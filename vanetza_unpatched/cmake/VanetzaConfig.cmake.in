@@ -1,0 +1,34 @@
+@PACKAGE_INIT@
+
+# Temporarily extend module path for bundled find package scripts
+set(_vanetza_save_cmake_module_path ${CMAKE_MODULE_PATH})
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR})
+
+include(CMakeFindDependencyMacro)
+find_dependency(Boost @Boost_VERSION_STRING@ CONFIG COMPONENTS date_time)
+
+if(@VANETZA_WITH_GEOGRAPHICLIB@)
+    find_dependency(GeographicLib @GeographicLib_VERSION_STRING@)
+endif()
+
+if(@VANETZA_WITH_RPC@)
+    find_dependency(CapnProto @CapnProto_VERSION@)
+endif()
+
+if(@VANETZA_WITH_CRYPTOPP@)
+    find_dependency(CryptoPP @CryptoPP_VERSION_STRING@)
+endif()
+
+if(@VANETZA_WITH_OPENSSL@)
+    # remove patch letter found with OpenSSL 1.x
+    string(REGEX REPLACE "[a-z]+$" "" OpenSSL_VERSION_WITHOUT_PATCH "@OpenSSL_VERSION@")
+    find_dependency(OpenSSL ${OpenSSL_VERSION_WITHOUT_PATCH})
+endif()
+
+# Restore previous module path
+set(CMAKE_MODULE_PATH ${_vanetza_save_cmake_module_path})
+unset(_vanetza_save_cmake_module_path)
+
+include("${CMAKE_CURRENT_LIST_DIR}/VanetzaTargets.cmake")
+
+set_and_check(VANETZA_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")

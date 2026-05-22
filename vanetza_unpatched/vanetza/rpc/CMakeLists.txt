@@ -1,0 +1,20 @@
+if(VANETZA_WITH_RPC)
+    message(STATUS "Enabled Vanetza RPC feature")
+    set(CAPNP_VERSION_STAMP "${CMAKE_CURRENT_BINARY_DIR}/capnp_version.stamp")
+    file(WRITE "${CAPNP_VERSION_STAMP}.tmp" "${CapnProto_VERSION}")
+    execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CAPNP_VERSION_STAMP}.tmp" "${CAPNP_VERSION_STAMP}")
+    capnp_generate_cpp(CAPNP_SOURCES CAPNP_HEADERS vanetza.capnp)
+    add_custom_command(OUTPUT ${CAPNP_SOURCES} ${CAPNP_HEADERS}
+        APPEND DEPENDS "${CAPNP_VERSION_STAMP}")
+    add_vanetza_component(rpc
+      asio_event_port.cpp
+      asio_stream.cpp
+      link_layer_client.cpp
+      ${CAPNP_SOURCES} ${CAPNP_HEADERS})
+    target_include_directories(rpc PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(rpc PUBLIC dcc)
+    target_link_libraries(rpc PUBLIC Boost::headers CapnProto::capnp-rpc)
+else()
+    message(STATUS "Disabled Vanetza RPC feature")
+endif()
