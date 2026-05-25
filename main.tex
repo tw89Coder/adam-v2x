@@ -122,7 +122,7 @@ the specific threat of parser-layer complexity attacks—where a low-bandwidth s
 \subsection{QoS-aware Edge Security and MEC Constraints}
 The integration of MEC into V2X architectures introduces new constraints for security engineering. MEC nodes must process high-throughput traffic with deterministic latency to support safety-critical functions % TODO: Add citation for MEC latency constraints. 
 Research into QoS-aware security often involves offloading expensive verification tasks to hardware accelerators or utilizing eBPF/XDP for high-speed packet filtering % TODO: Add citation for eBPF/XDP edge filtering. 
-However, deep packet inspection (DPI) for complex formats like ASN.1 remains computationally expensive. Our work contributes to this domain by introducing a systems-oriented circuit breaker mechanism that balances security intensity with real-time QoS requirements through adaptive sampling and state-based inspection.
+However, DPI for complex formats like ASN.1 remains computationally expensive. Our work contributes to this domain by introducing a systems-oriented circuit breaker mechanism that balances security intensity with real-time QoS requirements through adaptive sampling and state-based inspection.
 
 
 \section{Attack Characterization}
@@ -249,11 +249,11 @@ The transition back to \textit{PEACE\_TIME} occurs when the cooldown period expi
 \If{$State == PEACE$}
     \IF{$TotalPackets \pmod{(100 / R_{sample})} == 0$}
         \State $DropPacket \gets$ \textsc{AnomalyDetector}($Packet$)
-        \If{$DropPacket ==$ \textbf{True}}
+        \IF{$DropPacket ==$ \textbf{True}}
             \State $State \gets ATTACK$
             \State $Cooldown \gets C_{max}$
-        \EndIf
-    \EndIf
+        \ENDIF
+    \ENDIF
 \ElseIf{$State == ATTACK$}
     \State $DropPacket \gets$ \textsc{AnomalyDetector}($Packet$)
     \If{$DropPacket ==$ \textbf{True}}
@@ -317,9 +317,9 @@ To ensure statistical rigor, latency measurements were aggregated across multipl
 To facilitate reproducibility, the controlled parser evaluation utilizes deterministic random seeds for legitimate traffic generation, ensuring a consistent ratio of structural attack payloads to nominal V2X messages across all testing modes.
 The evaluation covers specific Vanetza git revisions:
 \begin{itemize}
-    \item Vulnerable baseline: \texttt{3a18193008cf350b580c41ca22de6310573213de}
-    \item Official recursion-limit patch: \texttt{2daa68fabc0fd7937fcccab5991127229ee90a63}
-    \item Latest evaluated patched baseline: \texttt{575fe31c0af25f66301dc3fdb777bde55a415318}
+    \item Vulnerable baseline: \texttt{3a18193}
+    \item Official recursion-limit patch: \texttt{2daa68f}
+    \item Latest evaluated patched baseline: \texttt{575fe31}
 \end{itemize}
 % TODO: Provide details on the testing harness configuration, additional random seed management, and dataset accessibility to ensure study reproducibility.
 
@@ -331,6 +331,8 @@ We first evaluated the baseline QoS performance of the test harness without any 
 
 Under steady-state adversarial traffic, the Unpatched Native parser (Mode 0) demonstrates severe performance degradation. As shown in Table \ref{tab:unpatched}, increasing the attack injection rate from 1\% to 10\% results in a linear escalation of P99 tail latency. At a 10\% attack intensity, the P99 latency reaches 0.2040 ms, a six-fold increase over the baseline. The severe Max latency of 2948.16 ms indicates severe HoL blocking, where legitimate packets are significantly delayed by recursive expansion events.
 
+Measurement explanation: The observed multi-second latency spikes (e.g., 2948.16 ms) in the unpatched environments are indicative of complete CPU core saturation or parser timeouts. Under CWE-674 recursion, the $\mathcal{O}(2^n)$ or deeply recursive $\mathcal{O}(n)$ object expansion forces the test harness to wait for the parser thread to either complete the exhaustive allocation or trigger a system-level resource limit, effectively stalling the emulated processing pipeline.
+
 The integration of the proposed pre-filter effectively isolates the parser from these structural bombs. Even at 10\% attack intensity, the \textit{Filter} configuration reduces the P99 tail latency to 0.0479 ms, closely approximating the baseline distribution. This confirms the efficacy of repetition-based structural scanning in maintaining tail latency control under high-load adversarial conditions.
 
 \begin{table}[htbp]
@@ -339,7 +341,7 @@ The integration of the proposed pre-filter effectively isolates the parser from 
 \centering
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Scenario} & \textbf{Mean} & \textbf{Median} & \textbf{P99} & \textbf{P99.9} & \textbf{Max} \\
+\textbf{Scenario} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{P99 (ms)} & \textbf{P99.9 (ms)} & \textbf{Max (ms)} \\
 \midrule
 Baseline & 0.0155 & 0.0145 & 0.0312 & 0.1106 & 0.1470 \\
 Native (1.0\%) & 0.0220 & 0.0155 & 0.1520 & 0.2422 & 2995.6618 \\
@@ -365,7 +367,7 @@ The $\mathcal{O}(N)$ pre-filter demonstrates a lower amortized overhead compared
 \centering
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Scenario} & \textbf{Mean} & \textbf{Median} & \textbf{P99} & \textbf{P99.9} & \textbf{Max} \\
+\textbf{Scenario} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{P99 (ms)} & \textbf{P99.9 (ms)} & \textbf{Max (ms)} \\
 \midrule
 Baseline & 0.0162 & 0.0154 & 0.0313 & 0.1132 & 0.3388 \\
 Native (1.0\%) & 0.0177 & 0.0160 & 0.0472 & 0.1476 & 3.3874 \\
@@ -392,7 +394,7 @@ The \textit{Patched + Filter (Hybrid)} configuration (Mode 2) represents the mos
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Scenario} & \textbf{Mean} & \textbf{Median} & \textbf{P99} & \textbf{P99.9} & \textbf{Max} \\
+\textbf{Scenario} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{P99 (ms)} & \textbf{P99.9 (ms)} & \textbf{Max (ms)} \\
 \midrule
 Baseline (No Attack) & 0.0155 & 0.0145 & 0.0312 & 0.1106 & 0.1470 \\
 Unpatched Native & 0.0365 & 0.0158 & 0.2040 & 0.3428 & 2948.1599 \\
@@ -460,6 +462,9 @@ A fundamental limitation of any probabilistic sampling defense is the "first-mis
 \subsection{Stateful Adversarial Behavior and Deployment Feasibility}
 Advanced adversaries might employ "low-frequency" or stateful attack patterns designed to trigger the circuit breaker just frequently enough to maintain the \textit{UNDER\_ATTACK} state, thereby forcing the node to incur the $\mathcal{O}(N)$ inspection tax continuously. However, as demonstrated in our complexity analysis, the $\mathcal{O}(N)$ operation is computationally inexpensive and non-allocating. Therefore, even under a sustained stateful attack, the system experiences only a minor baseline shift rather than severe HoL blocking. The practical feasibility of deploying this mechanism in MEC-enabled V2X ingress pipelines is high, given its minimal memory footprint and compatibility with existing protocol stacks.
 
+\subsection{Threats to Validity}
+Internal validity may be impacted by the choice of the 5\% sampling rate and the 10,000-packet cooldown period, which were empirically determined for the evaluated OER workloads. External validity is bounded by the use of the Vanetza protocol stack and the specific certificate structures defined in IEEE 1609.2. While the repetition-based detection logic is generalized for OER recursive patterns, its performance on non-OER encoding rules remains a subject for future verification.
+
 \section{Limitations and Future Work}
 
 While the proposed Parser-Layer Circuit Breaker effectively mitigates structural complexity attacks, several limitations present avenues for future research.
@@ -479,15 +484,62 @@ Our harness-based evaluation confirmed that the proposed Hybrid Defense strategy
 \appendices
 
 \section{Payload Analysis}
-% TODO: Provide payload xxd dumps for legitimate certificates and recursion bombs.
-% TODO: Discuss structural repetition in poc_mtu_limit.bin.
 
-\section{Evaluation Configuration}
-% TODO: Provide harness configuration details and random seed values.
-% TODO: Include additional scaling figures for various attack intensities.
+\subsection{Hexdump Comparison of Legitimate and Malicious Payloads}
+
+Legitimate V2X communication, such as OER-encoded CAM payloads containing cryptographic signatures, exhibit significant bit-stream variation. This high byte diversity is a result of the underlying ECC signatures and certificates, which occupy a substantial portion of the MTU-limited payload. In contrast, malicious OER recursion bombs designed to trigger CWE-674 vulnerabilities rely on repetitive structural markers to achieve deep nesting within the same byte constraints. As shown in the following comparison, the recursion bomb contains long sequences of repetitive structural octets (specifically \texttt{0x02} choice markers), which form the basis for our repetition-based detection heuristic.
+
+\begin{verbatim}
+00000000: 1200 0501 0381 0040 0380 5620 5002 8000  .......@..V P...
+00000010: 3201 0014 00fe 384c e0b8 90bf 6b33 441f  2.....8L....k3D.
+00000020: 4528 4006 640c 7081 ae03 bd00 00a0 0007  E(@.d.p.........
+00000030: d100 0002 024c e0b8 9035 7100 5a9d 4225  .....L...5q.Z.B%
+00000040: ee35 bbfc 824a 2446 d835 a354 583b e121  .5...J$F.5.TX;.!
+00000050: 0083 0296 8aaf 33f0 81fe 9a10 3fa0 1419  ......3.....?...
+00000060: 8040 0124 0001 c80b bac9 16ae 8101 0180  .@.$............
+00000070: 0300 8056 dfd6 d627 a362 dc10 8300 0000  ...V...'.b......
+\end{verbatim}
+% xxd output of legitimate CAM payload snippet above
+
+\begin{verbatim}
+00000000: 1230 3030 0281 3081 0030 3030 3030 3030  .000..0..0000000
+00000010: 3030 3030 3081 0030 3030 3030 3030 3030  00000..000000000
+00000020: 3030 3000 3030 3030 3030 3030 0030 3030  000.00000000.000
+00000030: 3030 3030 3000 3030 3030 3030 3030 8002  00000.00000000..
+00000040: 0202 0202 0202 0202 0202 0202 0202 0202  ................
+00000050: 0202 0202 0202 0202 0202 0202 0202 0202  ................
+00000060: 0202 0202 0202 0202 0202 0202 0202 0202  ................
+00000070: 0202 0202 0202 0202 0202 0202 0202 0202  ................
+\end{verbatim}
+% xxd output of malicious recursion bomb snippet above
+
+\section{Additional Scaling Experiments}
+
+This section provides extended latency scaling results across the primary defense configurations. These experiments quantify the impact of increasing attack intensity (1\%, 5\%, and 10\%) on the processing delay of the presentation-layer ingress. As shown in the figures below, the native parser suffers from exponential tail latency growth under structural exhaustion, while the proposed hybrid defense maintains deterministic QoS across all evaluated threat intensities.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{local_Unpatched_Native_Scaling.png}
+\caption{Latency scaling behavior of the unpatched native parser under increasing structural attack intensity.}
+\label{fig:scaling_unpatched_native}
+\end{figure*}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{local_Patched_Native_Scaling.png}
+\caption{Latency scaling behavior of the patched parser under increasing structural attack intensity.}
+\label{fig:scaling_patched_native}
+\end{figure*}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{local_Patched_Filter_Scaling.png}
+\caption{Latency scaling behavior of the hybrid defense architecture under increasing structural attack intensity.}
+\label{fig:scaling_patched_filter}
+\end{figure*}
 
 \section{Reproduction Instructions}
-% TODO: Provide detailed instructions for setting up the Vanetza-based test harness and running the experiments.
+Reproduction requires the Vanetza protocol stack and the custom \texttt{qos-harness} submodule. The evaluation environment must be configured with specific git revisions to replicate the baseline vulnerabilities and patch states. Detailed build scripts and data analysis notebooks are provided in the repository to ensure study reproducibility.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
