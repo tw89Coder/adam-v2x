@@ -82,7 +82,7 @@ int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
 
 bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
 
-    // ── Fast path ────────────────────────────────────────────────────────
+    // ── Fast path: Packet too small to contain a recursive bomb ──────────
     if (buf.size() < static_cast<size_t>(WINDOW_SIZE)) {
         current_budget = std::min(MAX_BUDGET, current_budget + RECOVERY_RATE);
         return false;
@@ -91,37 +91,20 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     State state   = get_state();
     bool  inspect = false;
 
-    // ── Two-stage cheap pre-check before any state decision ─────────────
-    // Cost: ~10ns, replaces full sliding window for obvious malware
-    bool obvious_malware = false;
-    {
-        uint8_t first = buf[64];          // malware starts repeating at byte 64
-        int cnt = 0;
-        for (int i = 64; i < 80; ++i)    // check 16-byte window only
-            cnt += (buf[i] == first);
-        if (cnt >= 14)                    // 14/16 same byte = malware
-            obvious_malware = true;
-    }
-
-    if (obvious_malware) {
-        // Drain budget hard, skip expensive sliding window entirely
-        current_budget = std::max(0.0, current_budget - PENALTY_MULTIPLIER);
-        return true;
-    }
-
     // ── State-gated sampling — DISCRETE states preserved ────────────────
     // Rationale: discrete states are auditable and certifiable for V2X
     if (state == State::S0_NORMAL) {
-        inspect = (fast_rand() % 100 < 5);   // 5%: minimal overhead in safe period
+        inspect = (fast_rand() % 100 < 10);    // 5%: minimal overhead in safe period
     } else if (state == State::S1_ELEVATED) {
-        inspect = (fast_rand() % 100 < 50);
+        inspect = (fast_rand() % 100 < 50);   // 50%: moderate pressure
     } else {
-        inspect = true;                       // S2/S3: full inspection
+        inspect = true;                       // S2/S3: full 100% inspection
     }
 
     bool is_anomalous = false;
     int  max_sum_sq   = 0;
 
+    // Rely entirely on the mathematical F2 sliding window sketch
     if (inspect) {
         max_sum_sq   = calculate_max_sum_sq(buf);
         is_anomalous = (max_sum_sq > SQ_THRESHOLD);
@@ -131,12 +114,11 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     if (is_anomalous) {
         clean_streak = 0;
         double excess = static_cast<double>(max_sum_sq - SQ_THRESHOLD) / SQ_THRESHOLD;
-        current_budget = std::max(0.0,
-            current_budget - (excess * PENALTY_MULTIPLIER * 10.0));
+        // Drain budget based on structural anomaly severity
+        current_budget = std::max(0.0, current_budget - (excess * PENALTY_MULTIPLIER * 10.0));
     } else {
         clean_streak++;
         // After STREAK_THRESHOLD consecutive clean packets: recover 6x faster
-        // This is the key fix for mode 2 inter-burst gaps
         double rate = (clean_streak > STREAK_THRESHOLD)
                       ? RECOVERY_RATE * 6.0
                       : RECOVERY_RATE;

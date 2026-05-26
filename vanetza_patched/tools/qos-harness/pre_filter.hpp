@@ -25,7 +25,7 @@ public:
 private:
     uint32_t rng_state;
 
-    const int    STREAK_THRESHOLD   = 100;
+    const int    STREAK_THRESHOLD   = 1000;
     const double MAX_BUDGET         = 100.0;
     const double TAU_1              = 70.0;
     const double TAU_2              = 40.0;

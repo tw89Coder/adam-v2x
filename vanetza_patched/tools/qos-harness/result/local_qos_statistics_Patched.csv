@@ -1,11 +1,11 @@
 Scenario,Mean_ms,Median_ms,P99_ms,Max_ms,FPR (%),FNR (%)
 Baseline (Optimal),0.0151,0.0139,0.0311,1.2919,N/A,N/A
-Native Parser (1.0%),0.0185,0.0156,0.1544,1.0547,N/A,N/A
-Native Parser (5.0%),0.0221,0.014,0.1636,1.3485,N/A,N/A
-Native Parser (10.0%),0.0293,0.0145,0.1712,3.873,N/A,N/A
-Filter Admitted (1.0%),0.0178,0.0167,0.0355,0.9318,0.0,0.0
-  -> Blocked CPU Cost,0.0005,0.0004,0.001,0.0294,N/A,N/A
-Filter Admitted (5.0%),0.0168,0.0155,0.0346,0.7047,0.0,0.0
-  -> Blocked CPU Cost,0.0003,0.0003,0.0007,0.1335,N/A,N/A
-Filter Admitted (10.0%),0.0167,0.0154,0.0331,1.1316,0.0,0.0
-  -> Blocked CPU Cost,0.0002,0.0002,0.0006,0.147,N/A,N/A
+Native Parser (1.0%),0.0162,0.0139,0.1387,0.6816,N/A,N/A
+Native Parser (5.0%),0.0218,0.014,0.1621,2.2777,N/A,N/A
+Native Parser (10.0%),0.029,0.0143,0.1691,1.8849,N/A,N/A
+Filter Admitted (1.0%),0.0166,0.0156,0.0326,3.1377,0.0,0.0
+  -> Blocked CPU Cost,0.0009,0.0008,0.0015,0.0681,N/A,N/A
+Filter Admitted (5.0%),0.0165,0.0154,0.0322,1.5193,0.0,0.0
+  -> Blocked CPU Cost,0.0008,0.0007,0.0013,0.221,N/A,N/A
+Filter Admitted (10.0%),0.0163,0.0152,0.0319,0.5895,0.0,0.0
+  -> Blocked CPU Cost,0.0007,0.0006,0.0011,0.1251,N/A,N/A
