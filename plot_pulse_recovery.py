@@ -10,6 +10,18 @@ def load_data(repo_name, filename):
         return None
     df = pd.read_csv(filepath)
     df['latency_ms'] = df['latency_ns'] / 1e6
+
+    # ==========================================
+    # 過濾 OS Jitter：移除明顯的系統排程異常值
+    # 閾值設為 5ms — 遠高於正常封包上限 (~0.45ms)
+    # 但不會誤刪真實的攻擊延遲尖峰
+    # ==========================================
+    before = len(df)
+    df = df[df['latency_ms'] < 5.0].reset_index(drop=True)
+    after = len(df)
+    if before != after:
+        print(f"  [Filter] Removed {before - after} OS jitter outliers (>5ms) from {filename}")
+
     return df
 
 def main():

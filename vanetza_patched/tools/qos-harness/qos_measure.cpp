@@ -394,6 +394,16 @@ int main(int argc, char* argv[]) {
 
         long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
         logs.push_back({i, is_malware ? 1 : 0, drop_packet ? 1 : 0, latency_ns});
+
+        // ── DEBUG: flag any filter spike exceeding unpatched baseline ──────
+        // if (enable_filter && latency_ns > 300000) {
+        //     fprintf(stderr, "[WARN] Packet %d: latency=%lldns state=%d "
+        //                     "budget=%.2f streak=%d size=%zu\n",
+        //             i, latency_ns, (int)filter_fsm.get_state(),
+        //             filter_fsm.current_budget,
+        //             filter_fsm.clean_streak,
+        //             buf.size());
+        // }
     }
 
     std::cout << "\n[*] Simulation complete. Writing data to disk...\n";

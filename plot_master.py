@@ -11,7 +11,18 @@ def load_data(repo_name, filename, warmup=50):
         return None
     df = pd.read_csv(filepath)
     df['latency_ms'] = df['latency_ns'] / 1e6
-    return df.iloc[warmup:].reset_index(drop=True)
+
+    # 移除前 warmup 筆暖機資料
+    df = df.iloc[warmup:].reset_index(drop=True)
+
+    # 過濾 OS Jitter：閾值 5ms，遠高於真實攻擊尖峰上限 (~1.5ms)
+    before = len(df)
+    df = df[df['latency_ms'] < 5.0].reset_index(drop=True)
+    after = len(df)
+    if before != after:
+        print(f"  [Jitter] Removed {before - after} OS outliers (>5ms) from {filename}")
+
+    return df
 
 def plot_cdf(ax, data, label, color, linestyle, linewidth, zorder):
     if data is None: return

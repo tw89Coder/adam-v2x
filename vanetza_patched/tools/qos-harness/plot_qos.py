@@ -4,7 +4,7 @@ import numpy as np
 import os
 import glob  # NEW: For using the '*' wildcard
 
-def load_data(file_pattern, warmup=50):
+def load_data(file_pattern, warmup=50, jitter_threshold_ms=5.0):
     filepath_pattern = os.path.join('csv_data', file_pattern)
     matched_files = glob.glob(filepath_pattern)
     
@@ -21,7 +21,18 @@ def load_data(file_pattern, warmup=50):
     
     df = pd.read_csv(latest_file)
     df['latency_ms'] = df['latency_ns'] / 1e6
-    return df.iloc[warmup:].reset_index(drop=True)
+
+    # Remove warmup samples
+    df = df.iloc[warmup:].reset_index(drop=True)
+
+    # Filter OS Jitter: threshold far above real attack peak (~1.5ms)
+    before = len(df)
+    df = df[df['latency_ms'] < jitter_threshold_ms].reset_index(drop=True)
+    after = len(df)
+    if before != after:
+        print(f"  [Jitter] Removed {before - after} OS outliers (>{jitter_threshold_ms}ms) from {latest_file}")
+
+    return df
 
 def plot_cdf(ax, data, label, color, linestyle, linewidth, zorder):
     if data is None or len(data) == 0: return
@@ -192,7 +203,7 @@ def main():
     }
 
     plot_scenario(f'local_{env_name}_Native_Scaling', f'[{env_name}] Native Parser', df_base, native_data, rates, styles)
-    plot_scenario(f'local_{env_name}_Filter_Scaling', f'[{env_name}] Proposed Pre-filter', df_base, filter_data_admitted, rates, styles)
+    plot_scenario(f'local_{env_name}_Filter_Scaling', f'[{env_name}] Proposed Pre-filter', df_base, filter_data_raw, rates, styles)
     
     print(f"[+] Local plots (PNG & PDF) and statistics CSV for {env_name} generated successfully!")
 
