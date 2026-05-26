@@ -25,7 +25,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     print("[*] Loading Mode 0 (Uniform Random) experimental data...")
-    df_base = load_data('vanetza_unpatched', 'qos_attack_0.0_mode0.csv') # 注意：請確保你有跑 0.0% 當作 Baseline
+    df_base = load_data('vanetza_unpatched', 'qos_baseline.csv') # 注意：請確保你有跑 0.0% 當作 Baseline
     df_unpatched = load_data('vanetza_unpatched', 'qos_attack_10.0_mode0.csv')
     df_unpatched_filter = load_data('vanetza_unpatched', 'qos_attack_10.0_mode0_filtered.csv')
     df_patched = load_data('vanetza_patched', 'qos_attack_10.0_mode0.csv')

@@ -12,7 +12,7 @@ RATES=(1.0 5.0 10.0)
 CORE=9
 
 # Attack mode selection (0=Uniform, 1=Single Pulse, 2=Periodic On-Off)
-ATTACK_MODE=2
+ATTACK_MODE=0
 
 EXEC="/home/yhl/term-project/cse625_qos/vanetza_unpatched/build/bin/qos_measure"
 

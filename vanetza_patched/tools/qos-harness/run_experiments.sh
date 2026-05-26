@@ -9,7 +9,7 @@ export LC_ALL=C
 # Configuration
 TOTAL_PACKETS=1000000
 RATES=(1.0 5.0 10.0)
-CORE=9
+CORE=7
 
 # Attack mode selection (0=Uniform, 1=Single Pulse, 2=Periodic On-Off)
 ATTACK_MODE=2

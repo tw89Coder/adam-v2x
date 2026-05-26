@@ -1,62 +1,105 @@
 #include "pre_filter.hpp"
+#include <algorithm>
+#include <ctime>
 
 AdaptiveFilterFSM::AdaptiveFilterFSM()
-    : current_state(State::PEACE_TIME), cooldown_counter(0), total_packets_seen(0) {}
+    : current_budget(MAX_BUDGET),
+      rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF)
+{
+}
 
-// O(N) 內部掃描引擎 (與之前相同)
-bool AdaptiveFilterFSM::scan_payload(const vanetza::ByteBuffer& buf) {
-    if (buf.empty()) return false;
-    const int SUSPICIOUS_REPEAT_THRESHOLD = 10;
-    int consecutive_count = 1;
-    uint8_t current_byte = buf[0];
+AdaptiveFilterFSM::State AdaptiveFilterFSM::get_state() const {
+    if (current_budget > TAU_1) return State::S0_NORMAL;
+    if (current_budget > TAU_2) return State::S1_ELEVATED;
+    if (current_budget > TAU_3) return State::S2_CONSTRAINED;
+    return State::S3_QUARANTINE;
+}
 
-    for (size_t i = 1; i < buf.size(); ++i) {
-        if (buf[i] == current_byte) {
-            consecutive_count++;
-            if (consecutive_count > SUSPICIOUS_REPEAT_THRESHOLD) return true;
+inline uint32_t AdaptiveFilterFSM::fast_rand() {
+    rng_state ^= rng_state << 13;
+    rng_state ^= rng_state >> 17;
+    rng_state ^= rng_state << 5;
+    return rng_state;
+}
+
+int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
+    if (buf.size() < static_cast<size_t>(WINDOW_SIZE)) return 0;
+
+    int     histogram[256]  = {0};
+    bool    in_active[256]  = {};
+    uint8_t active_vals[256];
+    int     n_active        = 0;
+    uint8_t ring_buffer[64];
+    int     ring_idx        = 0;
+    int     items_in_window = 0;
+    int     max_sum_sq      = 0;
+
+    for (size_t i = 0; i < buf.size(); ++i) {
+        uint8_t cur = buf[i];
+
+        if (items_in_window == WINDOW_SIZE) {
+            uint8_t old = ring_buffer[ring_idx];
+            histogram[old]--;
+            if (histogram[old] == 0) {
+                in_active[old] = false;
+                for (int j = 0; j < n_active; ++j) {
+                    if (active_vals[j] == old) {
+                        active_vals[j] = active_vals[--n_active];
+                        break;
+                    }
+                }
+            }
         } else {
-            current_byte = buf[i];
-            consecutive_count = 1;
+            items_in_window++;
+        }
+
+        ring_buffer[ring_idx] = cur;
+        if (!in_active[cur]) {
+            in_active[cur] = true;
+            active_vals[n_active++] = cur;
+        }
+        histogram[cur]++;
+        ring_idx = (ring_idx + 1) % WINDOW_SIZE;
+
+        if (items_in_window == WINDOW_SIZE) {
+            int sum_sq = 0;
+            for (int k = 0; k < n_active; ++k) {
+                int c = histogram[active_vals[k]];
+                sum_sq += c * c;
+                if (sum_sq > SQ_THRESHOLD) return sum_sq;  // early exit
+            }
+            if (sum_sq > max_sum_sq) max_sum_sq = sum_sq;
         }
     }
-    return false;
+    return max_sum_sq;
 }
 
 bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
-    total_packets_seen++;
-    bool drop_packet = false;
+    State state = get_state();
+    bool  inspect = false;
 
-    if (current_state == State::PEACE_TIME) {
-        // 【和平時期】：機率抽查
-        // 為了極致效能，我們不使用複雜的亂數生成器（如 MT19937），
-        // 而是透過簡單的 modulo 運算來模擬 5% 的取樣率 (每 20 顆抽查 1 顆)。
-        // 這樣可以保證在正常流量下，過濾器的 Overhead 逼近於 0。
-        if (total_packets_seen % (100 / SAMPLING_RATE_PERCENT) == 0) {
-            drop_packet = scan_payload(buf);
-            
-            if (drop_packet) {
-                // 警報觸發！切換狀態並拉起熔斷器
-                current_state = State::UNDER_ATTACK;
-                cooldown_counter = COOLDOWN_MAX;
-            }
-        }
-    } 
-    else { // State::UNDER_ATTACK
-        // 【受攻擊時期】：100% 嚴格掃描
-        drop_packet = scan_payload(buf);
-        
-        if (drop_packet) {
-            // 持續受到攻擊，重新填滿冷卻計數器
-            cooldown_counter = COOLDOWN_MAX;
-        } else {
-            // 收到安全封包，計數器遞減
-            cooldown_counter--;
-            if (cooldown_counter <= 0) {
-                // 威脅解除，系統回歸和平時期
-                current_state = State::PEACE_TIME;
-            }
-        }
+    if (state == State::S0_NORMAL) {
+        inspect = (fast_rand() % 100 < 5);
+    } else if (state == State::S1_ELEVATED) {
+        inspect = (fast_rand() % 100 < 50);
+    } else {
+        inspect = true;
     }
 
-    return drop_packet;
+    bool is_anomalous = false;
+    int  max_sum_sq   = 0;
+
+    if (inspect) {
+        max_sum_sq   = calculate_max_sum_sq(buf);
+        is_anomalous = (max_sum_sq > SQ_THRESHOLD);
+    }
+
+    if (is_anomalous) {
+        double excess = static_cast<double>(max_sum_sq - SQ_THRESHOLD) / SQ_THRESHOLD;
+        current_budget = std::max(0.0, current_budget - (excess * PENALTY_MULTIPLIER * 10.0));
+    } else {
+        current_budget = std::min(MAX_BUDGET, current_budget + RECOVERY_RATE);
+    }
+
+    return is_anomalous;
 }
