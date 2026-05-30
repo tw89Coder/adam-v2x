@@ -131,6 +131,118 @@ long long measurePacketLatency(const vanetza::ByteBuffer& buf) {
 }
 
 // ================================================
+// Helper: patch GN payload length field in-place
+// GeoNetworking Common Header layout (after 4-byte Basic Header):
+//   offset 4: NextHdr/Reserved
+//   offset 5: Reserved
+//   offset 6-7: Payload Length  <-- big-endian uint16
+// ================================================
+
+void patchGNPayloadLength(vanetza::ByteBuffer& pkt, size_t gn_header_size) {
+    if (pkt.size() < gn_header_size + 2) return;
+    uint16_t new_payload_len = static_cast<uint16_t>(pkt.size() - gn_header_size);
+    pkt[6] = (new_payload_len >> 8) & 0xFF;
+    pkt[7] =  new_payload_len       & 0xFF;
+}
+
+// ================================================
+// Amplification Profiler (MTU-Constrained Experiment)
+// ================================================
+
+void runAmplificationProfiling(const vanetza::ByteBuffer& poc_packet) {
+    std::cout << "\n========================================\n";
+    std::cout << "[*] Starting MTU-Constrained Amplification Profiling...\n";
+    std::cout << "========================================\n";
+
+    // --- Derive GN header size from the existing packet ---
+    // Bytes 6-7 of the poc are the original GN payload length (big-endian).
+    // The GN header size is everything before the payload.
+    if (poc_packet.size() < 8) {
+        std::cerr << "[-] poc_packet too small to read GN header\n";
+        return;
+    }
+    uint16_t orig_gn_payload_len =
+        (static_cast<uint16_t>(poc_packet[6]) << 8) | poc_packet[7];
+    size_t gn_header_size = poc_packet.size() - orig_gn_payload_len;
+
+    std::cout << "[*] Detected GN header size : " << gn_header_size << " bytes\n";
+    std::cout << "[*] Original GN payload len : " << orig_gn_payload_len << " bytes\n";
+
+    mkdir("csv_data", 0755);
+    std::ofstream csv("csv_data/amplification_profile.csv");
+    csv << "payload_size_bytes,latency_ns,amplification_multiplier\n";
+
+    long long baseline_latency = -1;
+
+    std::vector<size_t> target_sizes = {353, 400, 520, 780, 1000, 1200, 1400};
+
+    for (size_t size : target_sizes) {
+
+        // --- Build correctly-sized packet ---
+        vanetza::ByteBuffer test_pkt = poc_packet;  // copy: preserves all headers
+
+        if (size > test_pkt.size()) {
+            // Extend only the flood/payload region (bytes 64+), keep header intact
+            test_pkt.resize(size, 0x02);
+        } else if (size < test_pkt.size()) {
+            // Shrink: truncate payload, keep header
+            if (size > gn_header_size)
+                test_pkt.resize(size);
+        }
+
+        // *** KEY FIX: update the GN payload length field so vanetza
+        //     actually parses the full new buffer, not the original size ***
+        patchGNPayloadLength(test_pkt, gn_header_size);
+
+        // Debug: verify the field was written correctly
+        uint16_t check = (static_cast<uint16_t>(test_pkt[6]) << 8) | test_pkt[7];
+        std::cout << "[DBG] size=" << size
+                  << "  buffer=" << test_pkt.size()
+                  << "  GN_payload_len_field=" << check
+                  << "  expected=" << (test_pkt.size() - gn_header_size) << "\n";
+
+        // Run 20 times and average
+        long long total_lat = 0;
+        int valid_runs = 0;
+        for (int i = 0; i < 20; i++) {
+            long long lat = measurePacketLatency(test_pkt);
+            if (lat > 0) {
+                total_lat += lat;
+                valid_runs++;
+            }
+        }
+
+        if (valid_runs == 0) {
+            std::cerr << "[-] All runs crashed at size " << size
+                      << " bytes — vanetza rejected the patched header.\n";
+            // This tells you the length field offset might be wrong for your
+            // specific packet type; print bytes 4-9 to verify:
+            std::cerr << "    bytes[4..9]: ";
+            for (int b = 4; b <= 9 && b < (int)test_pkt.size(); b++)
+                std::cerr << std::hex << (int)test_pkt[b] << " ";
+            std::cerr << std::dec << "\n";
+            continue;
+        }
+
+        long long avg_lat = total_lat / valid_runs;
+
+        if (baseline_latency == -1)
+            baseline_latency = avg_lat;
+
+        double multiplier = static_cast<double>(avg_lat) / baseline_latency;
+
+        std::cout << "[+] Size: " << size << " B  |  Latency: " << avg_lat
+                  << " ns  |  Cost Amplification: " << multiplier << "x\n";
+
+        csv << size << "," << avg_lat << "," << multiplier << "\n";
+    }
+
+    std::cout << GREEN << "[+] Amplification profiling saved to csv_data/amplification_profile.csv"
+              << RESET << "\n";
+    std::cout << "========================================\n\n";
+}
+
+// ================================================
 // Dataset builder
 // Generates N_TARGET validated attack variants
 // Saves to folder so they can be reused across runs
@@ -220,7 +332,8 @@ void printHelp(const char* progName) {
               << "                     1 = Single Pulse (30~50% window)\n"
               << "                     2 = Periodic On-Off (5 attack waves)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
-              << "  --build-dataset  Generate and validate attack packet dataset\n";
+              << "  --build-dataset  Generate and validate attack packet dataset\n"
+              << "  --profile-amp    Run MTU-constrained amplification profiling\n";
 }
 
 // ================================================
@@ -244,11 +357,13 @@ int main(int argc, char* argv[]) {
     int    attack_mode    = 0;
     bool   enable_filter  = false;
     bool   build_dataset  = false;
+    bool   profile_amp = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if      (arg == "-h")              { printHelp(argv[0]); return 0; }
         else if (arg == "--build-dataset")   build_dataset  = true;
+        else if (arg == "--profile-amp")     profile_amp = true;
         else if (arg == "-f")                enable_filter  = true;
         else if (arg == "-t" && i+1 < argc)  total_packets  = std::atoi(argv[++i]);
         else if (arg == "-p" && i+1 < argc)  pollution_rate = std::atof(argv[++i]);
@@ -272,6 +387,11 @@ int main(int argc, char* argv[]) {
     if (poc_packet.empty()) {
         std::cerr << "[-] poc_mtu_limit.bin missing\n";
         return 1;
+    }
+
+    if (profile_amp) {
+        runAmplificationProfiling(poc_packet);
+        return 0;
     }
 
     if (build_dataset) {

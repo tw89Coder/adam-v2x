@@ -3,131 +3,254 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def load_data(repo_name, filename, warmup=50):
+MODES = [0, 1, 2]
+RATES = [1.0, 5.0, 10.0]
+WARMUP = 50
+JITTER_THRESHOLD_MS = 5.0
+
+def load_data(repo_name, filename, warmup=WARMUP):
     base_path = os.path.dirname(os.path.abspath(__file__))
     filepath = os.path.join(base_path, repo_name, 'tools', 'qos-harness', 'csv_data', filename)
     if not os.path.exists(filepath):
-        print(f"[Warning] File not found: {filepath}")
+        print(f"  [Skip] File not found: {filepath}")
         return None
     df = pd.read_csv(filepath)
     df['latency_ms'] = df['latency_ns'] / 1e6
 
-    # 移除前 warmup 筆暖機資料
+    # Remove warm-up samples
     df = df.iloc[warmup:].reset_index(drop=True)
 
-    # 過濾 OS Jitter：閾值 5ms，遠高於真實攻擊尖峰上限 (~1.5ms)
+    # Filter OS jitter outliers (>5ms, well above real attack peak ~1.5ms)
     before = len(df)
-    df = df[df['latency_ms'] < 5.0].reset_index(drop=True)
+    df = df[df['latency_ms'] < JITTER_THRESHOLD_MS].reset_index(drop=True)
     after = len(df)
     if before != after:
         print(f"  [Jitter] Removed {before - after} OS outliers (>5ms) from {filename}")
 
     return df
 
+
+def compute_security_metrics(df):
+    """
+    Calculate FPR and FNR from 'was_dropped' and 'is_malware' columns.
+
+    Confusion matrix:
+      TP = malicious packet correctly blocked   (is_malware=1, was_dropped=1)
+      FP = benign packet wrongly blocked        (is_malware=0, was_dropped=1)
+      TN = benign packet correctly admitted     (is_malware=0, was_dropped=0)
+      FN = malicious packet wrongly admitted    (is_malware=1, was_dropped=0)
+
+    FPR (%) = FP / (FP + TN) * 100   — how often benign traffic is blocked
+    FNR (%) = FN / (FN + TP) * 100   — how often malicious traffic slips through
+    """
+    if 'was_dropped' not in df.columns or 'is_malware' not in df.columns:
+        return 'N/A', 'N/A'
+
+    tp = len(df[(df['is_malware'] == 1) & (df['was_dropped'] == 1)])
+    fp = len(df[(df['is_malware'] == 0) & (df['was_dropped'] == 1)])
+    tn = len(df[(df['is_malware'] == 0) & (df['was_dropped'] == 0)])
+    fn = len(df[(df['is_malware'] == 1) & (df['was_dropped'] == 0)])
+
+    fpr = round((fp / (fp + tn)) * 100.0, 4) if (fp + tn) > 0 else 0.0
+    fnr = round((fn / (fn + tp)) * 100.0, 4) if (fn + tp) > 0 else 0.0
+    return fpr, fnr
+
+
+def compute_stats(df, is_filtered=False):
+    """
+    Compute latency statistics. For filtered files also compute FPR/FNR
+    from the was_dropped + is_malware columns (latency stats use admitted
+    packets only, i.e. was_dropped == 0).
+    Returns a dict, or None if df is None.
+    """
+    if df is None:
+        return None
+
+    # For filtered files: latency stats are measured on admitted packets only
+    if is_filtered and 'was_dropped' in df.columns:
+        df_admitted = df[df['was_dropped'] == 0].reset_index(drop=True)
+    else:
+        df_admitted = df
+
+    if df_admitted.empty:
+        return None
+
+    fpr, fnr = compute_security_metrics(df) if is_filtered else ('N/A', 'N/A')
+
+    return {
+        "Mean_ms":   round(df_admitted['latency_ms'].mean(), 4),
+        "Median_ms": round(df_admitted['latency_ms'].median(), 4),
+        "P99_ms":    round(df_admitted['latency_ms'].quantile(0.99), 4),
+        "P99.9_ms":  round(df_admitted['latency_ms'].quantile(0.999), 4),
+        "Max_ms":    round(df_admitted['latency_ms'].max(), 4),
+        "FPR_%":     fpr,
+        "FNR_%":     fnr,
+    }
+
+
 def plot_cdf(ax, data, label, color, linestyle, linewidth, zorder):
-    if data is None: return
+    if data is None:
+        return
     sorted_data = np.sort(data)
     yvals = np.arange(len(sorted_data)) / float(len(sorted_data) - 1)
-    ax.plot(sorted_data, yvals, label=label, color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.9, zorder=zorder)
+    ax.plot(sorted_data, yvals, label=label, color=color,
+            linestyle=linestyle, linewidth=linewidth, alpha=0.9, zorder=zorder)
+
 
 def main():
     base_path = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(base_path, 'final_results')
     os.makedirs(output_dir, exist_ok=True)
 
-    print("[*] Loading Mode 0 (Uniform Random) experimental data...")
-    df_base = load_data('vanetza_unpatched', 'qos_baseline.csv') # 注意：請確保你有跑 0.0% 當作 Baseline
-    df_unpatched = load_data('vanetza_unpatched', 'qos_attack_10.0_mode0.csv')
-    df_unpatched_filter = load_data('vanetza_unpatched', 'qos_attack_10.0_mode0_filtered.csv')
-    df_patched = load_data('vanetza_patched', 'qos_attack_10.0_mode0.csv')
-    df_patched_filter = load_data('vanetza_patched', 'qos_attack_10.0_mode0_filtered.csv')
+    # ==========================================
+    # 1. Collect stats across ALL combinations
+    # ==========================================
+    rows = []
 
-    # 配置 5 條線的完全對比色彩與虛實樣式 (粗細統一為 1.5)
-    datasets = [
-        ("Baseline (No Attack)", df_base, '#2ca02c', '-', 1),                # 綠色實線
-        ("Unpatched Native", df_unpatched, '#d62728', '-', 2),               # 紅色實線
-        ("Unpatched + Pre-filter", df_unpatched_filter, '#ff7f0e', ':', 3),  # 橘色點線
-        ("Official Patch Native", df_patched, '#9467bd', '--', 4),           # 紫色虛線
-        ("Patched + Pre-filter (Hybrid)", df_patched_filter, '#1f77b4', '-.', 5) # 藍色點折線
-    ]
+    print("\n[*] Scanning all mode × rate × patch × filter combinations...\n")
+
+    # --- Baseline (no attack, no mode/rate) ---
+    df_base = load_data('vanetza_unpatched', 'qos_baseline.csv')
+    s = compute_stats(df_base, is_filtered=False)
+    if s:
+        rows.append({
+            "Scenario":   "Baseline (No Attack)",
+            "Repo":       "vanetza_unpatched",
+            "Mode":       "N/A",
+            "Rate_%":     0.0,
+            "Variant":    "Native",
+            **s
+        })
+
+    # --- Attack combinations ---
+    for mode in MODES:
+        for rate in RATES:
+            rate_str = f"{rate}"
+            combos = [
+                ("vanetza_unpatched", f"qos_attack_{rate_str}_mode{mode}.csv",          "Unpatched", "Native",   False),
+                ("vanetza_unpatched", f"qos_attack_{rate_str}_mode{mode}_filtered.csv", "Unpatched", "Filtered", True),
+                ("vanetza_patched",   f"qos_attack_{rate_str}_mode{mode}.csv",          "Patched",   "Native",   False),
+                ("vanetza_patched",   f"qos_attack_{rate_str}_mode{mode}_filtered.csv", "Patched",   "Filtered", True),
+            ]
+            for repo, filename, patch_label, variant_label, is_filtered in combos:
+                print(f"  Loading  mode{mode}  {rate}%  {patch_label}  {variant_label}")
+                df = load_data(repo, filename)
+                s = compute_stats(df, is_filtered=is_filtered)
+                if s:
+                    rows.append({
+                        "Scenario": f"{patch_label} {variant_label} | mode{mode} | {rate}%",
+                        "Repo":     repo,
+                        "Mode":     f"mode{mode}",
+                        "Rate_%":   rate,
+                        "Variant":  f"{patch_label}+{variant_label}",
+                        **s
+                    })
 
     # ==========================================
-    # 1. 輸出學術論文精確統計表格
+    # 2. Save master CSV
     # ==========================================
-    stats_list = []
-    for name, df, _, _, _ in datasets:
-        if df is not None:
-            stats_list.append({
-                "Scenario": name,
-                "Mean_ms": round(df['latency_ms'].mean(), 4),
-                "Median_ms": round(df['latency_ms'].median(), 4),
-                "P99_ms": round(df['latency_ms'].quantile(0.99), 4),
-                "P99.9_ms": round(df['latency_ms'].quantile(0.999), 4),
-                "Max_ms": round(df['latency_ms'].max(), 4)
-            })
-    
-    stats_df = pd.DataFrame(stats_list)
-    stats_df.to_csv(os.path.join(output_dir, 'qos_statistics_table.csv'), index=False)
-    
-    print("\n" + "="*85)
-    print(" 📊 QoS Multi-Dimensional Evaluation Table (Ready for Paper)")
-    print("="*85)
+    stats_df = pd.DataFrame(rows)
+    csv_path = os.path.join(output_dir, 'qos_all_combinations.csv')
+    stats_df.to_csv(csv_path, index=False)
+
+    print("\n" + "="*100)
+    print(" 📊 QoS All-Combination Statistics Table (Latency + FPR + FNR)")
+    print("="*100)
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 200)
     print(stats_df.to_string(index=False))
-    print("="*85 + "\n")
+    print("="*100)
+    print(f"\n[+] Full CSV saved to: {csv_path}\n")
 
     # ==========================================
-    # 2. 繪製標準學術對照圖
+    # 3. Per-mode master plot (original style)
     # ==========================================
-    plt.rcParams.update({'font.size': 12, 'axes.labelsize': 14, 'axes.titlesize': 14, 'font.family': 'serif'})
-    window_size = 500  
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.labelsize': 14,
+        'axes.titlesize': 14,
+        'font.family': 'serif'
+    })
 
-    # ----- 左圖: Time Series -----
-    for name, df, color, ls, z in datasets:
-        if df is not None:
-            ax1.plot(df['packet_id'][:window_size], df['latency_ms'][:window_size], 
-                     label=name, color=color, linestyle=ls, linewidth=1.5, alpha=0.8 if z!=1 else 0.4, zorder=z)
+    # Colour / style palette per variant
+    STYLE = {
+        "Baseline (No Attack)":    ('#2ca02c', '-',  1),
+        "Unpatched+Native":        ('#d62728', '-',  2),
+        "Unpatched+Filtered":      ('#ff7f0e', ':',  3),
+        "Patched+Native":          ('#9467bd', '--', 4),
+        "Patched+Filtered":        ('#1f77b4', '-.', 5),
+    }
 
-    ax1.set_ylim(0, 0.45)
-    ax1.set_xlabel('Packet ID (Post Warm-up)')
-    ax1.set_ylabel('Processing Latency (ms)')
-    ax1.set_title('Master Comparison: Latency Jitter')
-    ax1.grid(True, linestyle=':', alpha=0.7)
-    ax1.legend(loc='upper right', fontsize=10)
+    WINDOW = 500
 
-    # ----- 右圖: CDF -----
-    for name, df, color, ls, z in datasets:
-        if df is not None:
-            plot_cdf(ax2, df['latency_ms'], name, color, ls, 1.5, z)
+    for mode in MODES:
+        for rate in RATES:
+            rate_str = f"{rate}"
+            print(f"[*] Plotting mode{mode} @ {rate}% ...")
 
-    # 繪製 Y=0.99 的基準水平線
-    ax2.axhline(y=0.99, color='black', linestyle='-', alpha=0.2, linewidth=1.0)
+            # Load the 5 series for this subplot pair
+            df_b   = load_data('vanetza_unpatched', 'qos_baseline.csv')
+            df_un  = load_data('vanetza_unpatched', f'qos_attack_{rate_str}_mode{mode}.csv')
+            df_unf = load_data('vanetza_unpatched', f'qos_attack_{rate_str}_mode{mode}_filtered.csv')
+            df_p   = load_data('vanetza_patched',   f'qos_attack_{rate_str}_mode{mode}.csv')
+            df_pf  = load_data('vanetza_patched',   f'qos_attack_{rate_str}_mode{mode}_filtered.csv')
 
-    # 橫向錯開標籤的初始 X 軸位置，避免文字在 log scale 下重疊
-    x_text_positions = [1.2e-2, 1.2e-1, 4.5e-2, 2.2e-2, 5.0e-3]
-    text_idx = 0
+            datasets = [
+                ("Baseline (No Attack)", df_b,   STYLE["Baseline (No Attack)"]),
+                ("Unpatched+Native",     df_un,  STYLE["Unpatched+Native"]),
+                ("Unpatched+Filtered",   df_unf, STYLE["Unpatched+Filtered"]),
+                ("Patched+Native",       df_p,   STYLE["Patched+Native"]),
+                ("Patched+Filtered",     df_pf,  STYLE["Patched+Filtered"]),
+            ]
 
-    # 精確計算每條曲線的 P99，並繪製從曲線交點向下落到 X 軸的垂直虛線
-    for name, df, color, ls, z in datasets:
-        if df is not None:
-            p99_val = df['latency_ms'].quantile(0.99)
-            # 垂直線：從 Y=0 到 Y=0.99
-            ax2.plot([p99_val, p99_val], [0, 0.99], color=color, linestyle=ls, linewidth=1.2, alpha=0.8)
-            # 在 X 軸上方稍微錯開的高度標註精確數值
-            ax2.text(p99_val * 1.05, 0.2 + (text_idx * 0.12), f'{p99_val:.3f} ms', color=color, fontsize=10)
-            text_idx += 1
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-    ax2.set_xscale('log')
-    ax2.set_xlim(1e-4, 10.0)
-    ax2.set_xlabel('Processing Latency (ms) [Log Scale]')
-    ax2.set_ylabel('CDF Probability')
-    ax2.set_title('Master Comparison: CDF (99th Drop-lines)')
-    ax2.grid(True, which="both", linestyle=':', alpha=0.7)
-    ax2.legend(loc='lower right', fontsize=10)
-    
-    plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, 'master_defense_comparison.png'), dpi=300, bbox_inches='tight')
-    print(f"[+] Multi-layer analysis completed. Plot generated in final_results/")
+            # ----- Left: Time Series -----
+            for name, df, (color, ls, z) in datasets:
+                if df is not None:
+                    ax1.plot(df['packet_id'][:WINDOW], df['latency_ms'][:WINDOW],
+                             label=name, color=color, linestyle=ls,
+                             linewidth=1.5, alpha=0.4 if z == 1 else 0.8, zorder=z)
+
+            ax1.set_ylim(0, 0.45)
+            ax1.set_xlabel('Packet ID (Post Warm-up)')
+            ax1.set_ylabel('Processing Latency (ms)')
+            ax1.set_title(f'Latency Jitter — mode{mode} @ {rate}%')
+            ax1.grid(True, linestyle=':', alpha=0.7)
+            ax1.legend(loc='upper right', fontsize=10)
+
+            # ----- Right: CDF -----
+            for name, df, (color, ls, z) in datasets:
+                if df is not None:
+                    plot_cdf(ax2, df['latency_ms'], name, color, ls, 1.5, z)
+
+            ax2.axhline(y=0.99, color='black', linestyle='-', alpha=0.2, linewidth=1.0)
+
+            for idx, (name, df, (color, ls, z)) in enumerate(datasets):
+                if df is not None:
+                    p99 = df['latency_ms'].quantile(0.99)
+                    ax2.plot([p99, p99], [0, 0.99], color=color, linestyle=ls,
+                             linewidth=1.2, alpha=0.8)
+                    ax2.text(p99 * 1.05, 0.2 + idx * 0.12,
+                             f'{p99:.3f} ms', color=color, fontsize=10)
+
+            ax2.set_xscale('log')
+            ax2.set_xlim(1e-4, 10.0)
+            ax2.set_xlabel('Processing Latency (ms) [Log Scale]')
+            ax2.set_ylabel('CDF Probability')
+            ax2.set_title(f'CDF (P99 Drop-lines) — mode{mode} @ {rate}%')
+            ax2.grid(True, which="both", linestyle=':', alpha=0.7)
+            ax2.legend(loc='lower right', fontsize=10)
+
+            plt.tight_layout()
+            fname = f'comparison_mode{mode}_{int(rate)}pct.png'
+            fig.savefig(os.path.join(output_dir, fname), dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print(f"  [+] Saved {fname}")
+
+    print("\n[✓] All done. Results in: final_results/")
+
 
 if __name__ == "__main__":
     main()
