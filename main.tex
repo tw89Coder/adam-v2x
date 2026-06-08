@@ -17,7 +17,7 @@
 
 \begin{document}
 
-\title{Adaptive Bounded-Cost Edge Filtering for QoS Preservation in MEC-Enabled V2X Networks}
+\title{Characterizing and Mitigating MTU-constrained Parser Workload Amplification in ASN.1-based V2X Stacks}
 
 \author{
 Yi-Hung Lu,
@@ -32,11 +32,11 @@ National Sun Yat-sen University (NSYSU), Kaohsiung, Taiwan
 \maketitle
 
 \begin{abstract}
-Vehicle-to-Everything (V2X) communications increasingly rely on Multi-access Edge Computing (MEC) to meet stringent low-latency requirements. However, the complexity of Abstract Syntax Notation One (ASN.1) parsers, specifically those utilizing Octet Encoding Rules (OER), introduces a critical vulnerability to algorithmic complexity attacks (CWE-674). Maliciously crafted messages with deep structural nesting can exhaust parser resources, leading to Head-of-Line (HoL) blocking and severe Quality of Service (QoS) degradation for legitimate traffic. This paper proposes a Parser-Layer Circuit Breaker for QoS Preservation, utilizing a Probabilistic Risk Budget Finite State Machine (PRB-FSM) and a constant-memory bounded-state Streaming Structural Risk Filter (SSRF). By shifting the defense to a lightweight sampling mechanism, our approach achieves low inspection overhead during nominal operations while providing rapid mitigation under attack. Our harness-based evaluation demonstrates that the proposed hybrid defense reduces P99 tail latency from 0.1793 ms to 0.0320 ms, substantially reducing the computational amplification surface and transforming recursive parser exhaustion into a highly constrained inspection problem suitable for MEC-constrained V2X systems.
+Vehicle-to-Everything (V2X) communications increasingly rely on efficient presentation-layer processing to meet stringent low-latency requirements. However, the complexity of Abstract Syntax Notation One (ASN.1) parsers, specifically those utilizing Octet Encoding Rules (OER), introduces a critical vulnerability to algorithmic complexity attacks (CWE-674). This paper characterizes the practicality of parser workload amplification under strict Maximum Transmission Unit (MTU) constraints. We demonstrate that a maliciously crafted payload, representing only an 8.6\% increase in size over a legitimate 325-byte Cooperative Awareness Message (CAM), induces a 5.7$\times$ amplification in parser latency. Such structural recursion bombs can exhaust compute resources, leading to Head-of-Line (HoL) blocking in V2X stacks. We evaluate a mitigation strategy utilizing a Probabilistic Risk Budget Finite State Machine (PRB-FSM) and a constant-memory Streaming Structural Risk Filter (SSRF). By shifting the defense to a lightweight sampling mechanism, our approach achieves low inspection overhead during nominal operations while providing rapid mitigation under attack. Our evaluation demonstrates that the proposed mitigation reduces P99 tail latency from 0.1793 ms to 0.0320 ms, substantially containing the computational amplification surface within tested V2X workloads.
 \end{abstract}
 
 \begin{IEEEkeywords}
-V2X Security, ASN.1 Parser, OER, Algorithmic Complexity Attack, Quality of Service (QoS), Tail Latency.
+V2X Security, ASN.1 Parser, OER, Algorithmic Complexity Attack, Workload Amplification, Tail Latency.
 \end{IEEEkeywords}
 
 \section{Introduction}
@@ -45,7 +45,7 @@ The rapid evolution of Cooperative Intelligent Transport Systems (C-ITS) has est
 
 However, the support for recursive structures in OER introduces significant security challenges. Specifically, ASN.1 parsers are susceptible to algorithmic complexity attacks (CWE-674). By crafting OER-encoded payloads with deeply nested sequences or choice-based recursive structures, an adversary can trigger infinite recursion or exponential object tree expansion. In an emulated edge-processing workload, such "structural bombs" can exhaust CPU resources, leading to Head-of-Line (HoL) blocking. This results in severe latency amplification for legitimate safety messages queued behind a malicious packet undergoing expensive parsing, potentially compromising the safety of the vehicular network.
 
-Conventional security mechanisms often introduce a deterministic inspection overhead that persists even during nominal operations. For processing high-volume V2X traffic, this continuous overhead can degrade system jitter and inflate P99 tail latency, which is critical for real-time safety requirements. There is a fundamental conflict between the requirement for exhaustive security verification and the need for low-overhead packet forwarding. To address this challenge, we propose a \textit{Parser-Layer Circuit Breaker for QoS Preservation}. Unlike traditional static filters, our approach utilizes a Probabilistic Risk Budget FSM (PRB-FSM) coupled with a constant-memory bounded-state Streaming Structural Risk Filter (SSRF). By shifting the security objective from perfect packet classification to \textbf{bounded computational exposure}, we effectively contain adversarial workloads before they penetrate the resource-intensive parsing stage. The system dynamically modulates its inspection intensity, ensuring that the MEC node improves QoS stability even when subjected to targeted structural complexity amplification.
+Conventional security mechanisms often introduce a deterministic inspection overhead that persists even during nominal operations. For processing high-volume V2X traffic, this continuous overhead can degrade system jitter and inflate P99 tail latency, which is critical for real-time safety requirements. There is a fundamental conflict between the requirement for exhaustive security verification and the need for low-overhead packet forwarding. To address this challenge, we evaluate a \textit{Parser-Layer Circuit Breaker for Workload Mitigation}. Unlike traditional static filters, our approach utilizes a Probabilistic Risk Budget FSM (PRB-FSM) coupled with a constant-memory bounded-state Streaming Structural Risk Filter (SSRF). By shifting the security objective from perfect packet classification to \textbf{mitigating computational exposure}, we effectively contain adversarial workloads before they penetrate the resource-intensive parsing stage. The system dynamically modulates its inspection intensity, ensuring improved latency stability even when subjected to targeted structural complexity amplification.
 
 \begin{figure}[!ht]
 \centering
@@ -82,14 +82,14 @@ Conventional security mechanisms often introduce a deterministic inspection over
 \label{fig:architecture}
 \end{figure}
 
-This architecture allows the system to prioritize latency-sensitive safety traffic by strictly bounding the worst-case inspection overhead.
+This architecture allows the system to prioritize latency-sensitive safety traffic by mitigating the worst-case inspection overhead.
 
 The primary contributions of this paper are as follows:
 \begin{itemize}
-    \item We characterize the impact of ASN.1 OER structural complexity attacks on QoS, demonstrating how parser-layer exhaustion leads to HoL blocking in emulated MEC workloads.
+    \item We empirically characterize the impact of MTU-constrained ASN.1 OER structural complexity attacks, demonstrating that a 353-byte adversarial payload induces a 5.7$\times$ amplification in parser workload relative to a standard 325-byte CAM.
     \item We propose a lightweight, $\mathcal{O}(1)$ bounded-cost anomaly detector (SSRF) that leverages localized frequency moments to identify structural recursion bombs without relying on specific attack signatures.
-    \item We design a Probabilistic Risk Budget FSM (PRB-FSM) that provides a systems-theoretic framework for risk-aware escalation, ensuring deterministic upper-bounds on computational resource consumption.
-    \item We demonstrate that by decoupling security inspection from parser execution, the system can preserve millisecond-level tail latency (P99) under sustained adversarial pressure, providing a robust "circuit breaker" for V2X presentation-layer processing.
+    \item We design a Probabilistic Risk Budget FSM (PRB-FSM) that provides a risk-aware escalation framework to mitigate computational resource consumption in ASN.1-based V2X stacks.
+    \item We demonstrate that by decoupling security inspection from parser execution, the system can mitigate P99 tail latency spikes under sustained adversarial pressure, providing an effective "circuit breaker" for V2X presentation-layer processing.
 \end{itemize}
 
 
@@ -114,14 +114,14 @@ We assume a computationally bounded adversary $\mathcal{A}$ capable of generatin
 \end{itemize}
 
 \subsubsection{Adversary Objective}
-The adversary aims to maximize edge-node computational latency $L$ by inducing excessive parsing overhead, specifically targeting:
+The adversary aims to maximize parser workload amplification and temporal processing complexity by inducing excessive parsing overhead, specifically targeting the presentation-layer processing delay $L$:
 $$L = L_{queue} + C_{parse} + C_{inspection}$$
 where $C_{parse}$ dominates under recursive payload structures.
 
 \subsubsection{System Assumptions and Security Goal}
-We assume that cryptographic verification is satisfied prior to parsing, and the MEC node operates under a strict latency budget $L \le 10$ ms. The objective of the proposed system is to ensure that worst-case inspection overhead is mathematically bounded:
+We assume that cryptographic verification is satisfied prior to parsing, and the MEC node operates under a strict latency budget $L \le 10$ ms. The objective of the proposed system is to empirically bound inspection overhead to $\mathcal{O}(1)$ relative to the payload size in evaluated workloads:
 $$\forall P_i \in \mathcal{P}, \quad C_{inspection}(P_i) \le \mathcal{O}(1)$$
-and to prevent adversarial escalation of parser workload prior to ASN.1 decoding.
+and to mitigate adversarial escalation of parser workload prior to ASN.1 decoding.
 
 \subsubsection{Scope of Attack}
 The threat model focuses on ASN.1 structural complexity attacks (e.g., CWE-674). The adversary is assumed to be a compromised or malicious OBU or a roadside entity capable of injecting syntactically valid but structurally malicious OER-encoded messages into the network. These messages exploit recursive structures to force the parser into deep recursion or exhaustive memory allocation. 
@@ -130,7 +130,7 @@ The attacker's goal is not necessarily to crash the emulated edge node but to in
 
 \subsubsection{Attacker Capabilities and Constraints}
 1) \textit{Structural Manipulation:} The attacker can manipulate the OER tree depth to exceed typical operational limits.
-2) \textit{Structural Pattern Constraint:} Constructing deeply nested OER structures within maximum transmission unit (MTU) limits often necessitates repetitive byte patterns (structural padding) to satisfy length determinants and choice indices. 
+2) \textit{Structural Pattern Constraint:} Strictly constrained by Maximum Transmission Unit (MTU) limits, an adversary must utilize repetitive byte patterns (structural padding) to satisfy length determinants and choice indices within a finite footprint, necessitating structural repetition to achieve deep nesting. 
 3) \textit{Network Layer:} The attack is carried out at the application/presentation layer but manifests as a resource exhaustion denial-of-service (DoS) during the parsing phase. 
 
 \subsubsection{Execution Pipeline Context}
@@ -215,7 +215,7 @@ A representative structural repetition pattern observed in our emulated workload
 
 \section{Bounded Risk-Aware Pre-Parsing Defense (BRPPD)}
 
-To balance extreme security against CWE-674 structural attacks with the stringent low-latency constraints of V2X communications, we propose a bounded-cost pre-parsing framework. The system guarantees computationally deterministic inspection prior to ASN.1 decoding.
+To balance extreme security against CWE-674 structural attacks with the stringent low-latency constraints of V2X communications, we propose a bounded-cost pre-parsing framework. The system provides bounded-cost inspection prior to ASN.1 decoding.
 
 \subsection{Bounded Streaming Structural Risk Filter (B-SSRF)}
 Incoming packets are processed using a constant-time streaming sketch that estimates structural instability by calculating the localized second frequency moment ($F_2$) of byte frequencies within a sliding window. This metric, denoted as $SQ$, serves as a collision concentration statistic:
@@ -314,12 +314,12 @@ where $\mathcal{P}_t$ is the penalty incurred by anomalous structural risk, and 
 \label{fig:prb_fsm_dynamics}
 \end{figure}
 
-The budget thresholds $\{\tau_1, \tau_2, \tau_3\}$ map the continuous budget to discrete operational states ($S_0 \dots S_3$) with escalating sampling rates (10\%, 50\%, 100\%). This mapping provides an auditable and certifiable safety model for V2X systems, ensuring that nominal operations incur minimal overhead ($\sim$10\% inspection) while providing rapid, risk-aware escalation to full deterministic inspection under adversarial pressure.
+The budget thresholds $\{\tau_1, \tau_2, \tau_3\}$ map the continuous budget to discrete operational states ($S_0 \dots S_3$) with escalating sampling rates (10\%, 50\%, 100\%). This mapping provides a predictable operational model for managing inspection overhead, ensuring that nominal operations incur minimal overhead ($\sim$10\% inspection) while providing rapid, risk-aware escalation to full deterministic inspection under adversarial pressure.
 
 \subsection{Bounded Inspection Constraint}
 By coupling the B-SSRF with the risk budget, we ensure that the inspection cost $C_{inspection}$ for any given packet $P_i$ is bounded:
 $$C_{inspection}(P_i) = \begin{cases} \mathcal{O}(1) & R_i \le \theta \\ \mathcal{O}(k) & R_i > \theta, \; k \ll N \end{cases}$$
-Thus, the worst-case computational exposure is strictly bounded to $C_{max} = \mathcal{O}(k)$, ensuring $\mathbb{E}[L] \le 10$ ms.
+Thus, the worst-case computational exposure is empirically bounded in our evaluated workloads to $C_{max} = \mathcal{O}(k)$, helping to maintain nominal processing latency.
 
 
 \section{Experimental Setup}
@@ -380,6 +380,51 @@ The evaluation covers specific Vanetza git revisions:
 % TODO: Provide details on the testing harness configuration, additional random seed management, and dataset accessibility to ensure study reproducibility.
 
 \section{Evaluation}
+
+\subsection{Empirical Workload Amplification (MTU-Constrained)}
+
+To empirically quantify the structural amplification, we profiled the ASN.1 parser's latency across varying malicious payload sizes constrained strictly by the 1400-byte MTU limit. As shown in Figure \ref{fig:parse_latency_comparison} and Table \ref{tab:amp_profiling}, unbounded structural recursion exhibits a highly stable linear growth model ($\mathcal{O}(N)$) with respect to the payload size. 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{parse_latency_comparison.png}
+\caption{Empirical parse latency comparison demonstrating stable linear growth ($\mathcal{O}(N)$) of the vulnerable parser versus the mitigated constant-time performance.}
+\label{fig:parse_latency_comparison}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Performance Profiling of MTU-Constrained Amplification}
+\label{tab:amp_profiling}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}l l r r r r@{}}
+\toprule
+\textbf{Packet Size} & \textbf{Flood Region} & \textbf{Unpatched ($\mu$s)} & \textbf{Patched ($\mu$s)} & \textbf{Gain Ratio} & \textbf{Amp Factor} \\ \midrule
+\textbf{353 B} (PoC) & 289 B & 164.69 & 25.12 & 6.6$\times$ & 5.73$\times$ \\
+687 B & 623 B & 334.51 & 25.32 & 13.2$\times$ & 11.64$\times$ \\
+1007 B & 943 B & 499.28 & 25.81 & 19.3$\times$ & 17.37$\times$ \\
+\textbf{1400 B} (MTU) & 1336 B & 704.81 & 26.19 & 26.9$\times$ & 24.52$\times$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+Our regression analysis of the unpatched execution yields the linear equation $y = 0.5143x - 18.3051$ with a coefficient of determination $R^2 = 0.999908$. This near-perfect fit empirically confirms that ASN.1 structural recursion provides a stable, reliable resource exhaustion vector. A single 1400-byte malicious payload results in a 24.52$\times$ amplification factor compared to a patched parser, consuming over 704.81 $\mu$s of CPU time. 
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{mitigation_performance_gain.png}
+\caption{Mitigation performance gain ratio highlighting the exponential efficiency improvement as payload size approaches the MTU limit.}
+\label{fig:mitigation_performance_gain}
+\end{figure}
+
+These profiling results confirm our core thesis: an adversary does not require volumetric network flooding to degrade edge parser performance. Deep structural manipulation within a single standard network frame is sufficient to induce localized Head-of-Line (HoL) blocking.
+
+\subsection{Structural Signal Distribution Analysis}
+
+To validate the efficacy of the Bounded Streaming Structural Risk Filter (B-SSRF), we empirically evaluated the Localized Second Frequency Moment ($F_2$, denoted as $SQ$) across our dataset using a 64-byte sliding window. For legitimate V2X traffic, such as a standard 325-byte CAM payload, the presence of high-entropy cryptographic fields (e.g., ECC signatures and certificates) naturally disperses the byte distribution. Consequently, the localized collision concentration remains low. In our harness evaluation, the legitimate payloads exhibited a peak $SQ$ of 286, demonstrating the high structural variance inherent to standard protocol operations.
+
+In stark contrast, the 353-byte MTU-constrained recursion bomb (PoC) exhibits fundamentally different structural characteristics. To achieve deep ASN.1 structural nesting within a highly constrained byte footprint, the adversary is forced to repetitively inject identical structural markers, such as the \texttt{0x02} choice index. When the 64-byte sliding window enters this malicious padding region, the localized repetition causes the $SQ$ to spike to exactly 4096 ($64^2$), representing its theoretical mathematical maximum. This profound $>14\times$ signal gap (4096 versus 286) allows the SSRF to establish a highly resilient detection threshold ($\theta$). By exploiting this structural necessity of the attack, our mechanism effectively isolates algorithmic complexity threats without triggering false positives on legitimate traffic, successfully decoupling defense accuracy from expensive semantic parsing operations.
 
 \subsection{QoS Impact of Parser Exhaustion}
 
@@ -551,9 +596,9 @@ Internal validity may be impacted by the choice of the 5\% sampling rate and the
 
 \section{Limitations and Future Work}
 
-While the proposed Parser-Layer Circuit Breaker effectively mitigates structural complexity attacks, several limitations present avenues for future research.
+While the proposed Parser-Layer Circuit Breaker effectively mitigates structural complexity attacks, several limitations present avenues for future research. Importantly, our current evaluation is parser-centric and harness-based, focused on isolating the impact of presentation-layer workload amplification. Consequently, it does not utilize full vehicular mobility models or large-scale network simulations (e.g., ns-3), which would be necessary to assess the system's performance in broader, multi-node networking contexts.
 
-First, the $\mathcal{O}(1)$ SSRF relies on a statically defined repetition threshold ($\theta$). While effective for OER, which typically exhibits high bit-stream variation in legitimate cryptographic payloads, applying this heuristic to other protocols or encoding rules may require dynamic threshold tuning to prevent false positives. Future work will investigate adaptive thresholding mechanisms based on real-time traffic analysis.
+First, the $\mathcal{O}(1)$ SSRF relies on a statically defined repetition threshold ($\theta$). While effective for OER, which typically exhibits high bit-stream variation in legitimate cryptographic payloads, applying this heuristic to other protocols or encoding rules may require dynamic threshold tuning to prevent false positives. Furthermore, while the heuristic is effective against basic MTU-constrained structural padding, sophisticated adversaries might employ randomized structural markers or entropy camouflage to evade the $F_2$ moment detector, necessitating future work on resilient pattern recognition. Future work will investigate adaptive thresholding mechanisms based on real-time traffic analysis.
 
 Second, while the current implementation operates efficiently within the software ingress pipeline, the initial $\mathcal{O}(1)$ scan could be further optimized. Migrating the structural pattern detection to hardware-accelerated environments, such as FPGA smartNICs or eBPF/XDP frameworks, could provide true line-rate filtering before the packets reach the user-space processing queue.
 

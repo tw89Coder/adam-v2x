@@ -144,6 +144,93 @@ void runFloodDiagnosis(const vanetza::ByteBuffer& poc_packet) {
     const size_t HEADER_SIZE = 64;
     const int    RUNS        = 10000;
 
+    // ── NORMAL vs POC BASELINE ───────────────────────────────────────
+    double poc_vs_normal_ratio = 0.0;
+    {
+        vanetza::ByteBuffer normal_pkt =
+            readFileIntoBuffer("input/cam_v3_certificate.dat");
+
+        fprintf(stdout, "%s  NORMAL vs POC BASELINE%s\n",
+                YELLOW.c_str(), RESET.c_str());
+
+        struct BLEntry {
+            const char*                label;
+            const vanetza::ByteBuffer* buf;
+            bool                       available;
+        };
+
+        BLEntry bl_entries[] = {
+            { "NORMAL  cam_v3_certificate.dat", &normal_pkt, !normal_pkt.empty() },
+            { "POC     poc_mtu_limit.bin",      &poc_packet, true                },
+        };
+
+        long long bl_avg[2] = {};
+
+        for (int e = 0; e < 2; ++e) {
+            if (!bl_entries[e].available) {
+                fprintf(stdout,
+                    "  %s%-44s  [FILE NOT FOUND]%s\n",
+                    RED.c_str(), bl_entries[e].label, RESET.c_str());
+                continue;
+            }
+
+            long long total = 0;
+            long long mn = LLONG_MAX, mx = 0;
+            int valid = 0, crashed = 0;
+
+            for (int r = 0; r < RUNS; ++r) {
+                long long lat = measurePacketLatency(*bl_entries[e].buf);
+                fprintf(stdout,
+                    "\r  [%-44s]  run %5d/%d  ok=%-5d  crash=%-3d  last=%8lld ns     ",
+                    bl_entries[e].label, r + 1, RUNS, valid, crashed,
+                    lat > 0 ? lat : 0LL);
+                fflush(stdout);
+                if (lat > 0) {
+                    total += lat; valid++;
+                    mn = std::min(mn, lat);
+                    mx = std::max(mx, lat);
+                } else {
+                    crashed++;
+                }
+            }
+            fprintf(stdout, "\r%80s\r", "");
+
+            long long avg = valid > 0 ? total / valid : 0;
+            bl_avg[e] = avg;
+
+            fprintf(stdout,
+                "  %-44s  avg=%8lld ns  min=%8lld ns  max=%8lld ns  valid=%d/%d\n",
+                bl_entries[e].label, avg,
+                (valid > 0 ? mn : 0LL), (valid > 0 ? mx : 0LL),
+                valid, RUNS);
+        }
+
+        if (bl_avg[0] > 0 && bl_avg[1] > 0) {
+            poc_vs_normal_ratio = static_cast<double>(bl_avg[1]) / bl_avg[0];
+            const char* ratio_color =
+                (poc_vs_normal_ratio < 2.0)  ? GREEN.c_str()  :
+                (poc_vs_normal_ratio < 10.0) ? YELLOW.c_str() : RED.c_str();
+
+            fprintf(stdout,
+                "  %-44s  %sx%.2f%s  (POC costs %.1fx more CPU than NORMAL)\n\n",
+                "POC / NORMAL ratio:",
+                ratio_color, poc_vs_normal_ratio, RESET.c_str(), poc_vs_normal_ratio);
+
+            if (poc_vs_normal_ratio < 2.0) {
+                fprintf(stdout,
+                    "  %s[NOTE] POC/Normal ratio < 2.0 — patch likely active at this packet size.%s\n"
+                    "  Flood content diagnosis below may not be meaningful.\n\n",
+                    GREEN.c_str(), RESET.c_str());
+            }
+        }
+
+        fprintf(stdout, "  %s%s%s\n\n",
+                BLUE.c_str(),
+                "──────────────────────────────────────────────────────────────",
+                RESET.c_str());
+    }
+    // ── BASELINE END ─────────────────────────────────────────────────
+
     // Variant A: original poc (0x02 flood)
     vanetza::ByteBuffer var_02 = poc_packet;
 
@@ -215,7 +302,17 @@ void runFloodDiagnosis(const vanetza::ByteBuffer& poc_packet) {
             diff_02_vs_00, pct_flood_contrib);
     fprintf(stdout, "  A vs C (full vs header-only) : %+lld ns\n", diff_02_vs_hdr);
 
-    if (std::abs(diff_02_vs_00) < results[0] * 0.05) {
+    // ── 先判斷 patch 是否截斷，再給 flood 結論 ───────────────────
+    if (poc_vs_normal_ratio > 0.0 && poc_vs_normal_ratio < 2.0) {
+        fprintf(stdout,
+            "\n  %s[RESULT] Patch is ACTIVE — recursion terminated early.%s\n"
+            "  POC/Normal = x%.2f (< 2.0): POC is faster than NORMAL because\n"
+            "  depth limiter causes early return before full flood parse.\n"
+            "  A/B/C/D latency differences are within noise — flood diagnosis\n"
+            "  is NOT meaningful on a patched build.\n"
+            "  → Run on unpatched build to measure flood contribution.\n",
+            GREEN.c_str(), RESET.c_str(), poc_vs_normal_ratio);
+    } else if (std::abs(diff_02_vs_00) < results[0] * 0.05) {
         fprintf(stdout,
             "\n  %s[RESULT] Flood content does NOT affect latency (< 5%% difference).%s\n"
             "  The amplification is driven by the header structure alone (bytes[0-63]).\n"
