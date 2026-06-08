@@ -73,8 +73,6 @@ endif()
 
 add_subdirectory(tools/qos-harness)
 
-add_subdirectory(tools/payload_gen)
-
 # interface library for convenience
 get_property(_components GLOBAL PROPERTY VANETZA_COMPONENTS)
 add_library(vanetza INTERFACE)
