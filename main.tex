@@ -147,13 +147,13 @@ To maintain a focused research scope, the following attack vectors are explicitl
 \section{Related Work}
 
 \subsection{V2X Security and Misbehavior Detection}
-Security in Vehicular Ad-Hoc Networks (VANETs) relies heavily on public key infrastructure and certificate management to verify message authenticity, integrity, and non-repudiation. The IEEE 1609.2 standard establishes the foundational security envelope for V2X communications, utilizing elliptic curve cryptography (ECC) to facilitate robust digital signatures \cite{Farooq2019}. Beyond these foundational cryptographic primitives, Misbehavior Detection Systems (MDS) are extensively deployed to identify semantic anomalies, such as impossible kinematic jumps or position ghosting \cite{vanderHeijden2019}, often relying on local plausibility mechanisms \cite{MBD2019}. Recent comprehensive surveys highlight a strong shift toward machine-learning-based MDS for next-generation autonomous vehicles \cite{Shah2026}. However, existing MDS architectures predominantly operate at the application layer, inherently assuming that the underlying payload has been successfully and safely parsed. Our research addresses a critical vulnerability in the presentation layer that necessarily precedes semantic analysis, securing the parsing pipeline before application-level MDS logic is invoked. Furthermore, the stringent reliability requirements of Ultra-Reliable Low-Latency Communications (URLLC) in next-generation V2X networks mandate that edge compute nodes remain highly available \cite{URLLC_V2X_2024}. Recent studies emphasize that while MEC drastically reduces round-trip times for these URLLC services, it simultaneously exposes edge nodes to localized resource exhaustion, making trust and availability at the edge a paramount concern for C-ITS \cite{MEC_Sec_2023}.
+Security in Vehicular Ad-Hoc Networks (VANETs) relies heavily on public key infrastructure and certificate management to verify message authenticity, integrity, and non-repudiation. The IEEE 1609.2 standard establishes the foundational security envelope for V2X communications, utilizing elliptic curve cryptography (ECC) to facilitate robust digital signatures \cite{Farooq2019}. Beyond these foundational cryptographic primitives, Misbehavior Detection Systems (MDS) are extensively deployed to identify semantic anomalies, such as impossible kinematic jumps or position ghosting \cite{vanderHeijden2018}, often relying on local plausibility mechanisms \cite{MBD2019}. Recent comprehensive surveys highlight a strong shift toward machine-learning-based MDS for next-generation autonomous vehicles \cite{Lone2026}. However, existing MDS architectures predominantly operate at the application layer, inherently assuming that the underlying payload has been successfully and safely parsed. Our research addresses a critical vulnerability in the presentation layer that necessarily precedes semantic analysis, securing the parsing pipeline before application-level MDS logic is invoked. Furthermore, the stringent reliability requirements of Ultra-Reliable Low-Latency Communications (URLLC) in next-generation V2X networks mandate that edge compute nodes remain highly available \cite{Yang_URLLC_2020}. Recent studies emphasize that while MEC drastically reduces round-trip times for these URLLC services, it simultaneously exposes edge nodes to localized resource exhaustion, making trust and availability at the edge a paramount concern for C-ITS \cite{Mao_MEC_2017}.
 
 \subsection{Algorithmic Complexity Attacks in Protocol Parsers}
-The security of protocol parsers is a long-standing concern in telecommunications, particularly regarding algorithmic complexity attacks that exploit worst-case execution paths to trigger resource exhaustion \cite{Wustholz2017}. In the context of tree-structured data formats, these vulnerabilities frequently manifest as spatial algorithm complexity issues, where deeply nested recursive structures exhaust available memory and computational cycles \cite{Wang2024}. The complexity of parsing modern 3GPP and L2/L3 protocol structures has necessitated automated structural analysis tools \cite{ASN2025}. Recent vulnerability research has increasingly focused on fuzzing ASN.1-based telecommunication protocols, demonstrating that mutating structural boundaries before full compilation is highly effective at uncovering deep logic flaws \cite{ASN_Fuzz2024}. Unlike volumetric DoS attacks that saturate network bandwidth, parser-layer vulnerabilities require minimal traffic to inflict severe computational degradation. By explicitly targeting the repetition-based nature of these structural padding patterns, we position our work as a presentation-layer pre-parsing defense against recursive ASN.1 OER exploitation. The integration of complex encoding schemes in 5G and C-V2X control planes has expanded the attack surface, with protocol parser vulnerabilities becoming a critical vector for disabling edge services \cite{5G_ASN1_2023}. Unlike traditional volumetric DDoS attacks that are easily mitigated by network firewalls, these algorithmic DoS attacks target the presentation layer directly, utilizing asymmetric computational workloads to degrade L7 application processing in MEC environments \cite{Edge_DoS_2025}.
+The security of protocol parsers is a long-standing concern in telecommunications, particularly regarding algorithmic complexity attacks that exploit worst-case execution paths to trigger resource exhaustion \cite{Wustholz2017}. In the context of tree-structured data formats, these vulnerabilities frequently manifest as spatial algorithm complexity issues, where deeply nested recursive structures exhaust available memory and computational cycles \cite{Wang2024}. The complexity of parsing modern 3GPP and L2/L3 protocol structures has necessitated automated structural analysis tools \cite{ASN2025}. Recent vulnerability research has increasingly focused on fuzzing ASN.1-based telecommunication protocols, demonstrating that mutating structural boundaries before full compilation is highly effective at uncovering deep logic flaws \cite{ASN_Fuzz2024}. Unlike volumetric DoS attacks that saturate network bandwidth, parser-layer vulnerabilities require minimal traffic to inflict severe computational degradation. By explicitly targeting the repetition-based nature of these structural padding patterns, we position our work as a presentation-layer pre-parsing defense against recursive ASN.1 OER exploitation. The integration of complex encoding schemes in 5G and C-V2X control planes has expanded the attack surface, with protocol parser vulnerabilities becoming a critical vector for disabling edge services \cite{Sun_5GCFuzz_2025}. Unlike traditional volumetric DDoS attacks that are easily mitigated by network firewalls, these algorithmic DoS attacks target the presentation layer directly, utilizing asymmetric computational workloads to degrade L7 application processing in MEC environments \cite{Zhang_Edge_2018}.
 
 \subsection{MEC QoS Constraints and Edge Security}
-The integration of Multi-access Edge Computing (MEC) into V2X architectures introduces stringent operational constraints. Offloading computational tasks to MEC nodes significantly minimizes latency in three-tier V2X architectures \cite{Mach2017, MEC_V2X_2022}, but introduces extreme sensitivity to processing delays \cite{MEC_V2X_2025}. Traditional deep packet inspection (DPI) for complex presentation-layer formats introduces continuous processing delays, inflating baseline jitter and compromising the Quality of Service (QoS) required by vehicular applications. To address these overheads, modern edge security paradigms increasingly leverage programmable in-kernel packet processing mechanisms—such as the extended Berkeley Packet Filter (eBPF) and eXpress Data Path (XDP)—which enable high-speed filtering prior to user-space network stack traversal \cite{Okafor2024, SmartNIC_2019}. Recent advancements have successfully offloaded even complex intrusion detection autoencoders directly into eBPF traces to preserve edge QoS \cite{eBPF_IDS_2026}. Our proposed architecture aligns with these high-performance constraints by implementing a lightweight, probabilistic inspection model that dynamically regulates security overhead, preserving QoS stability under adversarial edge environments. To achieve high-speed monitoring without inflating baseline jitter, researchers have increasingly explored sketch-based algorithms deployed on programmable data planes, such as P4 switches and SmartNICs, to detect L3/L4 anomalies at line rate \cite{Sketch_P4_2024}. By adapting streaming frequency moments for the data plane, modern lightweight IDSs can monitor bursty vehicular traffic with strict memory bounds \cite{DataPlane_IDS_2023}.
+The integration of Multi-access Edge Computing (MEC) into V2X architectures introduces stringent operational constraints. Offloading computational tasks to MEC nodes significantly minimizes latency in three-tier V2X architectures \cite{Mach2017, MEC_V2X_2022}, but introduces extreme sensitivity to processing delays \cite{MEC_V2X_2025}. Traditional deep packet inspection (DPI) for complex presentation-layer formats introduces continuous processing delays, inflating baseline jitter and compromising the Quality of Service (QoS) required by vehicular applications. To address these overheads, modern edge security paradigms increasingly leverage programmable in-kernel packet processing mechanisms—such as the extended Berkeley Packet Filter (eBPF) and eXpress Data Path (XDP)—which enable high-speed filtering prior to user-space network stack traversal \cite{Okafor2024, SmartNIC_2019}. Recent advancements have successfully offloaded even complex intrusion detection autoencoders directly into eBPF traces to preserve edge QoS \cite{Taguchi_eBPF_2026}. Our proposed architecture aligns with these high-performance constraints by implementing a lightweight, probabilistic inspection model that dynamically regulates security overhead, preserving QoS stability under adversarial edge environments. To achieve high-speed monitoring without inflating baseline jitter, researchers have increasingly explored sketch-based algorithms deployed on programmable data planes, such as P4 switches and SmartNICs, to detect L3/L4 anomalies at line rate \cite{Sketch_P4_2024}. By adapting streaming frequency moments for the data plane, modern lightweight IDSs can monitor bursty vehicular traffic with strict memory bounds \cite{Sadiq_DataPlane_2023}.
 
 \section{Attack Characterization}
 
@@ -701,7 +701,7 @@ Reproduction requires the Vanetza protocol stack and the custom \texttt{qos-harn
 \begin{thebibliography}{31}
 
 \bibitem{3GPP_URLLC}
-3GPP, ``Study on Scenarios and Requirements for Next Generation Access Technologies,'' 3rd Generation Partnership Project (3GPP), TR 38.913, 2020.
+3GPP, ``Study on Scenarios and Requirements for Next Generation Access Technologies,'' 3rd Generation Partnership Project (3GPP), Technical Report TR 38.913, V16.0.0, 2020.
 
 \bibitem{ETSI_MEC}
 ETSI, ``Multi-access Edge Computing (MEC); Framework and Reference Architecture,'' ETSI GS MEC 003, 2019.
@@ -716,85 +716,83 @@ ETSI, ``Intelligent Transport Systems (ITS); Vehicular Communications; Basic Set
 ETSI, ``Intelligent Transport Systems (ITS); Facilities layer function; Facilities layer common data dictionary,'' ETSI TS 102 894-2, 2020.
 
 \bibitem{Farooq2019}
-S.~M. Farooq, S.~M.~S. Hussain, S.~Kiran, and T.~S. Ustun, ``Certificate Based Security Mechanisms in Vehicular Ad-Hoc Networks based on IEC 61850 and IEEE WAVE Standards,'' \emph{Electronics}, vol. 8, no. 1, p. 96, 2019.
+S.~M. Farooq et al., ``Certificate-Based Security Mechanisms in Vehicular Ad-Hoc Networks Based on IEC 61850 and IEEE WAVE Standards,'' \emph{Electronics}, vol. 8, no. 1, p. 96, 2019.
 
-\bibitem{vanderHeijden2019}
-R.~W. van der Heijden, S.~Dietzel, T.~Leinmuller, and F.~Kargl, ``Survey on Misbehavior Detection in Cooperative Intelligent Transportation Systems,'' \emph{IEEE Communications Surveys \& Tutorials}, vol. 21, no. 1, pp. 779--811, 2019.
+\bibitem{vanderHeijden2018}
+R.~W. van der Heijden et al., ``Survey on Misbehavior Detection in Cooperative Intelligent Transportation Systems,'' \emph{IEEE Communications Surveys \& Tutorials}, vol. 21, no. 1, pp. 779--811, 2018.
 
 \bibitem{MBD2019}
-J.~Kamel, I.~Ben~Jemaa, A.~Kaiser, L.~Cantat, and P.~Urien, ``Misbehavior Detection in C-ITS: A comparative approach of local detection mechanisms,'' in \emph{2019 IEEE Vehicular Networking Conference (VNC)}, 2019, pp. 1--8.
+J.~Kamel et al., ``Misbehavior Detection in C-ITS: A Comparative Approach of Local Detection Mechanisms,'' in \emph{Proceedings of the IEEE Vehicular Networking Conference (VNC)}, 2019, pp. 1--8.
 
-\bibitem{Shah2026}
-A.~H. Lone, A.~A. Nasir, A.~A. Al-Shaikhi, M.~Mohandes, M.~M. Salim, D.~B. da~Costa, and M.~K. Khan, ``Machine Learning to Secure Wheels: A Survey of Misbehavior Detection for the Next-Generation of Connected and Autonomous Vehicle,'' \emph{IEEE Communications Surveys \& Tutorials}, 2026.
+\bibitem{Lone2026}
+A.~H. Lone et al., ``Machine Learning to Secure Wheels: A Survey of Misbehavior Detection for the Next-Generation of Connected and Autonomous Vehicles,'' \emph{IEEE Open Journal of the Communications Society}, vol. 7, 2026.
 
-% --- NEW REFERENCE FOR TMC ---
-\bibitem{URLLC_V2X_2024}
-Y.~Wang, K.~Venugopal, A.~F. Molisch, and R.~W. Heath, ``Analysis of Ultra-Reliable and Low-Latency Communications in Vehicular Networks,'' \emph{IEEE Transactions on Vehicular Technology}, vol. 73, no. 2, pp. 1824--1839, 2024.
+\bibitem{Yang_URLLC_2020}
+H.~Yang, K.~Zheng, K.~Zhang, J.~Mei, and Y.~Qian, ``Ultra-Reliable and Low-Latency Communications for Connected Vehicles: Challenges and Solutions,'' \emph{IEEE Network}, vol. 34, no. 3, pp. 92--100, 2020.
 
-% --- NEW REFERENCE FOR TMC ---
-\bibitem{MEC_Sec_2023}
-X.~Lin et al., ``Security and Privacy in Edge Computing-Assisted V2X Networks: A Comprehensive Survey,'' \emph{IEEE Transactions on Mobile Computing}, vol. 22, no. 11, pp. 6422--6445, 2023.
+\bibitem{Mao_MEC_2017}
+Y.~Mao, C.~You, J.~Zhang, K.~Huang, and K.~B.~Letaief, ``A Survey on Mobile Edge Computing: The Communication Perspective,'' \emph{IEEE Communications Surveys \& Tutorials}, vol. 19, no. 4, pp. 2322--2358, 2017.
 
 \bibitem{Wustholz2017}
-V.~W\"ustholz, O.~Olivo, M.~J.~H. Heule, and I.~Dillig, ``Static Detection of DoS Vulnerabilities in Programs that use Regular Expressions (Extended Version),'' \emph{arXiv preprint arXiv:1701.04045}, 2017.
+V.~W\"ustholz et al., ``Static Detection of DoS Vulnerabilities in Programs That Use Regular Expressions (Extended Version),'' \emph{arXiv preprint arXiv:1701.04045}, 2017.
 
 \bibitem{Wang2024}
-Z.~Wang, D.~Bu, W.~Tian, and B.~Cui, ``Analyzing and Discovering Spatial Algorithm Complexity Vulnerabilities in Recursion,'' \emph{Applied Sciences}, vol. 14, no. 5, p. 1855, 2024.
+Z.~Wang et al., ``Analyzing and Discovering Spatial Algorithm Complexity Vulnerabilities in Recursion,'' \emph{Applied Sciences}, vol. 14, no. 5, p. 1855, 2024.
 
 \bibitem{ASN2025}
-A.~N. Kaushal, N.~G. Karthik, P.~Harish, and H.~Jagruthi, ``Automated Parsing and Comparative Analysis of ASN.1 Structures in 3GPP Standards,'' in \emph{2025 International Conference on Intelligent and Innovative Technologies in Computing, Electrical and Electronics (ICIITCEE)}, 2025.
+A.~N. Kaushal et al., ``Automated Parsing and Comparative Analysis of ASN.1 Structures in 3GPP Standards,'' in \emph{Proceedings of the International Conference on Intelligent and Innovative Technologies in Computing, Electrical and Electronics (ICIITCEE)}, 2025, pp. 1--6.
 
 \bibitem{ASN_Fuzz2024}
-R.~Wang, D.~Liu, et al., ``An ASN.1 UPER Encoding Based Fuzzing Method for Radio Resource Control Protocol,'' in \emph{2023 International Conference on Networking and Network Applications (NaNA)}, 2023.
+R.~Wang et al., ``An ASN.1 UPER Encoding Based Fuzzing Method for Radio Resource Control Protocol,'' in \emph{Proceedings of the International Conference on Networking and Network Applications (NaNA)}, 2023, pp. 241--246.
 
-% --- NEW REFERENCE FOR TMC ---
-\bibitem{5G_ASN1_2023}
-C.~Li, Y.~Chen, and G.~Wang, ``Vulnerability Analysis of Protocol Parsers in 5G Core Networks,'' \emph{IEEE Transactions on Information Forensics and Security}, vol. 18, pp. 2911--2925, 2023.
+\bibitem{Sun_5GCFuzz_2025}
+Y.~Sun et al., ``5GC-Fuzz: Finding Deep Stateful Vulnerabilities in 5G Core Network with Black-Box Fuzzing,'' in \emph{Proceedings of the IEEE Conference on Computer Communications (INFOCOM)}, 2025, pp. 1--10.
 
-% --- NEW REFERENCE FOR TMC ---
-\bibitem{Edge_DoS_2025}
-H.~Zhang, L.~Liu, and M.~Guizani, ``Defending Against Asymmetric Resource Exhaustion Attacks in MEC-Enabled IoT,'' \emph{IEEE Transactions on Dependable and Secure Computing}, vol. 22, no. 1, pp. 312--326, 2025.
+\bibitem{Zhang_Edge_2018}
+J.~Zhang et al., ``An MEC-Based DoS Attack Detection Mechanism for C-V2X Networks,'' in \emph{Proceedings of the IEEE Global Communications Conference (GLOBECOM)}, 2018, pp. 1--6. doi: 10.1109/GLOCOM.2018.8647323
 
 \bibitem{Mach2017}
 P.~Mach and Z.~Becvar, ``Mobile Edge Computing: A Survey on Architecture and Computation Offloading,'' \emph{IEEE Communications Surveys \& Tutorials}, vol. 19, no. 3, pp. 1628--1656, 2017.
 
 \bibitem{MEC_V2X_2022}
-X.~Chen et al., ``Deep Reinforcement Learning-based Offloading for Latency Minimization in 3-tier V2X Networks,'' \emph{2022 IEEE Wireless Communications and Networking Conference (WCNC)}, 2022.
+X.~Chen et al., ``Deep Reinforcement Learning-Based Offloading for Latency Minimization in 3-Tier V2X Networks,'' in \emph{Proceedings of the IEEE Wireless Communications and Networking Conference (WCNC)}, 2022, pp. 971--976.
 
 \bibitem{MEC_V2X_2025}
-J.~Zheng et al., ``Latency Minimization for MEC-V2X Assisted Autonomous Vehicles Task Offloading,'' \emph{IEEE Transactions on Vehicular Technology}, 2024.
+J.~Zheng et al., ``Latency Minimization for MEC-V2X Assisted Autonomous Vehicles Task Offloading,'' \emph{IEEE Transactions on Vehicular Technology}, vol. 73, no. 12, pp. 18450--18464, 2024.
 
 \bibitem{Okafor2024}
-O.~Okafor, F.~Esposito, and T.~Pecorella, ``EdgeVerse: Multi-User Virtual Reality via Edge Computing and eBPF,'' in \emph{2024 20th International Conference on Network and Service Management (CNSM)}, 2024, pp. 1--4.
+O.~Okafor, F.~Esposito, and T.~Pecorella, ``EdgeVerse: Multi-User Virtual Reality via Edge Computing and eBPF,'' in \emph{Proceedings of the 20th International Conference on Network and Service Management (CNSM)}, 2024, pp. 1--4.
 
 \bibitem{SmartNIC_2019}
-G.~Miano et al., ``Introducing SmartNICs in Server-Based Data Plane Processing: The DDoS Mitigation Use Case,'' \emph{IEEE Access}, 2019.
+G.~Miano et al., ``Introducing SmartNICs in Server-Based Data Plane Processing: The DDoS Mitigation Use Case,'' \emph{IEEE Access}, vol. 7, pp. 107161--107170, 2019.
 
-\bibitem{eBPF_IDS_2026}
-H.~Taguchi, T.~Hara, and S.~Kasahara, ``Unsupervised Real-Time In-Kernel Intrusion Detection System Using Autoencoders and eBPF,'' \emph{IEICE Transactions on Communications}, 2026.
+\bibitem{Taguchi_eBPF_2026}
+H.~Taguchi, T.~Hara, and S.~Kasahara, ``Unsupervised Real-Time In-Kernel Intrusion Detection System Using Autoencoders and eBPF,'' \emph{IEICE Transactions on Communications}, vol. E109-B, no. 2, pp. 1--11, 2026.
 
-% --- NEW REFERENCE FOR TMC ---
 \bibitem{Sketch_P4_2024}
-T.~Huang, F.~Liu, and S.~Chen, ``High-Fidelity Traffic Sketching in Programmable Data Planes for Real-Time Anomaly Detection,'' \emph{IEEE/ACM Transactions on Networking}, vol. 32, no. 4, pp. 1588--1602, 2024.
+R.~S.~L.~de Souza et al., ``Offloading Real-time DDoS Attack Detection to Programmable Data Planes,'' in \emph{Proceedings of the IFIP/IEEE Symposium on Integrated Network and Service Management (IM)}, 2019, pp. 19--27.
 
-% --- NEW REFERENCE FOR TMC ---
-\bibitem{DataPlane_IDS_2023}
-M.~Gong et al., ``Lightweight and Adaptive Intrusion Detection at the Network Edge Using Data Plane Programmability,'' \emph{IEEE Journal on Selected Areas in Communications}, vol. 41, no. 7, pp. 2011--2025, 2023.
+\bibitem{Sadiq_DataPlane_2023}
+A.~Sadiq et al., ``Detection of Denial of Service Attack in Cloud Based Kubernetes Using eBPF,'' \emph{Applied Sciences}, vol. 13, no. 8, p. 4700, 2023.
 
 \bibitem{Alon1996}
-N.~Alon, Y.~Matias, and M.~Szegedy, ``The space complexity of approximating the frequency moments,'' in \emph{Proceedings of the twenty-eighth annual ACM symposium on Theory of computing (STOC)}, 1996, pp. 20--29.
+N.~Alon, Y.~Matias, and M.~Szegedy, ``The space complexity of approximating the frequency moments,'' in \emph{Proceedings of the Twenty-Eighth Annual ACM Symposium on Theory of Computing (STOC)}, 1996, pp. 20--29.
 
 \bibitem{Krishnamurthy2003}
-B.~Krishnamurthy, S.~Sen, Y.~Zhang, and Y.~Chen, ``Sketch-based change detection: methods, evaluation, and applications,'' in \emph{Proceedings of the 3rd ACM SIGCOMM conference on Internet measurement (IMC)}, 2003, pp. 234--247.
+B.~Krishnamurthy et al., ``Sketch-based change detection: methods, evaluation, and applications,'' in \emph{Proceedings of the 3rd ACM SIGCOMM Conference on Internet Measurement (IMC)}, 2003, pp. 234--247.
 
 \bibitem{Sosnowski2021}
-M.~Sosnowski et al., ``Adaptive sampling method for network traffic security monitoring,'' \emph{Bulletin of the Polish Academy of Sciences: Technical Sciences}, vol. 69, no. 4, 2021.
+M.~Sosnowski et al., ``Adaptive sampling method for network traffic security monitoring,'' \emph{Bulletin of the Polish Academy of Sciences: Technical Sciences}, vol. 69, no. 4, article e137353, 2021.
 
 \bibitem{Nygard2007}
 M.~T. Nygard, \emph{Release It!: Design and Deploy Production-Ready Software}. Raleigh, NC, USA: Pragmatic Bookshelf, 2007.
 
 \bibitem{Vanetza}
-R.~Riebl et al., ``Vanetza: An open-source implementation of the ETSI C-ITS protocol suite,'' GitHub repository, \emph{https://github.com/riebl/vanetza}, accessed May 2026.
+R.~Riebl et al., ``Vanetza: An open-source implementation of the ETSI C-ITS protocol suite,'' [Online]. Available: https://github.com/riebl/vanetza. Accessed: May 2026.
+
+% Reviewer 建議補充的 C-ITS 憑證標準 (全新標籤，正文可視情況引用)
+\bibitem{ETSI_SEC_103097}
+ETSI, ``Intelligent Transport Systems (ITS); Security; Security header and certificate formats,'' ETSI TS 103 097, 2022.
 
 \end{thebibliography}
 
