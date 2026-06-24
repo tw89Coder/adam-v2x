@@ -1,9 +1,0 @@
-Command 'perf' not found, but can be installed with:
-sudo apt install linux-intel-iotg-tools-common          # version 5.15.0-1104.110, or
-sudo apt install linux-nvidia-6.2-tools-common          # version 6.2.0-1003.3~22.04.1
-sudo apt install linux-nvidia-tegra-igx-tools-common    # version 5.15.0-1018.18
-sudo apt install linux-tools-common                     # version 5.15.0-181.191
-sudo apt install linux-nvidia-5.19-tools-common         # version 5.19.0-1014.14
-sudo apt install linux-nvidia-tegra-tools-common        # version 5.15.0-1030.30
-sudo apt install linux-xilinx-zynqmp-tools-common       # version 5.15.0-1053.57
-sudo apt install linux-intel-iot-realtime-tools-common  # version 5.15.0-1073.75

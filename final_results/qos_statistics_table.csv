@@ -1,6 +1,0 @@
-Scenario,Mean_ms,Median_ms,P99_ms,P99.9_ms,Max_ms
-Baseline (No Attack),0.0151,0.0139,0.0311,0.1349,1.2919
-Unpatched Native,0.0303,0.015,0.1787,0.3031,1.7783
-Unpatched + Pre-filter,0.0153,0.0156,0.0348,0.1267,2.4289
-Official Patch Native,0.029,0.0143,0.1691,0.2881,1.8849
-Patched + Pre-filter (Hybrid),0.0148,0.015,0.0309,0.1222,0.5895
