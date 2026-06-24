@@ -7,13 +7,24 @@
 export LC_ALL=C
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Initialize terminal signaling color codes
+C_RESET="\033[0m"
+C_BOLD="\033[1m"
+C_INFO="\033[1;36m"
+C_SUCCESS="\033[1;32m"
+C_WARN="\033[1;33m"
+C_ERROR="\033[1;41;37m"
+
 # Initialize baseline default states and matrix parameters
 PIN_CORE=${PIN_CORE:-9}
 TOTAL_PACKETS=1000000
 RUN_FILTER_OFF=true
 RUN_FILTER_ON=true
 
-# Default global pollution density spectrum arrays
+# Default global state machine mode and pollution density spectrum arrays
+DEFAULT_MODES=(0 1 2)
+TARGET_MODES=("${DEFAULT_MODES[@]}")
+
 DEFAULT_RATES=(1.0 5.0 10.0)
 POLLUTION_RATES=("${DEFAULT_RATES[@]}")
 
@@ -29,7 +40,7 @@ while [[ $# -gt 0 ]]; do
                 PIN_CORE="$2"
                 shift 2
             else
-                echo "[-] Error: --core demands a valid numeric CPU index value."
+                echo -e "${C_ERROR}[ERROR] --core demands a valid numeric CPU index value.${C_RESET}"
                 exit 1
             fi
             ;;
@@ -43,13 +54,23 @@ while [[ $# -gt 0 ]]; do
             RUN_FILTER_ON=true
             shift
             ;;
+        --modes)
+            if [[ -n "$2" ]]; then
+                # Tokenize space-separated string into bash array elements
+                IFS=' ' read -r -a TARGET_MODES <<< "$2"
+                shift 2
+            else
+                echo -e "${C_ERROR}[ERROR] --modes demands a space-separated string of integers (e.g. \"0 1\").${C_RESET}"
+                exit 1
+            fi
+            ;;
         --rates)
             if [[ -n "$2" ]]; then
-                # Dynamically tokenized whitespace separated numbers into native Bash array mapping
+                # Tokenize space-separated string into bash array elements
                 IFS=' ' read -r -a POLLUTION_RATES <<< "$2"
                 shift 2
             else
-                echo "[-] Error: --rates demands a string space-separated list of ranges (e.g. \"1.0 2.0 3.0\")."
+                echo -e "${C_ERROR}[ERROR] --rates demands a space-separated string of ranges (e.g. \"1.0 5.0\").${C_RESET}"
                 exit 1
             fi
             ;;
@@ -60,7 +81,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Restore standard target routing tokens back to the main branch execution map
+# Restore standard target routing tokens back to the positional parameter map
 set -- "${POSITIONAL_ARGS[@]}"
 
 print_usage() {
@@ -80,13 +101,13 @@ print_usage() {
     echo "  -c, --core <id>   Target hardware CPU core index for taskset processor locking (Default: 9)"
     echo "  --no-filter-only  Force --simulate-all batch scheduler to execute ONLY Filter=OFF steps"
     echo "  --filter-only     Force --simulate-all batch scheduler to execute ONLY Filter=ON steps"
+    echo "  --modes \"m1 m2\"   Override default execution suite with custom target logic modes"
     echo "  --rates \"r1 r2\"   Override default sweep steps with a custom range list of pollution floats"
     echo ""
     echo "Examples:"
     echo "  ./run_experiments.sh unpatched --simulate-all                             # Default 18-node sweep"
-    echo "  ./run_experiments.sh unpatched --simulate-all --no-filter-only            # Only Filter=OFF nodes"
+    echo "  ./run_experiments.sh all --simulate-all --modes \"0\" --rates \"0.0\"         # Generate absolute baselines"
     echo "  ./run_experiments.sh unpatched --simulate-all --rates \"1.0 2.0 3.0 4.0\"   # Sweep 4 custom rates"
-    echo "  ./run_experiments.sh unpatched --simulate-all --filter-only --rates \"2.5 7.5\" --core 4"
     exit 1
 }
 
@@ -102,35 +123,27 @@ execute_matrix_sweep() {
     local exec_bin="${ROOT_DIR}/vanetza_${tgt}/build/bin/qos-harness"
 
     if [ ! -f "$exec_bin" ]; then
-        echo "[-] Error: Executable target kernel missing at ${exec_bin}."
-        echo "[-] Run './manage_build.sh ${tgt}' first to map compilation binary."
-        return
+        echo -e "${C_ERROR}[FATAL] Executable target kernel missing at ${exec_bin}.${C_RESET}"
+        echo -e "${C_ERROR}[FATAL] Run './manage_build.sh ${tgt}' first to compile binary map.${C_RESET}"
+        exit 1
     fi
 
     mkdir -p "${ROOT_DIR}/outputs/csv_raw/${tgt}"
 
-    # Dynamic target mode list matrix array
-    local MODES=(0 1 2)
-
-    for mode in "${MODES[@]}"; do
+    # Dynamic target mode list mapped from command arguments
+    for mode in "${TARGET_MODES[@]}"; do
         for rate in "${POLLUTION_RATES[@]}"; do
             
             # Conditionally execute the unhardened raw baseline telemetry flow node
             if [ "$RUN_FILTER_OFF" = true ]; then
-                echo "======================================================================"
-                echo "[*] Matrix Node: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=OFF (Core: ${PIN_CORE})"
-                echo "======================================================================"
+                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=OFF (Core: ${PIN_CORE})${C_RESET}"
                 taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode"
-                echo "" # Releases trailing carriage return view block
             fi
 
             # Conditionally execute the circuit-breaker state-machine hardened flow node
             if [ "$RUN_FILTER_ON" = true ]; then
-                echo "======================================================================"
-                echo "[*] Matrix Node: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON (Core: ${PIN_CORE})"
-                echo "======================================================================"
+                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  (Core: ${PIN_CORE})${C_RESET}"
                 taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f
-                echo ""
             fi
             
             if [ "$RUN_FILTER_OFF" = true ] || [ "$RUN_FILTER_ON" = true ]; then
@@ -142,13 +155,40 @@ execute_matrix_sweep() {
 
 case "$ACTION" in
     --diagnose-flood|--profile-amp|--build-dataset)
+        execute_single_action() {
+            local tgt=$1
+            local bin="${ROOT_DIR}/vanetza_${tgt}/build/bin/qos-harness"
+            
+            if [ ! -f "$bin" ]; then
+                echo -e "${C_ERROR}[FATAL] Executable target kernel missing at ${bin}.${C_RESET}"
+                echo -e "${C_ERROR}[FATAL] Run './manage_build.sh ${tgt}' first to compile binary map.${C_RESET}"
+                exit 1
+            fi
+            
+            echo -e "${C_INFO}[INFO] Triggering dedicated framework routine: ${ACTION} on target [${tgt}] (Pinned Core: ${PIN_CORE})${C_RESET}"
+            taskset -c $PIN_CORE "$bin" "$ACTION"
+            
+            # Post-execution isolation router to prevent cross-over overwrites
+            local target_csv_dir="${ROOT_DIR}/outputs/csv_raw/${tgt}"
+            mkdir -p "$target_csv_dir"
+            
+            # Intercept and relocate generated profile data from shared or local drop zones
+            if [ -f "${ROOT_DIR}/outputs/csv_raw/amplification_profile.csv" ]; then
+                mv "${ROOT_DIR}/outputs/csv_raw/amplification_profile.csv" "${target_csv_dir}/"
+                echo -e "${C_SUCCESS}[SUCCESS] Dynamic isolation complete: Relocated root profile to ${tgt}/ layout.${C_RESET}"
+            elif [ -f "${ROOT_DIR}/vanetza_${tgt}/tools/qos-harness/csv_data/amplification_profile.csv" ]; then
+                mv "${ROOT_DIR}/vanetza_${tgt}/tools/qos-harness/csv_data/amplification_profile.csv" "${target_csv_dir}/"
+                echo -e "${C_SUCCESS}[SUCCESS] Dynamic isolation complete: Relocated localized profile to ${tgt}/ layout.${C_RESET}"
+            fi
+        }
+
+        # Upgraded to natively support sequential automation sweeps via the 'all' keyword
         if [ "$TARGET" == "all" ]; then
-            echo "[-] Error: Action ${ACTION} must be target specific. Choose unpatched or patched."
-            exit 1
+            execute_single_action "unpatched"
+            execute_single_action "patched"
+        else
+            execute_single_action "$TARGET"
         fi
-        EXEC_BIN="${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness"
-        echo "[*] Triggering dedicated framework routine: ${ACTION} (Pinned Core: ${PIN_CORE})"
-        taskset -c $PIN_CORE "$EXEC_BIN" "$ACTION"
         ;;
         
     --simulate-all)
@@ -158,19 +198,17 @@ case "$ACTION" in
         else
             execute_matrix_sweep "$TARGET"
         fi
-        echo "======================================================================"
-        echo "[+] Dynamic matrix sweep executed successfully. Data converged."
-        echo "======================================================================"
+        echo -e "${C_SUCCESS}[SUCCESS] Dynamic matrix sweep executed successfully. Data converged.${C_RESET}"
         ;;
         
     --custom)
         if [ "$TARGET" == "all" ]; then
-            echo "[-] Error: Custom actions cannot accept global target routing."
+            echo -e "${C_ERROR}[ERROR] Custom actions cannot accept global target routing.${C_RESET}"
             exit 1
         fi
         shift 2
         EXEC_BIN="${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness"
-        echo "[*] Invoking custom framework map... Args: $@"
+        echo -e "${C_INFO}[INFO] Invoking custom framework map... Args: $@${C_RESET}"
         taskset -c $PIN_CORE "$EXEC_BIN" "$@"
         ;;
         
