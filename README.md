@@ -26,7 +26,7 @@ parsing algorithms and the industrial telemetry presentation layer.
 │   │   └── patched/          # Separated data matrices from protected state-machine loops
 │   └── amp_packets/          # Extracted binary payloads tracking geometric progression increments
 ├── manage_build.sh           # Industrial orchestrator for incremental or clean workspace builds
-└── run_experiments.sh          # Autonomous evaluation master console for multi-mode batch execution
+└── run_experiments.sh        # Autonomous evaluation master console for multi-mode batch execution
 
 ```
 
@@ -56,37 +56,41 @@ The automated harness overrides hardcoded loops, supporting continuous hardware 
 ### Standard Core Routine Invocations
 
 ```bash
-# 1. Delta Diagnosis: Verify asymmetric CPU expenditure contribution between flood payload maps
+# Delta Diagnosis: Verify asymmetric CPU expenditure contribution between flood payload maps
 ./run_experiments.sh unpatched --diagnose-flood
 
-# 2. Geometric Profiling: Sweep and extract packet-size vs CPU amplification factor metrics up to 1400B
+# Geometric Profiling: Sweep and extract packet-size vs CPU amplification factor metrics up to 1400B
 ./run_experiments.sh unpatched --profile-amp
 
-# 3. Dataset Generation: Run multi-sample strict validation loops to filter high-potency toxic variants
+# Dataset Generation: Run multi-sample strict validation loops to filter high-potency toxic variants
 ./run_experiments.sh unpatched --build-dataset
 
 ```
 
-### Full-Scale Evaluation Matrix Sweep
+### Automation Configuration Modifiers
 
-Executes nested batch iterations sweeping all pollution densities (1.0%, 5.0%, 10.0%) across discrete traffic types:
+Modifiers can be flexibly placed anywhere within the command-line interface sequence:
 
-* **Mode 0 (Uniform Random):** High-entropy sporadic packet interleaving simulating slow-rate degradation.
-* **Mode 1 (Single Pulse Burst):** High-density volumetric surge focused explicitly within the 30% to 50% window.
-* **Mode 2 (Periodic On-Off Waves):** Non-linear oscillating attack cycles designed to disrupt nominal firewalls.
+* `-c, --core <id>`: Target hardware CPU core index for taskset processor locking (Default: 9)
+* `--no-filter-only`: Force `--simulate-all` batch scheduler to execute ONLY Filter=OFF evaluation steps
+* `--filter-only`: Force `--simulate-all` batch scheduler to execute ONLY Filter=ON evaluation steps
+* `--rates "r1 r2"`: Override default sweep intervals with a custom whitespace-separated list of pollution floats
+
+### Full-Scale Matrix Evaluation Examples
 
 ```bash
-# Launch multi-mode evaluation loops against unpatched baseline sandboxes
+# Launch default 18-node comparative matrix sweep across modes (0,1,2) and rates (1%,5%,10%)
 ./run_experiments.sh unpatched --simulate-all
 
-# Launch identical evaluation loops against hardened circuit-breaker state-machines
-./run_experiments.sh patched --simulate-all
+# Execute high-density custom sweep tracking unique target intervals on an isolated core index
+./run_experiments.sh unpatched --simulate-all --rates "1.0 2.0 3.0 4.0 5.0" --no-filter-only --core 4
+
+# Perform pinpoint defense validation against selected high-pollution density thresholds
+./run_experiments.sh patched --simulate-all --rates "7.5 15.0" --filter-only --core 2
 
 ```
 
-### Custom Parameter Injections
-
-Bypass automated targets to inject raw terminal configuration arguments directly down into the test binary:
+### Custom Independent Parameter Injections
 
 ```bash
 # Arguments format: -t [total_frames] -p [pollution_rate] -m [attack_mode] [-f enable_filter]
