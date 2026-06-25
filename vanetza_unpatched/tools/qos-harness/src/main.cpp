@@ -228,8 +228,13 @@ int main(int argc, char* argv[]) {
     if (pollution_rate == 0.0) {
         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_baseline.csv", csv_target_dir.c_str());
     } else if (enable_filter) {
-        std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_filtered.csv",
-                      csv_target_dir.c_str(), pollution_rate, attack_mode);
+        if (rl_train_mode) {
+            std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_rl.csv",
+                          csv_target_dir.c_str(), pollution_rate, attack_mode);
+        } else {
+            std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_filtered.csv",
+                          csv_target_dir.c_str(), pollution_rate, attack_mode);
+        }
     } else {
         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d.csv", csv_target_dir.c_str(),
                       pollution_rate, attack_mode);
