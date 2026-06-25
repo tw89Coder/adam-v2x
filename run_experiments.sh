@@ -95,6 +95,7 @@ print_usage() {
     echo "  --profile-amp     Run full geometric size sweep tracking MTU capacity scaling"
     echo "  --build-dataset   Generate and validate high-potency toxic exploit vectors"
     echo "  --simulate-all    Execute matrix sweep dynamically configured by runtime filters/ranges"
+    echo "  --train-rl        Trigger automated one-click RL training pipeline (Forces Mode 3 + Socket Sync)"
     echo "  --custom          Manually bypass defaults to feed raw runtime arguments directly"
     echo ""
     echo "Automation Configuration Modifiers (Can be placed anywhere):"
@@ -106,8 +107,8 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  ./run_experiments.sh unpatched --simulate-all                             # Default 18-node sweep"
+    echo "  ./run_experiments.sh unpatched --train-rl                                 # Launch one-click RL training Sandbox"
     echo "  ./run_experiments.sh all --simulate-all --modes \"0\" --rates \"0.0\"         # Generate absolute baselines"
-    echo "  ./run_experiments.sh unpatched --simulate-all --rates \"1.0 2.0 3.0 4.0\"   # Sweep 4 custom rates"
     exit 1
 }
 
@@ -117,6 +118,31 @@ ACTION=$2
 if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || [ -z "$ACTION" ]; then
     print_usage
 fi
+
+# ── NEW: Dedicated Modular Pipeline Function for RL Training ────────────────
+execute_rl_training() {
+    local tgt=$1
+    local exec_bin="${ROOT_DIR}/vanetza_${tgt}/build/bin/qos-harness"
+
+    if [ ! -f "$exec_bin" ]; then
+        echo -e "${C_ERROR}[FATAL] Executable target kernel missing at ${exec_bin}.${C_RESET}"
+        echo -e "${C_ERROR}[FATAL] Run './manage_build.sh ${tgt}' first to compile binary map.${C_RESET}"
+        exit 1
+    fi
+
+    # Ensure isolation directory structures exist before firing synchronization lines
+    mkdir -p "${ROOT_DIR}/outputs/rl_env"
+
+    echo -e "${C_WARN}[NOTICE] Initializing Collaborative DRL Core Infrastructure Server Connection...${C_RESET}"
+    echo -e "${C_INFO}[STAGE] Task Lock Active: Target=${tgt} | Mode=3 (Grand Mix Scenario) | Automation Flags=--rl (Core: ${PIN_CORE})${C_RESET}"
+
+    # Sequentially iterate through configuration sweeps to feed interactive socket state-spaces
+    for rate in "${POLLUTION_RATES[@]}"; do
+        echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory at rate: ${rate}%...${C_RESET}"
+        taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m 3 --rl
+        echo "----------------------------------------------------------------------"
+    done
+}
 
 execute_matrix_sweep() {
     local tgt=$1
@@ -199,6 +225,17 @@ case "$ACTION" in
             execute_matrix_sweep "$TARGET"
         fi
         echo -e "${C_SUCCESS}[SUCCESS] Dynamic matrix sweep executed successfully. Data converged.${C_RESET}"
+        ;;
+
+    # ── NEW: Dedicated Switch Branch Routing for Automated Training ──────────
+    --train-rl)
+        if [ "$TARGET" == "all" ]; then
+            execute_rl_training "unpatched"
+            execute_rl_training "patched"
+        else
+            execute_rl_training "$TARGET"
+        fi
+        echo -e "${C_SUCCESS}[SUCCESS] Interactive RL training pipeline execution complete. Telemetry converged.${C_RESET}"
         ;;
         
     --custom)

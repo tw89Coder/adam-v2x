@@ -12,6 +12,7 @@
 #include "qos_harness/harness_engine.hpp"
 #include "qos_harness/metrics_collector.hpp"
 #include "qos_harness/pre_filter.hpp"
+#include "qos_harness/rl_bridge.hpp"
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/traffic_generator.hpp"
 
@@ -103,7 +104,12 @@ void printHelp(const char* progName) {
               << "                     0 = Uniform Random\n"
               << "                     1 = Single Pulse (30~50% window)\n"
               << "                     2 = Periodic On-Off (5 attack waves)\n"
+              << "                     3 = Integrated Multi-Scenario Mix (RL Training Profile)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
+              << "  --rl             Enable Interactive RL Training Mode (Sync via Socket)\n"
+              << "  --recovery       Override FSM Recovery Rate (AI/Custom)\n"
+              << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
+              << "  --sq-thresh      Override FSM SQ Threshold (AI/Custom)\n"
               << "  --build-dataset  Generate and validate attack packet dataset\n"
               << "  --profile-amp    Run MTU-constrained amplification profiling\n"
               << "  --diagnose-flood Run flood region parse contribution test\n";
@@ -117,6 +123,12 @@ int main(int argc, char* argv[]) {
     bool build_dataset = false;
     bool profile_amp = false;
     bool diagnose_flood = false;
+    bool rl_train_mode = false;
+    bool has_custom_policy = false;
+
+    double custom_recovery = 0.05;
+    double custom_penalty = 50.0;
+    int custom_sq_thresh = 600;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -129,8 +141,20 @@ int main(int argc, char* argv[]) {
             profile_amp = true;
         } else if (arg == "--diagnose-flood") {
             diagnose_flood = true;
+        } else if (arg == "--rl") {
+            rl_train_mode = true;
+            enable_filter = true;  // Force-enable filter pipelines under active RL training
         } else if (arg == "-f") {
             enable_filter = true;
+        } else if (arg == "--recovery" && i + 1 < argc) {
+            custom_recovery = std::atof(argv[++i]);
+            has_custom_policy = true;
+        } else if (arg == "--penalty" && i + 1 < argc) {
+            custom_penalty = std::atof(argv[++i]);
+            has_custom_policy = true;
+        } else if (arg == "--sq-thresh" && i + 1 < argc) {
+            custom_sq_thresh = std::atoi(argv[++i]);
+            has_custom_policy = true;
         } else if (arg == "-t" && i + 1 < argc) {
             total_packets = std::atoi(argv[++i]);
         } else if (arg == "-p" && i + 1 < argc) {
@@ -216,6 +240,16 @@ int main(int argc, char* argv[]) {
     std::cout << "[*] Starting QoS Measurement...\n";
 
     AdaptiveFilterFSM filter_fsm;
+
+    if (has_custom_policy) {
+        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh);
+        std::cout << "[+] Policy Override Active -> Recovery: " << custom_recovery << " | Penalty: " << custom_penalty
+                  << " | SQ Thresh: " << custom_sq_thresh << "\n";
+    }
+
+    qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);
+    rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
+
     vanetza::RouterFuzzingContext context;
 
     qos_harness::MetricsCollector collector;
@@ -242,6 +276,19 @@ int main(int argc, char* argv[]) {
         } else if (attack_mode == 2) {
             int current_cycle = i / mode2_period;
             if (current_cycle % 2 == 1) is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+        } else if (attack_mode == 3) {
+            double progress = static_cast<double>(i) / total_packets;
+            if (progress < 0.2) {
+                is_malware = false;  // Phase 1: Pure static baseline
+            } else if (progress < 0.5) {
+                is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);  // Phase 2: Pulse storm
+            } else if (progress < 0.7) {
+                is_malware = false;  // Phase 3: Immediate cease-fire
+            } else {
+                int current_cycle = i / mode2_period;  // Phase 4: Intermittent wave sequences
+                if (current_cycle % 2 == 1)
+                    is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+            }
         }
 
         if (is_malware) malware_so_far++;
@@ -269,6 +316,19 @@ int main(int argc, char* argv[]) {
         long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
         collector.recordPacket(i, is_malware, drop_packet, latency_ns);
+
+        if (enable_filter) {
+            // CRITICAL PERF GUARD: Only execute disk I/O and telemetry logging
+            // when explicitly running under interactive reinforcement learning training mode.
+            if (rl_train_mode) {
+                // Collect per-packet metrics for state/reward profiling
+                rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
+                                                   static_cast<int>(filter_fsm.get_state()), drop_packet);
+
+                // Trigger window boundary checks and blocking loopback socket sync
+                rl_bridge.check_and_sync_window(i, filter_fsm);
+            }
+        }
     }
 
     std::cout << "\n[*] Simulation complete. Writing data to disk...\n";

@@ -7,6 +7,7 @@ add_executable(qos-harness
     src/console_presenter.cpp
     src/amplification_profiler.cpp
     src/pre_filter.cpp
+    src/rl_bridge.cpp
     src/router_fuzzing_context.cpp
 )
 
