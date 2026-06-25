@@ -1,2 +1,7 @@
 .clang-format
 archive_pre_refactor/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
