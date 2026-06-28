@@ -1,0 +1,35 @@
+# ==============================================================================
+# V2X QoS DRL Framework Industrial Configuration Matrix
+# ==============================================================================
+
+infrastructure:
+  host: "127.0.0.1"
+  port: 8080
+  checkpoint_dir: "checkpoints"
+  online_brain_path: "checkpoints/v2x_online_brain.pth"
+  offline_brain_path: "checkpoints/v2x_offline_rmix_e20.pth"
+
+v2x_bounds:
+  max_packet_size: 1500.0
+  max_f2_sq: 65025.0
+  window_size: 64
+
+hyperparameters:
+  lr_online: 0.0003
+  lr_offline: 0.001
+  batch_size: 32
+  ppo_epochs_online: 5
+  ppo_epochs_offline: 10
+  clip_eps: 0.2
+  gamma: 0.99
+
+# EXPLICIT CONFIG TO CRUSH LOW-DETECTION (1%) PATTERNS WITHOUT RE-CODING
+reward_shaping:
+  anomaly_sensitivity_threshold: 0.005  # Dropped from 0.05 to capture 1% low-density attacks
+  active_attack_weights:
+    penalty_scale: 0.5                  # Increased weight to force high penalty params
+    sq_thresh_scale: 0.2                # Weight to push SQ_Thresh down aggressively
+    budget_violation_scale: 10.0        # Massive penalty if the environment budget drops
+  nominal_traffic_weights:
+    recovery_scale: 10.0                # Reward for fast recovery during absolute peacetime
+    sq_overhead_scale: 0.1              # Incentive to balance bandwidth
