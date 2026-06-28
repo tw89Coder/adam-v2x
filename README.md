@@ -139,3 +139,101 @@ python tools/plot_engine.py --type amp
 python tools/plot_engine.py --type qos --mode 1 --rate 10.0
 
 ```
+
+## 5. Distributed Deep Reinforcement Learning Toolchain (`tools/rl_bridge/`)
+
+The framework integrates a decoupled, production-grade Proximal Policy Optimization (PPO) co-simulation engine. The DRL agent eliminates the structural blind spots of traditional finite state machines by dynamically regulating a **4-Dimensional Continuous Action Space**:
+1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
+2. **Mitigation Penalty Multiplier** ($a_1 \in [0.0, 100.0]$)
+3. **F2 Sketch Similarity Count Threshold** ($a_2 \in [400, 800]$)
+4. **State S0 Peacetime Active Inspection Sampling Rate** ($a_3 \in [0.0, 1.0]$)
+
+### 5.1 Unified Configuration Subsystem (`config/ppo_agent.yaml`)
+
+To ensure clean algorithmic MLOps decoupling, all environmental boundaries, networking loops, and multi-objective reward shaping weights are isolated into a centralized YAML profile. This allows you to alter the behavior of the network without editing core Python routines.
+
+```yaml
+# Target location: config/ppo_agent.yaml
+infrastructure:
+  host: "127.0.0.1"
+  port: 8080
+  checkpoint_dir: "checkpoints"
+  online_brain_path: "checkpoints/v2x_online_brain.pth"
+  offline_brain_path: "checkpoints/v2x_offline_rmix_e20.pth"
+
+hyperparameters:
+  input_dim: 3
+  action_dim: 4                         # 4D control space (includes S0 sampling)
+  lr_online: 0.0003
+  batch_size: 32
+
+reward_shaping:
+  anomaly_sensitivity_threshold: 0.005  # Lowered to heavily penalize low-density (1%) attacks
+  active_attack_weights:
+    penalty_scale: 0.5
+    sq_thresh_scale: 0.2
+    budget_violation_scale: 10.0        # High penalty protects state machine budget collapse
+  nominal_traffic_weights:
+    recovery_scale: 10.0
+    sq_overhead_scale: 0.1
+    overhead_penalty_scale: 8.0         # Suppresses CPU consumption spikes during peacetime
+
+```
+
+### 5.2 Closed-Loop Interactive Online Training
+
+This pipeline handles real-time synchronization between the C++ network filter simulation and the PyTorch optimization engine. It utilizes a stochastic Gaussian policy distribution (`dist.sample()`) to actively explore the boundary space.
+
+```bash
+# Navigate to the reinforcement learning bridge environment core
+cd tools/rl_bridge/
+
+# Step 1: Launch the interactive background optimization server 
+python3 scripts/train_online.py
+
+# Step 2: Open a separate terminal and trigger the C++ co-simulation harness
+./run_experiments.sh unpatched --train-rl
+
+```
+
+### 5.3 Production Inference Server Deployment (Noise-Free Eval Mode)
+
+Once interactive training converges, exploration noise must be deactivated to maximize defensive stability. The production server loads the trained weights, locks the layers into deterministic execution (`model.eval()`), and maps actions directly to their mathematical mean values (`action_mean`) to crush low-density exploit leakage.
+
+```bash
+# Navigate to the reinforcement learning bridge environment core
+cd tools/rl_bridge/
+
+# Step 1: Terminate any active training loops and spin up the inference daemon
+python3 scripts/serve_agent.py
+
+# Step 2: In a separate terminal, execute the verification sweep on the C++ side
+./run_experiments.sh unpatched --train-rl
+
+```
+
+### 5.4 Offline Historical Matrix Batch Optimization
+
+For benchmarking against legacy pipelines or training policies on pre-recorded static datasets without firing up the C++ socket harness, utilize the matrix batch optimization engine. It features $K$-epoch inner-loop updates to ensure PPO advantage convergence.
+
+```bash
+# Navigate to the reinforcement learning bridge environment core
+cd tools/rl_bridge/
+
+# Run a 20-epoch sweep across mixed dataset trace dumps
+python3 scripts/train_offline.py --rate mix --epochs 20
+
+```
+
+### 5.5 Static Policy Verification & Brain Auditing
+
+Use this diagnostic CLI utility to inspect exactly what defensive decisions an exported weights binary (`.pth`) will make when confronted with distinct peacetime vs. high-potency attack vectors.
+
+```bash
+# Audit the interactive online brain asset
+python3 scripts/verify_brain.py -m checkpoints/v2x_online_brain.pth
+
+# Audit the historical offline matrix brain asset
+python3 scripts/verify_brain.py -m checkpoints/v2x_offline_rmix_e20.pth
+
+```
