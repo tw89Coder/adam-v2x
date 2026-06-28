@@ -5,3 +5,11 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# ==============================================================================
+# V2X QoS DRL Bridge Local Telemetry Data Exclusion
+# ==============================================================================
+tools/rl_bridge/data/raw/*
+tools/rl_bridge/data/processed/*
+!tools/rl_bridge/data/raw/.gitkeep
+!tools/rl_bridge/data/processed/.gitkeep
