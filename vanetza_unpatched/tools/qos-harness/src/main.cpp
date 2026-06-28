@@ -247,9 +247,10 @@ int main(int argc, char* argv[]) {
     AdaptiveFilterFSM filter_fsm;
 
     if (has_custom_policy) {
-        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh);
+        // Pass the default 10% baseline sampling rate to align with the 4-dimensional protocol
+        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, 0.10);
         std::cout << "[+] Policy Override Active -> Recovery: " << custom_recovery << " | Penalty: " << custom_penalty
-                  << " | SQ Thresh: " << custom_sq_thresh << "\n";
+                  << " | SQ Thresh: " << custom_sq_thresh << " | S0 Sampling: 0.10\n";
     }
 
     qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);

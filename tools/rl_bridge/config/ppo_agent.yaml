@@ -15,21 +15,23 @@ v2x_bounds:
   window_size: 64
 
 hyperparameters:
+  # Action Space expanded to 4 dimensions to regulate S0 sampling rate
+  input_dim: 3
+  action_dim: 4                         
   lr_online: 0.0003
-  lr_offline: 0.001
   batch_size: 32
   ppo_epochs_online: 5
-  ppo_epochs_offline: 10
   clip_eps: 0.2
   gamma: 0.99
 
-# EXPLICIT CONFIG TO CRUSH LOW-DETECTION (1%) PATTERNS WITHOUT RE-CODING
 reward_shaping:
-  anomaly_sensitivity_threshold: 0.005  # Dropped from 0.05 to capture 1% low-density attacks
+  anomaly_sensitivity_threshold: 0.005  
   active_attack_weights:
-    penalty_scale: 0.5                  # Increased weight to force high penalty params
-    sq_thresh_scale: 0.2                # Weight to push SQ_Thresh down aggressively
-    budget_violation_scale: 10.0        # Massive penalty if the environment budget drops
+    penalty_scale: 0.5                  
+    sq_thresh_scale: 0.2                
+    budget_violation_scale: 10.0        
   nominal_traffic_weights:
-    recovery_scale: 10.0                # Reward for fast recovery during absolute peacetime
-    sq_overhead_scale: 0.1              # Incentive to balance bandwidth
+    recovery_scale: 10.0                
+    sq_overhead_scale: 0.1              
+    # Penalize high AI sampling rates during peacetime to save CPU resources
+    overhead_penalty_scale: 8.0

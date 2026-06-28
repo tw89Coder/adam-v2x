@@ -1,15 +1,21 @@
 # src/models/policy_net.py
 import torch
 import torch.nn as nn
+from src.config import RAW_CFG
 
 class DefencePolicyNet(nn.Module):
     """
     Actor-Critic Neural Network Topology for V2X FSM Parameter Regulation.
-    Actor Branch  : Outputs continuous action means bounded via Sigmoid.
-    Critic Branch : Estimates State-Value V(s) for variance reduction in PPO updates.
+    Dynamically binds input and action dimensions from the global YAML matrix.
     """
-    def __init__(self, input_dim=3, action_dim=3, hidden_dim=64):
+    def __init__(self, input_dim=None, action_dim=None, hidden_dim=64):
         super(DefencePolicyNet, self).__init__()
+        
+        # Automatically pull dimensions from global YAML configuration if not specified
+        if input_dim is None:
+            input_dim = RAW_CFG["hyperparameters"]["input_dim"]
+        if action_dim is None:
+            action_dim = RAW_CFG["hyperparameters"]["action_dim"]
         
         # Shared feature representation layer
         self.shared_layer = nn.Sequential(

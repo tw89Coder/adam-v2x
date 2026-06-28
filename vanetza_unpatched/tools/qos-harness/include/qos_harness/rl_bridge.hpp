@@ -15,6 +15,7 @@ struct FilterPolicy {
     double recovery_rate;
     double penalty_multiplier;
     int sq_threshold;
+    double s0_sampling_rate;
 };
 
 /**

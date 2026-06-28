@@ -73,11 +73,13 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     FilterPolicy next_policy{0.05, 50.0, 600};
 
     if (socket_enabled_) {
-        // Perform blocking synchronization via loopback socket
+        // Pass default structure expanded with baseline backup rate (10%)
+        FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
+
         if (handshake_with_agent(telemetry, next_policy)) {
-            // Apply dynamic tuning parameters via OOP setter interface
+            // Apply the 4-dimensional continuous control sequence via updated OOP setter
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
-                                        next_policy.sq_threshold);
+                                        next_policy.sq_threshold, next_policy.s0_sampling_rate);
         }
     }
 
@@ -120,11 +122,18 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
     std::string res(recv_buf);
     size_t pos1 = res.find(',');
     size_t pos2 = res.find(',', pos1 + 1);
-    if (pos1 == std::string::npos || pos2 == std::string::npos) return false;
+    size_t pos3 = res.find(',', pos2 + 1);  // Track the newly extended 3rd comma boundary
 
+    if (pos1 == std::string::npos || pos2 == std::string::npos || pos3 == std::string::npos) {
+        return false;  // Safely discard corrupt or unaligned protocol envelopes
+    }
+
+    // Explicit substring extraction matching the wire protocol tokens
     out_policy.recovery_rate = std::stod(res.substr(0, pos1));
     out_policy.penalty_multiplier = std::stod(res.substr(pos1 + 1, pos2 - pos1 - 1));
-    out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1));
+    out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1, pos3 - pos2 - 1));
+    out_policy.s0_sampling_rate = std::stod(res.substr(pos3 + 1));  // Safely parse the 4th column
+
     return true;
 }
 

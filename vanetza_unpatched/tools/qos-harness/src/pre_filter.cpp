@@ -92,11 +92,12 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     // ── State-gated sampling — DISCRETE states preserved ────────────────
     // Rationale: discrete states are auditable and certifiable for V2X
     if (state == State::S0_NORMAL) {
-        inspect = (fast_rand() % 100 < 10);  // 5%: minimal overhead in safe period
+        // The stochastic sampling gate threshold is now dynamic and regulated by the DRL agent
+        inspect = (fast_rand() % 100 < static_cast<int>(S0_SAMPLING_RATE * 100.0));
     } else if (state == State::S1_ELEVATED) {
-        inspect = (fast_rand() % 100 < 50);  // 50%: moderate pressure
+        inspect = (fast_rand() % 100 < 50);
     } else {
-        inspect = true;  // S2/S3: full 100% inspection
+        inspect = true;
     }
 
     bool is_anomalous = false;
