@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
             diagnose_flood = true;
         } else if (arg == "--rl") {
             rl_train_mode = true;
-            enable_filter = true;  // Force-enable filter pipelines under active RL training
+            enable_filter = true;
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -207,9 +207,6 @@ int main(int argc, char* argv[]) {
         sequence[i] = static_cast<unsigned int>(rand());
     }
 
-    // =========================================================================
-    // INTEGRATED: Smart directory router to completely bifurcate test matrices
-    // =========================================================================
     std::string prog_path = argv[0];
     std::string build_type = "unpatched";
     if (prog_path.find("vanetza_patched") != std::string::npos) {
@@ -247,7 +244,6 @@ int main(int argc, char* argv[]) {
     AdaptiveFilterFSM filter_fsm;
 
     if (has_custom_policy) {
-        // Pass the default 10% baseline sampling rate to align with the 4-dimensional protocol
         filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, 0.10);
         std::cout << "[+] Policy Override Active -> Recovery: " << custom_recovery << " | Penalty: " << custom_penalty
                   << " | SQ Thresh: " << custom_sq_thresh << " | S0 Sampling: 0.10\n";
@@ -268,6 +264,10 @@ int main(int argc, char* argv[]) {
     int print_interval = total_packets / 20;
     int malware_so_far = 0;
 
+    // Convert baseline parsing from 100-modulo limits to 10000 basis points
+    // This safely ensures sub-1% rates (0.1%, 0.5%) map to accurate non-zero scaling boundaries
+    unsigned int target_basis_threshold = static_cast<unsigned int>(pollution_rate * 100.0);
+
     for (int i = 0; i < total_packets; ++i) {
         if (i % print_interval == 0 || i == total_packets - 1) {
             qos_harness::ConsolePresenter::printSimulationProgress(i, total_packets, malware_so_far);
@@ -275,25 +275,23 @@ int main(int argc, char* argv[]) {
 
         bool is_malware = false;
         if (attack_mode == 0) {
-            is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+            is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 1) {
-            if (i >= mode1_start && i <= mode1_end)
-                is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+            if (i >= mode1_start && i <= mode1_end) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 2) {
             int current_cycle = i / mode2_period;
-            if (current_cycle % 2 == 1) is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+            if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 3) {
             double progress = static_cast<double>(i) / total_packets;
             if (progress < 0.2) {
-                is_malware = false;  // Phase 1: Pure static baseline
+                is_malware = false;
             } else if (progress < 0.5) {
-                is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);  // Phase 2: Pulse storm
+                is_malware = (sequence[i] % 10000) < target_basis_threshold;
             } else if (progress < 0.7) {
-                is_malware = false;  // Phase 3: Immediate cease-fire
+                is_malware = false;
             } else {
-                int current_cycle = i / mode2_period;  // Phase 4: Intermittent wave sequences
-                if (current_cycle % 2 == 1)
-                    is_malware = (sequence[i] % 100) < static_cast<unsigned int>(pollution_rate);
+                int current_cycle = i / mode2_period;
+                if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
             }
         }
 
@@ -324,14 +322,9 @@ int main(int argc, char* argv[]) {
         collector.recordPacket(i, is_malware, drop_packet, latency_ns);
 
         if (enable_filter) {
-            // CRITICAL PERF GUARD: Only execute disk I/O and telemetry logging
-            // when explicitly running under interactive reinforcement learning training mode.
             if (rl_train_mode) {
-                // Collect per-packet metrics for state/reward profiling
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet);
-
-                // Trigger window boundary checks and blocking loopback socket sync
                 rl_bridge.check_and_sync_window(i, filter_fsm);
             }
         }
