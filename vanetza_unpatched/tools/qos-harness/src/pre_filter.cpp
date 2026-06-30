@@ -134,19 +134,23 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     }
 
     State state = get_state();
-    bool inspect = false;
-
-    // Stochastic Sampling Gate using FSM states to balance inspection overhead vs safety
-    if (state == State::S0_NORMAL) {
-        // The sampling gate threshold is dynamic and actively controlled by the DRL Agent
-        inspect = (fast_rand() % 100 < static_cast<int>(S0_SAMPLING_RATE * 100.0));
-    } else if (state == State::S1_ELEVATED) {
-        // Elevated state: Inspect 50% of the traffic
-        inspect = (fast_rand() % 100 < 50);
-    } else {
-        // Constrained or Quarantine states: Inspect 100% of the traffic
-        inspect = true;
+    
+    // Guard-Threshold Heuristic: continuous sampling rate mapped to experienced safety boundaries
+    // - budget >= 100: sampling_rate = BASE_SAMPLING_RATE (e.g. 5% or 10%)
+    // - budget == 70 (TAU_1): sampling_rate = 0.50 (50%)
+    // - budget <= 40 (TAU_2): sampling_rate = 1.00 (100%)
+    double sampling_rate = BASE_SAMPLING_RATE;
+    if (current_budget <= TAU_2) {
+        sampling_rate = 1.0;
+    } else if (current_budget <= TAU_1) {
+        double range_ratio = (current_budget - TAU_2) / (TAU_1 - TAU_2);
+        sampling_rate = 1.0 - 0.5 * range_ratio; // Smooth transition between 50% and 100%
+    } else if (current_budget < MAX_BUDGET) {
+        double range_ratio = (current_budget - TAU_1) / (MAX_BUDGET - TAU_1);
+        sampling_rate = 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio; // Smooth transition between base and 50%
     }
+    
+    bool inspect = (fast_rand() % 100 < static_cast<int>(sampling_rate * 100.0));
 
     bool is_anomalous = false;
     int max_sum_sq = 0;

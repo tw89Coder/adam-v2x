@@ -86,10 +86,10 @@ class V2XOnlinePipeline:
                     rec = a_clamped[0].item() * 0.5
                     pen = a_clamped[1].item() * 100.0
                     sq_t = int(400 + (a_clamped[2].item() * 400))
-                    s0_samp = a_clamped[3].item() # Extract the 4th active control variable
+                    base_samp = 0.05 # Dynamic continuous heuristic base rate
 
                     # Pass all 4 updated parameters seamlessly through the network utility helper
-                    response = NetworkIOHelper.serialize_policy(rec, pen, sq_t, s0_samp)
+                    response = NetworkIOHelper.serialize_policy(rec, pen, sq_t, base_samp)
                     client_socket.send(response)
                     
                     # Push step trajectory memories

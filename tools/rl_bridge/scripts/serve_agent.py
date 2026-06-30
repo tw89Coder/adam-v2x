@@ -98,8 +98,7 @@ def main():
                 pred_sq_thresh = int(400 + (action_mean[2].item() * 400))
                 
                 # Serialize payload and respond to C++ FSM gate
-                # NOTE FOR CODE REVIEW: serialize_policy requires 4 arguments but is called with 3 here.
-                response = NetworkIOHelper.serialize_policy(pred_recovery, pred_penalty, pred_sq_thresh)
+                response = NetworkIOHelper.serialize_policy(pred_recovery, pred_penalty, pred_sq_thresh, 0.05)
                 client_socket.send(response)
                 
                 # Broadcast live production telemetry logging lines

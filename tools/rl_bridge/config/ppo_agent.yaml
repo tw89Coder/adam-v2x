@@ -17,7 +17,7 @@ v2x_bounds:
 hyperparameters:
   # Action Space expanded to 4 dimensions to regulate S0 sampling rate
   input_dim: 3
-  action_dim: 4                         
+  action_dim: 3                         
   lr_online: 0.0003
   batch_size: 32
   ppo_epochs_online: 5

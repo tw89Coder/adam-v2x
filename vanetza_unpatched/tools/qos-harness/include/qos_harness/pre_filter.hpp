@@ -18,11 +18,11 @@ public:
     bool process_packet(const vanetza::ByteBuffer& buf);
     State get_state() const;
 
-    void update_policy_params(double recovery, double penalty, int sq_thresh, double s0_sampling) {
+    void update_policy_params(double recovery, double penalty, int sq_thresh, double base_sampling) {
         RECOVERY_RATE = recovery;
         PENALTY_MULTIPLIER = penalty;
         SQ_THRESHOLD = sq_thresh;
-        S0_SAMPLING_RATE = s0_sampling;
+        BASE_SAMPLING_RATE = base_sampling;
     }
 
     int get_last_sq() const {
@@ -46,7 +46,7 @@ private:
     double RECOVERY_RATE = 0.05;
     double PENALTY_MULTIPLIER = 50.0;
     int SQ_THRESHOLD = 600;
-    double S0_SAMPLING_RATE = 0.10;
+    double BASE_SAMPLING_RATE = 0.10;
     int last_max_sum_sq_ = 0;
     // scan_limit is NOT a member — it's computed inside calculate_max_sum_sq
     // using buf.size() at call time:

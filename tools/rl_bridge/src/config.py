@@ -66,3 +66,7 @@ WINDOW_SIZE = cfg["v2x_bounds"]["window_size"]
 
 # Expose the raw configuration matrix dictionary for semantic runtime deep-reads
 RAW_CFG = cfg
+
+# Dynamically locate the outputs/rl_env directory from workspace root
+WORKSPACE_ROOT = os.path.dirname(os.path.dirname(CONFIG_DIR))
+DATA_DIR = os.path.join(WORKSPACE_ROOT, "outputs", "rl_env")

@@ -32,6 +32,8 @@ class DefencePolicyNet(nn.Module):
         # Shared feature representation layer (multi-layer perceptron feature extractor)
         self.shared_layer = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU()
         )
         

@@ -85,37 +85,49 @@ done
 set -- "${POSITIONAL_ARGS[@]}"
 
 print_usage() {
-    echo "Usage: ./run_experiments.sh [target] [action] [optional flags...]"
-    echo "Targets:"
-    echo "  unpatched       Run tasks against the unpatched system workspace"
-    echo "  patched         Run tasks against the patched system workspace"
-    echo "  all             Sequentially run entire matrix for BOTH unpatched and patched"
-    echo "Actions:"
-    echo "  --diagnose-flood  Execute short flood region parsing delta diagnosis"
-    echo "  --profile-amp     Run full geometric size sweep tracking MTU capacity scaling"
-    echo "  --build-dataset   Generate and validate high-potency toxic exploit vectors"
-    echo "  --simulate-all    Execute matrix sweep dynamically configured by runtime filters/ranges"
-    echo "  --train-rl        Trigger automated one-click RL training pipeline (Forces Mode 3 + Socket Sync)"
-    echo "  --custom          Manually bypass defaults to feed raw runtime arguments directly"
-    echo ""
-    echo "Automation Configuration Modifiers (Can be placed anywhere):"
-    echo "  -c, --core <id>   Target hardware CPU core index for taskset processor locking (Default: 9)"
-    echo "  --no-filter-only  Force --simulate-all batch scheduler to execute ONLY Filter=OFF steps"
-    echo "  --filter-only     Force --simulate-all batch scheduler to execute ONLY Filter=ON steps"
-    echo "  --modes \"m1 m2\"   Override default execution suite with custom target logic modes"
-    echo "  --rates \"r1 r2\"   Override default sweep steps with a custom range list of pollution floats"
-    echo ""
-    echo "Examples:"
-    echo "  ./run_experiments.sh unpatched --simulate-all                             # Default 18-node sweep"
-    echo "  ./run_experiments.sh unpatched --train-rl                                 # Launch one-click RL training Sandbox"
-    echo "  ./run_experiments.sh all --simulate-all --modes \"0\" --rates \"0.0\"         # Generate absolute baselines"
+    echo -e "${C_INFO}Usage:${C_RESET} ./run_experiments.sh ${C_SUCCESS}[target]${C_RESET} ${C_WARN}[action]${C_RESET} [optional flags...]"
+    echo -e ""
+    echo -e "${C_BOLD}Targets:${C_RESET}"
+    echo -e "  ${C_SUCCESS}unpatched${C_RESET}       Run tasks against the unpatched system workspace"
+    echo -e "  ${C_SUCCESS}patched${C_RESET}         Run tasks against the patched system workspace"
+    echo -e "  ${C_SUCCESS}all${C_RESET}             Sequentially run entire matrix for BOTH unpatched and patched"
+    echo -e "  ${C_SUCCESS}python${C_RESET}          Orchestrate Python DRL agent scripts (venv encapsulated)"
+    echo -e ""
+    echo -e "${C_BOLD}Actions under C++ targets:${C_RESET}"
+    echo -e "  ${C_WARN}--diagnose-flood${C_RESET}  Execute short flood region parsing delta diagnosis"
+    echo -e "  ${C_WARN}--profile-amp${C_RESET}     Run full geometric size sweep tracking MTU capacity scaling"
+    echo -e "  ${C_WARN}--build-dataset${C_RESET}   Generate and validate high-potency toxic exploit vectors"
+    echo -e "  ${C_WARN}--simulate-all${C_RESET}    Execute matrix sweep dynamically configured by runtime filters/ranges"
+    echo -e "  ${C_WARN}--train-rl${C_RESET}        Trigger automated one-click RL training pipeline (Forces Mode 3 + Socket Sync)"
+    echo -e "  ${C_WARN}--custom${C_RESET}          Manually bypass defaults to feed raw runtime arguments directly"
+    echo -e ""
+    echo -e "${C_BOLD}Actions under 'python' target:${C_RESET}"
+    echo -e "  ${C_WARN}--train-online${C_RESET}   Start PPO interactive online socket server (port 8080)"
+    echo -e "  ${C_WARN}--train-offline${C_RESET}  Run offline dataset trajectory training"
+    echo -e "  ${C_WARN}--deploy${C_RESET}         Start production inference serve daemon"
+    echo -e "  ${C_WARN}--verify-brain${C_RESET}   Audit brain checkpoints on baseline scenarios"
+    echo -e ""
+    echo -e "${C_BOLD}Automation Configuration Modifiers (Can be placed anywhere):${C_RESET}"
+    echo -e "  ${C_INFO}-c, --core <id>${C_RESET}   Target hardware CPU core index for taskset processor locking (Default: 9)"
+    echo -e "  ${C_INFO}--no-filter-only${C_RESET} Force --simulate-all batch scheduler to execute ONLY Filter=OFF steps"
+    echo -e "  ${C_INFO}--filter-only${C_RESET}     Force --simulate-all batch scheduler to execute ONLY Filter=ON steps"
+    echo -e "  ${C_INFO}--modes \"m1 m2\"${C_RESET}   Override default execution suite with custom target logic modes"
+    echo -e "  ${C_INFO}--rates \"r1 r2\"${C_RESET}   Override default sweep steps with a custom range list of pollution floats"
+    echo -e ""
+    echo -e "${C_BOLD}Examples:${C_RESET}"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET}                             \033[90m# Default 18-node sweep\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--train-rl${C_RESET}                                 \033[90m# Launch one-click RL training Sandbox\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}all${C_RESET} ${C_WARN}--simulate-all${C_RESET} --modes \"0\" --rates \"0.0\"         \033[90m# Generate absolute baselines\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}python${C_RESET} ${C_WARN}--train-online${C_RESET} -b 32                          \033[90m# Start online training server\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}python${C_RESET} ${C_WARN}--deploy${C_RESET}                                      \033[90m# Start inference daemon\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}python${C_RESET} ${C_WARN}--train-offline${C_RESET} -e 10 -r 5.0                  \033[90m# Run offline training\033[0m"
     exit 1
 }
 
 TARGET=$1
 ACTION=$2
 
-if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || [ -z "$ACTION" ]; then
+if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ] && [ "$TARGET" != "python" ]; } || [ -z "$ACTION" ]; then
     print_usage
 fi
 
@@ -238,6 +250,50 @@ case "$ACTION" in
         echo -e "${C_SUCCESS}[SUCCESS] Interactive RL training pipeline execution complete. Telemetry converged.${C_RESET}"
         ;;
         
+    --train-online)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --train-online action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/train_online.py" "$@"
+        ;;
+
+    --train-offline)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --train-offline action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/train_offline.py" "$@"
+        ;;
+
+    --deploy)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --deploy action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/serve_agent.py" "$@"
+        ;;
+
+    --verify-brain)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --verify-brain action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/verify_brain.py" "$@"
+        ;;
+
     --custom)
         if [ "$TARGET" == "all" ]; then
             echo -e "${C_ERROR}[ERROR] Custom actions cannot accept global target routing.${C_RESET}"

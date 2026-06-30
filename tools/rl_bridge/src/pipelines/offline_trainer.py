@@ -44,7 +44,6 @@ class V2XOfflinePipeline:
                 next_window_slice = raw_data.iloc[(w + 1) * WINDOW_SIZE : (w + 2) * WINDOW_SIZE]
                 
                 # Call single source of truth state estimators from the agent helper
-                # NOTE FOR CODE REVIEW: extract_state_from_offline_df is currently missing in V2XAgent
                 s = self.agent.extract_state_from_offline_df(window_slice)
                 s_next = self.agent.extract_state_from_offline_df(next_window_slice)
                 

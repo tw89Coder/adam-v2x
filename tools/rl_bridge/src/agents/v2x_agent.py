@@ -37,6 +37,15 @@ class V2XAgent:
         norm_sq = avg_sq / MAX_F2_SQ
         return torch.tensor([norm_size, norm_sq, anomaly_rate], dtype=torch.float32)
 
+    def extract_state_from_offline_df(self, df_slice):
+        """
+        Parses window matrix slices from offline CSV files into a state tensor.
+        """
+        avg_size = df_slice["packet_size"].mean()
+        avg_sq = df_slice["max_sum_sq"].mean()
+        anomaly_rate = df_slice["is_anomalous"].mean()
+        return self.build_state_tensor(avg_size, avg_sq, anomaly_rate)
+
     def get_action_distribution(self, state_tensor):
         """
         Queries policy network to parameterize the Gaussian policy action distribution.
@@ -53,14 +62,13 @@ class V2XAgent:
         - action_values[0]: Recovery rate multiplier -> Rescaled to [0.0, 0.5]
         - action_values[1]: Penalty factor multiplier -> Rescaled to [0.0, 100.0]
         - action_values[2]: F2 similarity threshold -> Rescaled to [400, 800]
-        - action_values[3]: S0 peacetime sampling rate -> Rescaled to [0.0, 1.0]
         """
         pred_recovery = action_values[0] * 0.5
         pred_penalty  = action_values[1] * 100.0
         pred_sq_thresh = 400 + (action_values[2] * 400)
         
-        # Action[3] represents the dynamic AI-controlled sampling rate for State S0
-        pred_s0_sampling = action_values[3] 
+        # S0 peacetime sampling rate is a continuous heuristic and no longer trained
+        pred_base_sampling = 0.05
         
         if anomaly_rate > self.sensitivity_threshold:
             # Mitigation Phase: Reward high penalty actions but keep tracking budget depletion risks
@@ -74,7 +82,7 @@ class V2XAgent:
             reward = (
                 (pred_recovery * self.w_nominal["recovery_scale"]) + 
                 (pred_sq_thresh - 600.0) * self.w_nominal["sq_overhead_scale"] -
-                (pred_s0_sampling * self.w_nominal["overhead_penalty_scale"]) # Execution penalty curve
+                (pred_base_sampling * self.w_nominal["overhead_penalty_scale"]) # Execution penalty curve
             )
             
         return reward

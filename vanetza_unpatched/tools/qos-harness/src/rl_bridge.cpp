@@ -117,20 +117,15 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     WindowTelemetry telemetry{window_sq_sum_ / window_packet_count_, window_budget_sum_ / window_packet_count_,
                               static_cast<double>(window_malware_count_) / window_packet_count_};
 
-    // CODE SMELL WARNING:
-    // This outer next_policy variable is shadowed by the inner next_policy variable
-    // declared inside the if (socket_enabled_) block below. It is completely unused.
-    FilterPolicy next_policy{0.05, 50.0, 600};
-
     if (socket_enabled_) {
-        // Construct policy structure mapping baseline fallback configurations with 10% sampling
+        // Construct policy structure mapping baseline fallback configurations with 10% base sampling
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
 
         // Handshake with the optimization engine and overwrite state machine parameters
         if (handshake_with_agent(telemetry, next_policy)) {
             // Apply the received 4D parameter array to regulate filter thresholds and sampling rates
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
-                                        next_policy.sq_threshold, next_policy.s0_sampling_rate);
+                                        next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
     }
 
@@ -191,7 +186,7 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
     out_policy.recovery_rate = std::stod(res.substr(0, pos1));
     out_policy.penalty_multiplier = std::stod(res.substr(pos1 + 1, pos2 - pos1 - 1));
     out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1, pos3 - pos2 - 1));
-    out_policy.s0_sampling_rate = std::stod(res.substr(pos3 + 1));  // Dynamically regulated by DRL
+    out_policy.base_sampling_rate = std::stod(res.substr(pos3 + 1));  // Dynamically regulated by DRL
 
     return true;
 }
