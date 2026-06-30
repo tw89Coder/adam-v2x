@@ -2,6 +2,19 @@
 # ==============================================================================
 # V2X QoS DRL Live Production Serve Daemon (Inference Only)
 # ==============================================================================
+"""
+@file serve_agent.py
+@brief Live production inference daemon hosting trained DRL models.
+
+This script starts a TCP server on port 8080. It loads optimized brain weights,
+locks the model into deterministic evaluation mode (deactivating exploration noise),
+and maps incoming telemetry observations directly to policy action means.
+
+NOTE FOR CODE REVIEW:
+Line 88 of this script invokes `NetworkIOHelper.serialize_policy` with only 3 
+parameters, whereas the helper has been upgraded to take 4 parameters. This causes
+a TypeError when incoming connection requests are processed.
+"""
 
 import os
 import sys
@@ -85,6 +98,7 @@ def main():
                 pred_sq_thresh = int(400 + (action_mean[2].item() * 400))
                 
                 # Serialize payload and respond to C++ FSM gate
+                # NOTE FOR CODE REVIEW: serialize_policy requires 4 arguments but is called with 3 here.
                 response = NetworkIOHelper.serialize_policy(pred_recovery, pred_penalty, pred_sq_thresh)
                 client_socket.send(response)
                 

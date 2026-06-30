@@ -2,6 +2,14 @@
 # ==============================================================================
 # V2X QoS Deep Reinforcement Learning Offline PPO Optimization Console Entry
 # ==============================================================================
+"""
+@file train_offline.py
+@brief Command-line interface orchestration for batch offline PPO dataset training.
+
+This script parses target anomaly density filters and epoch metrics, imports 
+pre-recorded simulation traces from disk using dataset loading components,
+and executes historical Proximal Policy Optimization loops to pre-train policy parameters.
+"""
 
 import os
 import sys
@@ -20,6 +28,9 @@ from src.pipelines.offline_trainer import V2XOfflinePipeline
 from src.utils.data_loader import load_telemetry_data
 
 def parse_arguments():
+    """
+    Sets up options for sweeps, clipping boundaries, and optimization iterations.
+    """
     parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO Optimization Pipeline")
     parser.add_argument("-r", "--rate", type=str, default="mix", help="Target trace training dataset directory filter")
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")

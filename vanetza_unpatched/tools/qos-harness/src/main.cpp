@@ -16,17 +16,28 @@
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/traffic_generator.hpp"
 
-const int DATASET_TARGET = 1000;
-const int MAX_ATTEMPTS = 1000000;
+// Dataset generation parameters
+const int DATASET_TARGET = 1000;      // Target count of verified, CPU-expensive attack packets
+const int MAX_ATTEMPTS = 1000000;     // Fallback limit for structural fuzzing search loops
 
+// Repository filesystem paths resolving normal packets and raw attack POC binaries
 const std::string REPO_ROOT_STR = REPO_ROOT;
 const std::string NORMAL_FOLDER = REPO_ROOT_STR + "/inputs/base_packets";
 const std::string ATTACK_FOLDER = REPO_ROOT_STR + "/inputs/attack_vectors/malware";
 
+/**
+ * @brief Profiles a base POC exploit and generates a dataset of verified CPU-expensive attack packet mutations.
+ *        Validates each candidate mutation via multi-run latency benchmarks.
+ * 
+ * @param base_normal Reference standards-compliant baseline packet buffer.
+ * @param poc_packet Base ASN.1 exploit packet containing structural recursion triggers.
+ * @return true if target dataset size was successfully generated, false otherwise.
+ */
 bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::ByteBuffer& poc_packet) {
     mkdir(ATTACK_FOLDER.c_str(), 0755);
     std::cout << "[*] Profiling base POC packet latency baseline...\n";
 
+    // Measure the baseline parser execution latency of the original POC exploit packet
     long long poc_total_ns = 0;
     for (int i = 0; i < 10; ++i) {
         long long lat = qos_harness::HarnessEngine::measurePacketLatency(poc_packet);
@@ -34,6 +45,7 @@ bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::B
         poc_total_ns += lat;
     }
 
+    // Set target latency threshold to 105% of the baseline POC exploit's parser duration
     long long latency_threshold = static_cast<long long>((poc_total_ns / 10) * 1.05);
     int generated = 0, attempts = 0, rejected = 0;
 
@@ -41,9 +53,11 @@ bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::B
     std::cout << "[*] Performance Threshold set to: " << latency_threshold << " ns\n";
     std::cout << "[*] Building attack dataset (Target: " << DATASET_TARGET << " verified SLOW packets)...\n";
 
+    // Stochastic fuzzing loop generating and filtering mutated parser bombs
     while (generated < DATASET_TARGET && attempts < MAX_ATTEMPTS) {
         attempts++;
 
+        // Initialize unique seed combining current Unix time and iteration index
         unsigned int seed = static_cast<unsigned int>(time(nullptr)) ^ (attempts * 2654435761u);
         vanetza::ByteBuffer candidate = qos_harness::TrafficGenerator::craftAttackPacket(poc_packet, seed);
 
@@ -51,6 +65,7 @@ bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::B
         long long running_lat_sum = 0;
         const int VERIFICATION_RUNS = 3;
 
+        // Verify processing latency overhead consistency across multiple runs
         for (int v = 0; v < VERIFICATION_RUNS; ++v) {
             long long sample_lat = qos_harness::HarnessEngine::measurePacketLatency(candidate);
             if (sample_lat < latency_threshold) {
@@ -60,6 +75,7 @@ bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::B
             running_lat_sum += sample_lat;
         }
 
+        // Commit consistently slow exploit variants to the output directory
         if (consistently_potent) {
             long long confirmed_avg_lat = running_lat_sum / VERIFICATION_RUNS;
             char path[256];
@@ -96,6 +112,9 @@ bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::B
     return true;
 }
 
+/**
+ * @brief Prints CLI instructions mapping available parameter sweep arguments.
+ */
 void printHelp(const char* progName) {
     std::cout << "Usage: " << progName << " [-t total] [-p pollution_rate] [-m mode] [-f] [--build-dataset]\n"
               << "  -t               Total packets (Default: 1000000)\n"
@@ -116,6 +135,7 @@ void printHelp(const char* progName) {
 }
 
 int main(int argc, char* argv[]) {
+    // Default simulation and mitigation parameters
     int total_packets = 1000000;
     double pollution_rate = 5.0;
     int attack_mode = 0;
@@ -126,10 +146,12 @@ int main(int argc, char* argv[]) {
     bool rl_train_mode = false;
     bool has_custom_policy = false;
 
+    // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
     double custom_penalty = 50.0;
     int custom_sq_thresh = 600;
 
+    // Parse runtime arguments and configure evaluation profiles
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h") {
@@ -143,7 +165,7 @@ int main(int argc, char* argv[]) {
             diagnose_flood = true;
         } else if (arg == "--rl") {
             rl_train_mode = true;
-            enable_filter = true;
+            enable_filter = true; // Training DRL implies enabling the adaptive FSM pre-filter
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -164,6 +186,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Ingest baseline standards-compliant packets
     auto normals = qos_harness::FileManager::loadPacketsFromFolder(NORMAL_FOLDER);
     if (normals.empty()) {
         std::cerr << "[-] Error: No normal packets found in " << NORMAL_FOLDER << "/\n";
@@ -172,6 +195,7 @@ int main(int argc, char* argv[]) {
     vanetza::ByteBuffer base_normal = normals[0];
     std::cout << "[*] Loaded base normal packet: " << base_normal.size() << " bytes\n";
 
+    // Load reference toxic ASN.1 mutation representing base CWE-674 exploit
     std::string poc_path = REPO_ROOT_STR + "/inputs/attack_vectors/malware/poc_mtu_limit.bin";
     vanetza::ByteBuffer poc_packet = qos_harness::FileManager::readFileIntoBuffer(poc_path);
     if (poc_packet.empty()) {
@@ -179,6 +203,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Diagnostics / Profiling modes exit early after computing local metrics
     if (profile_amp) {
         qos_harness::AmplificationProfiler::runAmplificationProfiling(poc_packet);
         return 0;
@@ -191,6 +216,7 @@ int main(int argc, char* argv[]) {
         return buildAttackDataset(base_normal, poc_packet) ? 0 : 1;
     }
 
+    // Load attack dataset generated via offline fuzzer
     auto attack_packets = qos_harness::FileManager::loadPacketsFromFolder(ATTACK_FOLDER);
     if (attack_packets.empty()) {
         std::cerr << "[-] No attack packets found in " << ATTACK_FOLDER << "/\n";
@@ -202,17 +228,20 @@ int main(int argc, char* argv[]) {
     auto normal_packets = qos_harness::FileManager::loadPacketsFromFolder(NORMAL_FOLDER);
     std::cout << "[*] Loaded " << normal_packets.size() << " normal packet variants from " << NORMAL_FOLDER << "/\n";
 
+    // Generate stochastic execution schedule to decouple packet routing ordering
     std::vector<unsigned int> sequence(total_packets);
     for (int i = 0; i < total_packets; ++i) {
         sequence[i] = static_cast<unsigned int>(rand());
     }
 
+    // Determine current build directory to classify output folders
     std::string prog_path = argv[0];
     std::string build_type = "unpatched";
     if (prog_path.find("vanetza_patched") != std::string::npos) {
         build_type = "patched";
     }
 
+    // Initialize raw telemetry directories
     std::string base_out_dir = REPO_ROOT_STR + "/outputs";
     std::string csv_base_dir = base_out_dir + "/csv_raw";
     std::string csv_target_dir = csv_base_dir + "/" + build_type;
@@ -221,6 +250,7 @@ int main(int argc, char* argv[]) {
     mkdir(csv_base_dir.c_str(), 0755);
     mkdir(csv_target_dir.c_str(), 0755);
 
+    // Format target file path for output logging
     char out_filename[512];
     if (pollution_rate == 0.0) {
         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_baseline.csv", csv_target_dir.c_str());
@@ -241,14 +271,17 @@ int main(int argc, char* argv[]) {
               << "% | Filter: " << (enable_filter ? "ON" : "OFF") << "\n";
     std::cout << "[*] Starting QoS Measurement...\n";
 
+    // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
 
+    // Apply custom parameters if CLI override flags were provided
     if (has_custom_policy) {
         filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, 0.10);
         std::cout << "[+] Policy Override Active -> Recovery: " << custom_recovery << " | Penalty: " << custom_penalty
                   << " | SQ Thresh: " << custom_sq_thresh << " | S0 Sampling: 0.10\n";
     }
 
+    // Initialize socket co-simulation bridge for active DRL co-processing
     qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);
     rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
 
@@ -257,6 +290,7 @@ int main(int argc, char* argv[]) {
     qos_harness::MetricsCollector collector;
     collector.reserve(total_packets);
 
+    // Performance metrics and timeline tracking
     int true_positives = 0, false_positives = 0, true_negatives = 0, false_negatives = 0;
     int mode1_start = total_packets * 0.3;
     int mode1_end = total_packets * 0.5;
@@ -264,24 +298,34 @@ int main(int argc, char* argv[]) {
     int print_interval = total_packets / 20;
     int malware_so_far = 0;
 
-    // Convert baseline parsing from 100-modulo limits to 10000 basis points
-    // This safely ensures sub-1% rates (0.1%, 0.5%) map to accurate non-zero scaling boundaries
+    // Convert pollution rate percentage into basis points (0.01% resolution)
+    // Ensures sub-1.0% pollution rates (e.g. 0.1%, 0.5%) map to accurate integer ranges
     unsigned int target_basis_threshold = static_cast<unsigned int>(pollution_rate * 100.0);
 
+    // Main packet generation and processing iteration loop
     for (int i = 0; i < total_packets; ++i) {
         if (i % print_interval == 0 || i == total_packets - 1) {
             qos_harness::ConsolePresenter::printSimulationProgress(i, total_packets, malware_so_far);
         }
 
+        // Determine if current packet slot contains an attack variant based on the active mode schedule
         bool is_malware = false;
         if (attack_mode == 0) {
+            // Mode 0: Uniform Random distribution across the entire trajectory
             is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 1) {
+            // Mode 1: Single attack burst occurring between 30% and 50% timelines
             if (i >= mode1_start && i <= mode1_end) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 2) {
+            // Mode 2: Periodic On-Off waves (attack waves repeat every mode2_period steps)
             int current_cycle = i / mode2_period;
             if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 3) {
+            // Mode 3: Integrated Multi-Scenario Mix (Default training pattern)
+            //   0.0 - 0.2: Clean peacetime nominal traffic
+            //   0.2 - 0.5: Continuous uniform attack storm
+            //   0.5 - 0.7: Peacetime recovery window
+            //   0.7 - 1.0: Periodic oscillating pulsing attacks
             double progress = static_cast<double>(i) / total_packets;
             if (progress < 0.2) {
                 is_malware = false;
@@ -297,12 +341,15 @@ int main(int argc, char* argv[]) {
 
         if (is_malware) malware_so_far++;
 
+        // Route packet payload from normal or attack dataset vectors
         const vanetza::ByteBuffer& buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
                                                     : normal_packets[sequence[i] % normal_packets.size()];
 
+        // Execute parsing and record processing latency
         auto start = std::chrono::high_resolution_clock::now();
         bool drop_packet = enable_filter ? filter_fsm.process_packet(buf) : false;
 
+        // Classification metric routing
         if (drop_packet) {
             if (is_malware)
                 true_positives++;
@@ -313,16 +360,20 @@ int main(int argc, char* argv[]) {
                 false_negatives++;
             else
                 true_negatives++;
+            // Pass allowed packets to the mock router logic indicate method
             vanetza::ByteBuffer buf_copy = buf;
             context.indicate(std::move(buf_copy));
         }
         auto end = std::chrono::high_resolution_clock::now();
         long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
+        // Log packet results
         collector.recordPacket(i, is_malware, drop_packet, latency_ns);
 
+        // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
             if (rl_train_mode) {
+                // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet);
                 rl_bridge.check_and_sync_window(i, filter_fsm);

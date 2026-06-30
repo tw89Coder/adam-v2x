@@ -2,6 +2,13 @@
 # ==============================================================================
 # V2X QoS Interactive Online Reinforcement Learning Suite CLI
 # ==============================================================================
+"""
+@file train_online.py
+@brief Command-line interface orchestration for online interactive socket DRL training.
+
+This script parses arguments, initializes the Policy Net and V2XAgent wrapping layers,
+and delegates runtime execution to the socket-listening online training pipeline server.
+"""
 
 import os
 import sys
@@ -17,6 +24,9 @@ from src.agents.v2x_agent import V2XAgent
 from src.pipelines.online_server import V2XOnlinePipeline
 
 def parse_arguments():
+    """
+    Sets up options for local loopback TCP port allocation and rollout batch limits.
+    """
     parser = argparse.ArgumentParser(description="Industrial Online PPO Coprocessing Console")
     parser.add_argument("-p", "--port", type=int, default=8080, help="Loopback server port assignment")
     parser.add_argument("-b", "--batch", type=int, default=32, help="Rollout batch optimization threshold")

@@ -1,4 +1,13 @@
-# src/pipelines/online_server.py
+"""
+@file online_server.py
+@brief TCP Loopback co-simulation server orchestrating online interactive PPO training.
+
+This module sets up a non-blocking TCP socket server to interface with the C++ QoS 
+harness. It receives telemetry statistics, constructs normalized state tensors, 
+samples dynamic parameters from Actor Gaussian policy distributions, computes reward
+metrics, and executes synchronous PPO updates when batch sizes are satisfied.
+"""
+
 import os
 import sys
 import socket
@@ -31,6 +40,9 @@ class V2XOnlinePipeline:
         self.rewards = []
 
     def start_server(self, host="127.0.0.1", port=8080):
+        """
+        Launches IPv4 TCP Socket server and handles continuous transaction loops.
+        """
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         
@@ -57,10 +69,11 @@ class V2XOnlinePipeline:
                         continue
                     
                     # ---- Feature Remapping Engine ----
+                    # Remap packet sizes to simplify representation bounds
                     simulated_size = 1400.0 if metrics["anomaly_rate"] > 0.05 else 325.0
                     s = self.agent.build_state_tensor(simulated_size, metrics["avg_sq"], metrics["anomaly_rate"])
                     
-                    # Stochastic Exploration Step
+                    # Stochastic Exploration Step: Sample action from distribution
                     dist, val = self.agent.get_action_distribution(s)
                     a = dist.sample()
                     a_clamped = torch.clamp(a, 0.0, 1.0)
@@ -100,10 +113,12 @@ class V2XOnlinePipeline:
                             curr_log_probs = curr_dist.log_prob(b_actions).sum(dim=-1, keepdim=True)
                             entropy = curr_dist.entropy().sum(dim=-1, keepdim=True)
                             
+                            # Calculate importance sampling ratios r(theta)
                             ratios = torch.exp(curr_log_probs - b_log_probs.unsqueeze(-1))
                             advantages = b_rewards - curr_values.detach()
                             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
                             
+                            # Surrogate objective clipping constraints
                             surr1 = ratios * advantages
                             surr2 = torch.clamp(ratios, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantages
                             
@@ -121,15 +136,15 @@ class V2XOnlinePipeline:
                         mean_reward_val = b_rewards.mean().item()
                         actor_loss_val = actor_loss.item()
                         critic_loss_val = critic_loss.item()
-
+ 
                         # Flush rollout buffers immediately to secure gradient sanity
                         self.states, self.actions, self.log_probs, self.rewards = [], [], [], []
                         
                         # Process evaluation metric telemetry logs
                         print(f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
-                              f"Batch Mean Reward: {C_SUCCESS}{mean_reward_val:+6.2f}{C_RESET} | "
-                              f"Actor Loss: {C_BOLD}{actor_loss_val:+.5f}{C_RESET} | "
-                              f"Critic Loss: {C_BOLD}{critic_loss_val:.4f}{C_RESET}")
+                               f"Batch Mean Reward: {C_SUCCESS}{mean_reward_val:+6.2f}{C_RESET} | "
+                               f"Actor Loss: {C_BOLD}{actor_loss_val:+.5f}{C_RESET} | "
+                               f"Critic Loss: {C_BOLD}{critic_loss_val:.4f}{C_RESET}")
                         
                         # Epoch Checkpoint Serializer
                         if update_count % 10 == 0:

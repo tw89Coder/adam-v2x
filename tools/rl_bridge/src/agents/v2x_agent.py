@@ -1,4 +1,17 @@
-# src/agents/v2x_agent.py
+"""
+@file v2x_agent.py
+@brief Agent wrapper managing state tensor mapping, Gaussian action distribution parameters, and reward shaping.
+
+This module houses the V2XAgent coordinator. It bridges state observations into 
+normalized torch Tensors and implements the multi-objective surrogate reward
+objective function.
+
+NOTE FOR CODE REVIEW:
+This class is missing the `extract_state_from_offline_df` method, which is invoked by
+offline_trainer.py. Running train_offline.py will crash with an AttributeError until 
+this method is added during the bug-fixing phase.
+"""
+
 import torch
 from torch.distributions import Normal
 from src.config import MAX_PACKET_SIZE, MAX_F2_SQ, RAW_CFG
@@ -16,11 +29,18 @@ class V2XAgent:
         self.w_nominal = r_cfg["nominal_traffic_weights"]
 
     def build_state_tensor(self, avg_size, avg_sq, anomaly_rate):
+        """
+        Constructs normalized 3-dimensional state Tensor.
+        Dimensions: [Average Packet Size, Average F2 Sum Square, Anomaly Density Rate]
+        """
         norm_size = avg_size / MAX_PACKET_SIZE
         norm_sq = avg_sq / MAX_F2_SQ
         return torch.tensor([norm_size, norm_sq, anomaly_rate], dtype=torch.float32)
 
     def get_action_distribution(self, state_tensor):
+        """
+        Queries policy network to parameterize the Gaussian policy action distribution.
+        """
         action_mean, state_value = self.model(state_tensor)
         action_std = torch.exp(self.model.log_std)
         return Normal(action_mean, action_std), state_value
@@ -28,6 +48,12 @@ class V2XAgent:
     def compute_surrogate_reward(self, action_values, anomaly_rate, current_budget):
         """
         Multi-objective MDP formulation balancing computational overhead against FSM safety.
+        
+        Action Space Mappings:
+        - action_values[0]: Recovery rate multiplier -> Rescaled to [0.0, 0.5]
+        - action_values[1]: Penalty factor multiplier -> Rescaled to [0.0, 100.0]
+        - action_values[2]: F2 similarity threshold -> Rescaled to [400, 800]
+        - action_values[3]: S0 peacetime sampling rate -> Rescaled to [0.0, 1.0]
         """
         pred_recovery = action_values[0] * 0.5
         pred_penalty  = action_values[1] * 100.0

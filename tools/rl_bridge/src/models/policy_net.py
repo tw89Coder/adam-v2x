@@ -1,4 +1,16 @@
-# src/models/policy_net.py
+"""
+@file policy_net.py
+@brief Actor-Critic Neural Network architecture for V2X FSM parameter regulation.
+
+This module defines the PyTorch neural network architecture representing the
+DRL agent's brain. It utilizes a shared feature extraction layer feeding into
+two distinct heads:
+1. An Actor head that outputs the mean vector (mu) of a Gaussian distribution 
+   for continuous action sampling.
+2. A Critic head that outputs the estimated value V(s) of the current state 
+   context, used for computing on-policy advantages in PPO updates.
+"""
+
 import torch
 import torch.nn as nn
 from src.config import RAW_CFG
@@ -17,22 +29,23 @@ class DefencePolicyNet(nn.Module):
         if action_dim is None:
             action_dim = RAW_CFG["hyperparameters"]["action_dim"]
         
-        # Shared feature representation layer
+        # Shared feature representation layer (multi-layer perceptron feature extractor)
         self.shared_layer = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU()
         )
         
-        # Actor head: Outputs mean (mu) for Gaussian policy distribution
+        # Actor head: Outputs mean (mu) for Gaussian policy distribution, normalized via Sigmoid to [0, 1]
         self.actor_head = nn.Sequential(
             nn.Linear(hidden_dim, action_dim),
             nn.Sigmoid()
         )
         
-        # Critic head: Outputs scalar state value V(s)
+        # Critic head: Outputs scalar state value V(s) to guide policy gradient direction
         self.critic_head = nn.Linear(hidden_dim, 1)
         
-        # Trainable log standard deviation parameter for stochastic continuous exploration
+        # Trainable log standard deviation parameter for stochastic continuous exploration.
+        # Initialized to -1.0 corresponding to exp(-1) ~= 0.368 baseline standard deviation.
         self.log_std = nn.Parameter(torch.zeros(action_dim) - 1.0)
 
     def forward(self, x):

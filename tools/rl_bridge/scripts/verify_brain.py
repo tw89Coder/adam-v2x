@@ -2,6 +2,15 @@
 # ==============================================================================
 # V2X QoS DRL Brain Decision Verification Audit CLI
 # ==============================================================================
+"""
+@file verify_brain.py
+@brief Diagnostic evaluation utility auditing offline policy parameters.
+
+This script parses a path to a target brain checkpoint `.pth` file, constructs 
+predefined environmental scenarios (Normal traffic baseline and High-potency 
+Attack storm), executes forward inference passes through the policy network, 
+and prints rescaled output continuous parameter values.
+"""
 
 import os
 import sys
@@ -18,6 +27,9 @@ from src.config import C_ERROR, C_RESET, MAX_PACKET_SIZE, MAX_F2_SQ
 from src.models.policy_net import DefencePolicyNet 
 
 def parse_arguments():
+    """
+    Sets up options for specific brain checkpoints.
+    """
     parser = argparse.ArgumentParser(description="Brain Decision Verification Audit CLI")
     parser.add_argument(
         "-m", "--model", 
@@ -28,6 +40,9 @@ def parse_arguments():
     return parser.parse_args()
 
 def consult_brain(model, name, size, sq, anomaly):
+    """
+    Queries policy network to print model responses to predefined test cases.
+    """
     # Construct feature tensor representing the environmental state context
     state = torch.tensor([size/MAX_PACKET_SIZE, sq/MAX_F2_SQ, anomaly], dtype=torch.float32)
     

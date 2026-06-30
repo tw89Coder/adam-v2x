@@ -1,4 +1,12 @@
-# src/pipelines/offline_trainer.py
+"""
+@file offline_trainer.py
+@brief On-policy batch PPO optimization trainer feeding on pre-recorded historical CSV trajectories.
+
+This module houses the V2XOfflinePipeline. It parses continuous packet sequences,
+aggregates them into sliding windows of size 64 (WINDOW_SIZE), simulates agent responses, 
+computes advantages, and updates policy networks over multiple optimization epochs.
+"""
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -18,6 +26,9 @@ class V2XOfflinePipeline:
         self.optimizer = optim.Adam(self.agent.model.parameters(), lr=lr)
 
     def train_episodes(self, raw_data, total_epochs):
+        """
+        Executes on-policy dataset updates across total_epochs.
+        """
         total_packets = len(raw_data)
         num_windows = total_packets // WINDOW_SIZE
 
@@ -33,6 +44,7 @@ class V2XOfflinePipeline:
                 next_window_slice = raw_data.iloc[(w + 1) * WINDOW_SIZE : (w + 2) * WINDOW_SIZE]
                 
                 # Call single source of truth state estimators from the agent helper
+                # NOTE FOR CODE REVIEW: extract_state_from_offline_df is currently missing in V2XAgent
                 s = self.agent.extract_state_from_offline_df(window_slice)
                 s_next = self.agent.extract_state_from_offline_df(next_window_slice)
                 

@@ -1,3 +1,25 @@
+/**
+ * @file rl_bridge.cpp
+ * @brief Implementation of the reinforcement learning socket bridge interface.
+ * 
+ * DESIGN CONTEXT & WORKFLOW IPC LINK:
+ * This class coordinates the telemetry gathering and bidirectional IPC synchronization
+ * between the C++ simulator engine and the Python PyTorch/PPO training agent.
+ * 
+ * TELEMETRY LOGGING (EPISODIC TRACES):
+ * Writes per-packet metrics (packet size, max similarity square, budget, state, anomalies)
+ * to a CSV training trace. Each run routes to a rate-specific and mode-specific log 
+ * file to prevent cross-run trace contamination.
+ * 
+ * CONTROL WINDOW & SOCKET HANDSHAKE:
+ * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (1000) packets.
+ * - At window boundaries, it opens a blocking TCP socket loopback connection to port 8080.
+ * - Sends a serialized telemetry observation string: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
+ * - Blocks execution waiting for the DRL policy decision, which is received as a serialized 
+ *   comma-separated control string: "recovery,penalty,sq_threshold,s0_sampling_rate\n"
+ * - Dynamically updates the FSM parameters with the newly received policy.
+ */
+
 #include "qos_harness/rl_bridge.hpp"
 
 #include <arpa/inet.h>
@@ -24,23 +46,33 @@ RLBridge::~RLBridge() {
     }
 }
 
+/**
+ * @brief Configures simulation outputs directory and routes traces to dynamic files.
+ * 
+ * @param enable_socket Enables active loopback TCP handshake updates if true.
+ * @param pollution_rate Anomaly flow percentage representing fuzzer intensity.
+ * @param attack_mode Selected traffic generator schedule index.
+ */
 void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_mode) {
     socket_enabled_ = enable_socket;
 
-    // Create dedicated outputs subdirectory for reinforcement learning
+    // Create outputs folder for reinforcement learning offline/online telemetry
     std::string dir_path = repo_root_ + "/outputs/rl_env";
     mkdir(dir_path.c_str(), 0755);
 
-    // Dynamic File Routing to prevent cross-run trace contamination ──
+    // Route trace files dynamically to prevent overlapping executions from overwriting matrices
     char file_path[512];
     std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
                   attack_mode);
 
-    // Open with truncation to guarantee clean, deterministic episodic trajectories
+    // Open file using truncation to ensure clean episodic runs
     csv_file_.open(file_path, std::ios::out);
     write_csv_header();
 }
 
+/**
+ * @brief Commits CSV column labels if the telemetry file is empty.
+ */
 void RLBridge::write_csv_header() {
     csv_file_.seekp(0, std::ios::end);
     if (csv_file_.tellp() == 0) {
@@ -48,13 +80,22 @@ void RLBridge::write_csv_header() {
     }
 }
 
+/**
+ * @brief Logs packet-level observations and updates sliding window statisticians.
+ * 
+ * @param pkt_size Length of the raw packet.
+ * @param max_sum_sq The maximum F2 sketch similarity count.
+ * @param budget Virtual CPU budget value of the FSM.
+ * @param state Current FSM state index (0 to 3).
+ * @param is_anomalous True if the packet was dropped.
+ */
 void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
     if (csv_file_.is_open()) {
         csv_file_ << pkt_size << "," << max_sum_sq << "," << budget << "," << state << "," << (is_anomalous ? 1 : 0)
                   << "\n";
     }
 
-    // Accumulate metrics for the current control window
+    // Accumulate sliding window statisticians
     window_packet_count_++;
     window_sq_sum_ += max_sum_sq;
     window_budget_sum_ += budget;
@@ -63,33 +104,50 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
     }
 }
 
+/**
+ * @brief Synchronizes policy parameters with the python DRL brain at window boundary splits.
+ * 
+ * @param current_packet_idx The index of the packet in the main loop.
+ * @param filter The active FSM instance to modify.
+ */
 void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& filter) {
     if (window_packet_count_ < CTRL_WINDOW_SIZE) return;
 
+    // Package window statistics
     WindowTelemetry telemetry{window_sq_sum_ / window_packet_count_, window_budget_sum_ / window_packet_count_,
                               static_cast<double>(window_malware_count_) / window_packet_count_};
 
-    // Safe fallback defaults in case handshake fails
+    // CODE SMELL WARNING:
+    // This outer next_policy variable is shadowed by the inner next_policy variable
+    // declared inside the if (socket_enabled_) block below. It is completely unused.
     FilterPolicy next_policy{0.05, 50.0, 600};
 
     if (socket_enabled_) {
-        // Pass default structure expanded with baseline backup rate (10%)
+        // Construct policy structure mapping baseline fallback configurations with 10% sampling
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
 
+        // Handshake with the optimization engine and overwrite state machine parameters
         if (handshake_with_agent(telemetry, next_policy)) {
-            // Apply the 4-dimensional continuous control sequence via updated OOP setter
+            // Apply the received 4D parameter array to regulate filter thresholds and sampling rates
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.s0_sampling_rate);
         }
     }
 
-    // Reset accumulators for the next execution cycle
+    // Reset window statistical accumulators
     window_packet_count_ = 0;
     window_sq_sum_ = 0;
     window_budget_sum_ = 0;
     window_malware_count_ = 0;
 }
 
+/**
+ * @brief Connects to loopback port and executes a synchronous telemetry/policy handshake.
+ * 
+ * @param telemetry Aggregate input features.
+ * @param out_policy Structured policy buffer to write model responses to.
+ * @return true if communication succeeded and parameters were verified, false otherwise.
+ */
 bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return false;
@@ -99,40 +157,41 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
     serv_addr.sin_port = htons(port_);
     inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 
-    // If Python training environment isn't up, drop connection and fallback gracefully
+    // Drop connection and fallback gracefully if the Python training server is offline
     if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         close(sock);
         return false;
     }
 
-    // Serialize window observations into plain string
+    // Serialize window statistics using the wire protocol format
     char send_buf[256];
     std::snprintf(send_buf, sizeof(send_buf), "%f,%f,%f\n", telemetry.avg_max_sum_sq, telemetry.avg_budget,
                   telemetry.anomaly_rate);
     send(sock, send_buf, std::strlen(send_buf), 0);
 
-    // Block current execution context and wait for optimized agent parameters
+    // Block C++ thread and wait for DRL agent control updates
     char recv_buf[256] = {0};
     int valread = read(sock, recv_buf, sizeof(recv_buf) - 1);
     close(sock);
 
     if (valread <= 0) return false;
 
-    // Deserialize incoming command string into execution tokens
+    // Deserialize incoming command string into separate parameters
     std::string res(recv_buf);
     size_t pos1 = res.find(',');
     size_t pos2 = res.find(',', pos1 + 1);
-    size_t pos3 = res.find(',', pos2 + 1);  // Track the newly extended 3rd comma boundary
+    size_t pos3 = res.find(',', pos2 + 1);  // Exposes the 4th active variable boundary
 
+    // Reject envelopes missing token separators
     if (pos1 == std::string::npos || pos2 == std::string::npos || pos3 == std::string::npos) {
-        return false;  // Safely discard corrupt or unaligned protocol envelopes
+        return false;
     }
 
-    // Explicit substring extraction matching the wire protocol tokens
+    // Extract policy tokens and write to output parameters
     out_policy.recovery_rate = std::stod(res.substr(0, pos1));
     out_policy.penalty_multiplier = std::stod(res.substr(pos1 + 1, pos2 - pos1 - 1));
     out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1, pos3 - pos2 - 1));
-    out_policy.s0_sampling_rate = std::stod(res.substr(pos3 + 1));  // Safely parse the 4th column
+    out_policy.s0_sampling_rate = std::stod(res.substr(pos3 + 1));  // Dynamically regulated by DRL
 
     return true;
 }

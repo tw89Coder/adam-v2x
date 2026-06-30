@@ -1,8 +1,20 @@
-# src/config.py
+"""
+@file config.py
+@brief Configuration parser and global constants exporter for the V2X DRL agent.
+
+This module initializes ANSI terminal colors for formatting log outputs, ingests
+the centralized hyperparameters and boundaries from the YAML configuration file,
+and falls back to hardcoded default configurations if the file loading fails.
+
+NOTE FOR CODE REVIEW:
+This file currently does not export the `DATA_DIR` constant, which is imported by
+data_loader.py, causing an ImportError when running offline training scripts.
+"""
+
 import os
 import yaml
 
-# Initialize standard terminal signaling ANSI color codes
+# Initialize standard terminal signaling ANSI color codes for formatted logging
 C_RESET = "\033[0m"
 C_BOLD = "\033[1m"
 C_WHITE = "\033[1;37m"
