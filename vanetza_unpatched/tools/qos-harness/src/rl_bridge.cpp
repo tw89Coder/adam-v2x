@@ -82,6 +82,10 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
     onnx_model_path_ = model_path;
 }
 
+void RLBridge::set_safety_guards(bool enabled) {
+    safety_guards_enabled_ = enabled;
+}
+
 /**
  * @brief Commits CSV column labels if the telemetry file is empty.
  */
@@ -141,6 +145,13 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
 
         // Handshake with the optimization engine and overwrite state machine parameters
         if (handshake_with_agent(telemetry, next_policy)) {
+            // Apply safety boundaries in C++ if enabled
+            if (safety_guards_enabled_) {
+                if (next_policy.sq_threshold > 650) next_policy.sq_threshold = 650;
+                if (next_policy.penalty_multiplier < 20.0) next_policy.penalty_multiplier = 20.0;
+                if (next_policy.recovery_rate > 0.10) next_policy.recovery_rate = 0.10;
+                if (next_policy.base_sampling_rate < 0.05) next_policy.base_sampling_rate = 0.05;
+            }
             // Apply the received 4D parameter array to regulate filter thresholds and sampling rates
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
@@ -302,10 +313,12 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         }
 
         // 4. Enforce Heuristic Safety Boundaries to prevent RL from going crazy (FNR protection)
-        if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
-        if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
-        if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
-        if (out_policy.base_sampling_rate < 0.05) out_policy.base_sampling_rate = 0.05;
+        if (safety_guards_enabled_) {
+            if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
+            if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
+            if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
+            if (out_policy.base_sampling_rate < 0.05) out_policy.base_sampling_rate = 0.05;
+        }
 
         return true;
     } 

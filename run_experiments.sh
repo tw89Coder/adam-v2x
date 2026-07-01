@@ -22,6 +22,7 @@ RUN_FILTER_OFF=true
 RUN_FILTER_ON=true
 RUN_ONNX=false
 ONNX_MODEL_PATH=""
+DISABLE_SAFETY=false
 
 # Default global state machine mode and pollution density spectrum arrays
 DEFAULT_MODES=(0 1 2)
@@ -86,6 +87,10 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --disable-safety)
+            DISABLE_SAFETY=true
+            shift
+            ;;
         *)
             POSITIONAL_ARGS+=("$1")
             shift
@@ -137,6 +142,7 @@ print_usage() {
     echo -e "  ${C_INFO}--modes \"m1 m2\"${C_RESET}   Override default execution suite with custom target logic modes"
     echo -e "  ${C_INFO}--rates \"r1 r2\"${C_RESET}   Override default sweep steps with a custom range list of pollution floats"
     echo -e "  ${C_INFO}--onnx [path]${C_RESET}      Enable inline ONNX model inference during simulation (Default path if omitted)"
+    echo -e "  ${C_INFO}--disable-safety${C_RESET}  Disable heuristic safety clamping boundaries for RL agent"
     echo -e ""
     echo -e "${C_BOLD}Examples:${C_RESET}"
     echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET}                             \033[90m# Default 18-node sweep\033[0m"
@@ -175,7 +181,11 @@ execute_rl_training() {
     # Sequentially iterate through configuration sweeps to feed interactive socket state-spaces
     for rate in "${POLLUTION_RATES[@]}"; do
         echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory at rate: ${rate}%...${C_RESET}"
-        taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m 3 --rl
+        local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" 3 "--rl")
+        if [ "$DISABLE_SAFETY" = true ]; then
+            train_args+=("--disable-safety")
+        fi
+        taskset -c $PIN_CORE "$exec_bin" "${train_args[@]}"
         echo "----------------------------------------------------------------------"
     done
 }
@@ -205,11 +215,14 @@ execute_matrix_sweep() {
             # Conditionally execute the circuit-breaker state-machine hardened flow node
             if [ "$RUN_FILTER_ON" = true ]; then
                 echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  (Core: ${PIN_CORE})${C_RESET}"
+                local sweep_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "-f")
                 if [ "$RUN_ONNX" = true ]; then
-                    taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f --onnx "$ONNX_MODEL_PATH"
-                else
-                    taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f
+                    sweep_args+=("--onnx" "$ONNX_MODEL_PATH")
                 fi
+                if [ "$DISABLE_SAFETY" = true ]; then
+                    sweep_args+=("--disable-safety")
+                fi
+                taskset -c $PIN_CORE "$exec_bin" "${sweep_args[@]}"
             fi
             
             if [ "$RUN_FILTER_OFF" = true ] || [ "$RUN_FILTER_ON" = true ]; then
@@ -345,6 +358,9 @@ case "$ACTION" in
         CUSTOM_ARGS=("$@")
         if [ "$RUN_ONNX" = true ]; then
             CUSTOM_ARGS+=("--onnx" "$ONNX_MODEL_PATH")
+        fi
+        if [ "$DISABLE_SAFETY" = true ]; then
+            CUSTOM_ARGS+=("--disable-safety")
         fi
         
         echo -e "${C_INFO}[INFO] Invoking custom framework map... Args: ${CUSTOM_ARGS[*]}${C_RESET}"

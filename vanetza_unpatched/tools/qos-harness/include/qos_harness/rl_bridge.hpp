@@ -55,6 +55,12 @@ public:
     void initialize_onnx(bool enable_onnx, const std::string& model_path);
 
     /**
+     * @brief Set safety guards (heuristic boundaries) status.
+     * @param enabled If true, safety boundaries clamp RL outputs.
+     */
+    void set_safety_guards(bool enabled);
+
+    /**
      * @brief Logs per-packet metrics to the training trace file.
      */
     void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous);
@@ -71,6 +77,7 @@ private:
     int server_fd_;
     bool onnx_enabled_;
     std::string onnx_model_path_;
+    bool safety_guards_enabled_ = true;
 
     /**
      * @brief Executes in-process ONNX model inference.

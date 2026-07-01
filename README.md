@@ -151,6 +151,7 @@ Modifiers can be flexibly placed anywhere within the command-line interface sequ
 * `--filter-only`: Force `--simulate-all` batch scheduler to execute ONLY Filter=ON evaluation steps
 * `--modes "m1 m2"`: Override default execution matrix with custom target protocol simulation states
 * `--rates "r1 r2"`: Override default sweep intervals with a custom whitespace-separated list of pollution floats
+* `--disable-safety`: Disable heuristic safety clamping boundaries for the RL agent (allows raw RL outputs)
 
 ### Full-Scale Matrix Evaluation Examples
 
@@ -322,4 +323,7 @@ bash vanetza_setup.sh unpatch
 
 # Step 2: Run dynamic in-process ONNX inference simulation (custom example)
 ./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx
+
+# Step 3: Run dynamic ONNX inference WITHOUT heuristic safety boundaries (insurance off)
+./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx --disable-safety
 ```

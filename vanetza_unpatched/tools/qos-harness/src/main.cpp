@@ -147,6 +147,7 @@ int main(int argc, char* argv[]) {
     bool rl_train_mode = false;
     bool enable_onnx = false;
     std::string onnx_model_path = "";
+    bool disable_safety = false;
     bool has_custom_policy = false;
 
     // Hardcoded static fallback parameters for local overrides
@@ -173,6 +174,8 @@ int main(int argc, char* argv[]) {
             enable_onnx = true;
             onnx_model_path = argv[++i];
             enable_filter = true;
+        } else if (arg == "--disable-safety") {
+            disable_safety = true;
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -294,6 +297,9 @@ int main(int argc, char* argv[]) {
 
     // Initialize socket co-simulation bridge for active DRL co-processing
     qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);
+    if (disable_safety) {
+        rl_bridge.set_safety_guards(false);
+    }
     rl_bridge.initialize_onnx(enable_onnx, onnx_model_path);
     rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
 
