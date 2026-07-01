@@ -184,18 +184,19 @@ The repository integrates an industrial-grade Object-Oriented plotting and verif
 
 ### Unified Plotting Orchestration Core (`plot_engine.py`)
 
-The centralized `plot_engine.py` features a deferred lazy-loading architecture to prevent heavy backend library import overhead when querying standard text menus. It manages directories dynamically and saves every generated graphic asset as a high-resolution raster **PNG** alongside a lossless vector **PDF** for LaTeX manuscript insertion.
+The centralized plotting suite features a deferred lazy-loading architecture to prevent heavy backend library import overhead when querying standard text menus. It manages directories dynamically and saves every generated graphic asset as a high-resolution raster **PNG** alongside a lossless vector **PDF** for LaTeX manuscript insertion. You can trigger it directly via the `python` target:
 
 ```bash
 # Execute the complete analytical pipeline suite (Generates all dataframes, charts, and tables)
-python tools/plot_engine.py --all
+./run_experiments.sh python --plot --all
 
 # Isolate the amplification pipeline to compute regression metrics and refresh the LaTeX tabular code
-python tools/plot_engine.py --type amp
+./run_experiments.sh python --plot --type amp
 
-# Render a pinpoint QoS CDF and Jitter pair targeting a specific state configuration and rate step
-python tools/plot_engine.py --type qos --mode 1 --rate 10.0
-
+# Render a pinpoint QoS CDF and Jitter pair targeting distinct pollution rate steps
+./run_experiments.sh python --plot --type qos --mode 1 --rate 1.0
+./run_experiments.sh python --plot --type qos --mode 1 --rate 5.0
+./run_experiments.sh python --plot --type qos --mode 1 --rate 10.0
 ```
 
 ## 5. Distributed Deep Reinforcement Learning Toolchain (`tools/rl_bridge/`)

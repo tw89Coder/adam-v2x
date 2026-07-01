@@ -134,6 +134,7 @@ print_usage() {
     echo -e "  ${C_WARN}--deploy${C_RESET}         Start production inference serve daemon"
     echo -e "  ${C_WARN}--verify-brain${C_RESET}   Audit brain checkpoints on baseline scenarios"
     echo -e "  ${C_WARN}--export-onnx${C_RESET}    Export trained PyTorch model weights to ONNX format"
+    echo -e "  ${C_WARN}--plot${C_RESET}           Execute verification and plotting engine scripts"
     echo -e ""
     echo -e "${C_BOLD}Automation Configuration Modifiers (Can be placed anywhere):${C_RESET}"
     echo -e "  ${C_INFO}-c, --core <id>${C_RESET}   Target hardware CPU core index for taskset processor locking (Default: 9)"
@@ -345,6 +346,17 @@ case "$ACTION" in
         PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
         if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
         exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/export_onnx.py" "$@"
+        ;;
+
+    --plot)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --plot action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/plot_engine.py" "$@"
         ;;
 
     --custom)
