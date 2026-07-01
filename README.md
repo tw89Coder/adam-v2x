@@ -50,6 +50,40 @@ parsing algorithms, automated matrix evaluation workflows, and the modular analy
 
 ```
 
+### 1.1 Mitigation Pre-Filter Pipeline
+
+This diagram shows how incoming network packets are processed by the pre-filter mechanism to mitigate CWE-674 CPU workload amplification:
+
+```mermaid
+graph TD
+    Packet([Incoming V2X Packet]) --> StateCheck{Active State?}
+    
+    StateCheck -->|Peacetime S0| SampleCheck{Sampled?}
+    SampleCheck -->|Yes| F2Filter[F2 Sliding-Window Sketch Filter]
+    SampleCheck -->|No / Bypass| ASN1[ASN.1 Parser]
+    
+    StateCheck -->|Attack S1| F2Filter
+    
+    F2Filter -->|Below Threshold| ASN1
+    F2Filter -->|Above Threshold| Mitigate[Circuit Breaker Triggered]
+    
+    Mitigate -->|Apply Penalty & Limit| DropPacket([Drop / Rate Limit Packet])
+    ASN1 -->|Process Normal Frame| Success([Frame Decoded & Processed])
+```
+
+### 1.2 Evaluation & Visualization Workflow
+
+This diagram outlines the complete end-to-end orchestration pipeline from building to generating plots and tables:
+
+```mermaid
+graph TD
+    Start([Start Sandbox]) --> Build[1. Build Workspace: manage_build.sh]
+    Build --> Run[2. Run Experiment Matrix: run_experiments.sh]
+    Run --> Outputs[(3. Telemetry Outputs: csv_raw)]
+    Outputs --> Plot[4. Data Visualization Engine: plot_engine.py]
+    Plot --> Figures[(5. Rendered Plots & LaTeX Stats)]
+```
+
 ---
 
 ## 2. Setup and Automated Build Orchestration
