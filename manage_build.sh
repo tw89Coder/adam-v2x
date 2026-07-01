@@ -18,7 +18,7 @@ ANSI_BOLD="\033[1m"
 ANSI_CYAN="\033[1;36m"
 ANSI_GREEN="\033[1;32m"
 ANSI_YELLOW="\033[1;33m"
-ANSI_RED_BG="\033[1;41;37m"
+ANSI_RED="\033[1;31m"
 ANSI_BLUE="\033[1;34m"
 
 # ------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ COLOR_BOLD="${ANSI_BOLD}"
 COLOR_INFO="${ANSI_CYAN}"
 COLOR_SUCCESS="${ANSI_GREEN}"
 COLOR_WARNING="${ANSI_YELLOW}"
-COLOR_DANGER="${ANSI_RED_BG}"
+COLOR_DANGER="${ANSI_RED}"
 COLOR_PRIMARY="${ANSI_BLUE}"
 
 # ------------------------------------------------------------------------------

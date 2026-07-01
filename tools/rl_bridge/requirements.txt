@@ -36,3 +36,5 @@ torch==2.12.1
 triton==3.7.1
 typing_extensions==4.15.0
 tzdata==2026.2
+onnx
+onnxscript

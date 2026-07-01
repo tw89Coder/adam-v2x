@@ -13,7 +13,7 @@ C_BOLD="\033[1m"
 C_INFO="\033[1;36m"
 C_SUCCESS="\033[1;32m"
 C_WARN="\033[1;33m"
-C_ERROR="\033[1;41;37m"
+C_ERROR="\033[1;31m"
 
 # Initialize baseline default states and matrix parameters
 PIN_CORE=${PIN_CORE:-9}
@@ -128,6 +128,7 @@ print_usage() {
     echo -e "  ${C_WARN}--train-offline${C_RESET}  Run offline dataset trajectory training"
     echo -e "  ${C_WARN}--deploy${C_RESET}         Start production inference serve daemon"
     echo -e "  ${C_WARN}--verify-brain${C_RESET}   Audit brain checkpoints on baseline scenarios"
+    echo -e "  ${C_WARN}--export-onnx${C_RESET}    Export trained PyTorch model weights to ONNX format"
     echo -e ""
     echo -e "${C_BOLD}Automation Configuration Modifiers (Can be placed anywhere):${C_RESET}"
     echo -e "  ${C_INFO}-c, --core <id>${C_RESET}   Target hardware CPU core index for taskset processor locking (Default: 9)"
@@ -320,6 +321,17 @@ case "$ACTION" in
         PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
         if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
         exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/verify_brain.py" "$@"
+        ;;
+
+    --export-onnx)
+        if [ "$TARGET" != "python" ]; then
+            echo -e "${C_ERROR}[ERROR] --export-onnx action is only compatible with 'python' target.${C_RESET}"
+            exit 1
+        fi
+        shift 2
+        PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+        if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/scripts/export_onnx.py" "$@"
         ;;
 
     --custom)

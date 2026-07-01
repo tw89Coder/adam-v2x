@@ -21,7 +21,7 @@ C_WHITE = "\033[1;37m"
 C_INFO = "\033[1;36m"
 C_SUCCESS = "\033[1;32m"
 C_WARN = "\033[1;33m"
-C_ERROR = "\033[1;41;37m"
+C_ERROR = "\033[1;31m"
 
 # Locate the external YAML file layout relative to project infrastructure
 CONFIG_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

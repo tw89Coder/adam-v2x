@@ -48,6 +48,13 @@ public:
     void initialize(bool enable_socket, double pollution_rate, int attack_mode);
 
     /**
+     * @brief Configures ONNX inference state.
+     * @param enable_onnx If true, prepares system to run in-process ONNX model inference.
+     * @param model_path Path to the exported ONNX model binary.
+     */
+    void initialize_onnx(bool enable_onnx, const std::string& model_path);
+
+    /**
      * @brief Logs per-packet metrics to the training trace file.
      */
     void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous);
@@ -62,6 +69,14 @@ private:
     int port_;
     bool socket_enabled_;
     int server_fd_;
+    bool onnx_enabled_;
+    std::string onnx_model_path_;
+
+    /**
+     * @brief Executes in-process ONNX model inference.
+     * @return true if inference succeeded, false otherwise.
+     */
+    bool run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
 
     // Window-level statistical accumulators
     const int CTRL_WINDOW_SIZE = 1000;

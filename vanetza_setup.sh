@@ -22,7 +22,7 @@ readonly ANSI_BOLD="\033[1m"
 readonly ANSI_CYAN="\033[1;36m"
 readonly ANSI_GREEN="\033[1;32m"
 readonly ANSI_YELLOW="\033[1;33m"
-readonly ANSI_RED_BG="\033[1;41;37m"
+readonly ANSI_RED="\033[1;31m"
 readonly ANSI_BLUE="\033[1;34m"
 
 # ------------------------------------------------------------------------------
@@ -33,7 +33,7 @@ readonly COLOR_BOLD="${ANSI_BOLD}"
 readonly COLOR_INFO="${ANSI_CYAN}"
 readonly COLOR_SUCCESS="${ANSI_GREEN}"
 readonly COLOR_WARNING="${ANSI_YELLOW}"
-readonly COLOR_DANGER="${ANSI_RED_BG}"
+readonly COLOR_DANGER="${ANSI_RED}"
 readonly COLOR_PRIMARY="${ANSI_BLUE}"
 
 # ------------------------------------------------------------------------------

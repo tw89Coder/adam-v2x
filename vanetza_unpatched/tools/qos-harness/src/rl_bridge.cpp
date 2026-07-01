@@ -32,10 +32,17 @@
 #include <cstring>
 #include <iostream>
 
+#ifdef USE_ONNX
+#include <onnxruntime_cxx_api.h>
+#include <vector>
+#include <cmath>
+#endif
+
 namespace qos_harness {
 
 RLBridge::RLBridge(const std::string& repo_root, int port)
-    : repo_root_(repo_root), port_(port), socket_enabled_(false), server_fd_(-1) {}
+    : repo_root_(repo_root), port_(port), socket_enabled_(false), server_fd_(-1),
+      onnx_enabled_(false), onnx_model_path_("") {}
 
 RLBridge::~RLBridge() {
     if (server_fd_ >= 0) {
@@ -68,6 +75,11 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
     // Open file using truncation to ensure clean episodic runs
     csv_file_.open(file_path, std::ios::out);
     write_csv_header();
+}
+
+void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) {
+    onnx_enabled_ = enable_onnx;
+    onnx_model_path_ = model_path;
 }
 
 /**
@@ -117,7 +129,13 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     WindowTelemetry telemetry{window_sq_sum_ / window_packet_count_, window_budget_sum_ / window_packet_count_,
                               static_cast<double>(window_malware_count_) / window_packet_count_};
 
-    if (socket_enabled_) {
+    if (onnx_enabled_) {
+        FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
+        if (run_onnx_inference(telemetry, next_policy)) {
+            filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
+                                        next_policy.sq_threshold, next_policy.base_sampling_rate);
+        }
+    } else if (socket_enabled_) {
         // Construct policy structure mapping baseline fallback configurations with 10% base sampling
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
 
@@ -190,5 +208,106 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
 
     return true;
 }
+
+#ifdef USE_ONNX
+bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+    try {
+        // Initialize ONNX Runtime Env and Session on first call (thread-safe static initialization)
+        static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "V2X_ONNX_Inference");
+        static Ort::SessionOptions session_options;
+        session_options.SetIntraOpNumThreads(1);
+        session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        
+        static Ort::Session session(env, onnx_model_path_.c_str(), session_options);
+        
+        // Input Node Names and Shapes
+        static Ort::AllocatorWithDefaultOptions allocator;
+        static char* input_name = session.GetInputName(0, allocator);
+        static char* output_name = session.GetOutputName(0, allocator);
+        
+        // Dynamic Dimension Inspection: check shape of output
+        auto output_type_info = session.GetOutputTypeInfo(0);
+        auto output_tensor_info = output_type_info.GetTensorTypeAndOnnxTypeInfo();
+        std::vector<int64_t> output_shape = output_tensor_info.GetShape();
+        
+        // Output dimension is the last dimension of the shape array
+        size_t action_dim = output_shape.back();
+
+        // 1. Prepare Input Tensor (Shape: 1x3)
+        std::vector<int64_t> input_shape = {1, 3};
+        std::vector<float> input_tensor_values = {
+            static_cast<float>(telemetry.avg_max_sum_sq),
+            static_cast<float>(telemetry.avg_budget),
+            static_cast<float>(telemetry.anomaly_rate)
+        };
+
+        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+            memory_info, input_tensor_values.data(), input_tensor_values.size(),
+            input_shape.data(), input_shape.size()
+        );
+
+        // 2. Run ONNX Session Inference
+        const char* input_names[] = {input_name};
+        char* output_names[] = {output_name};
+        
+        auto output_tensors = session.Run(
+            Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1
+        );
+
+        float* float_output = output_tensors.front().GetTensorMutableData<float>();
+
+        // 3. Dynamic Action Space Mapping (Handles 3D vs 4D outputs)
+        if (action_dim == 4) {
+            // 4D Action Space: [recovery, penalty, sq_thresh, sampling_rate]
+            out_policy.recovery_rate = float_output[0] * 0.5;
+            out_policy.penalty_multiplier = float_output[1] * 100.0;
+            out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+            out_policy.base_sampling_rate = float_output[3]; // Sigmoid output [0.0, 1.0]
+        } 
+        else if (action_dim == 3) {
+            // 3D Action Space: [recovery, penalty, sq_thresh]
+            out_policy.recovery_rate = float_output[0] * 0.5;
+            out_policy.penalty_multiplier = float_output[1] * 100.0;
+            out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+            
+            // Dynamic S0 Peacetime Active Inspection Sampling Rate calculation:
+            // sampling_rate = (1 / risk_budget) * k * 100%
+            // In C++, telemetry.avg_budget represents the average remaining CPU budget [0.0, 1.0].
+            // To prevent division by zero, we enforce a minimum budget floor.
+            double current_budget = telemetry.avg_budget;
+            if (current_budget < 0.01) current_budget = 0.01;
+            
+            double k = 0.01; // Constant factor
+            double calculated_rate = (1.0 / current_budget) * k;
+            
+            // Enforce bounds [0.0, 1.0]
+            if (calculated_rate < 0.0) calculated_rate = 0.0;
+            if (calculated_rate > 1.0) calculated_rate = 1.0;
+            
+            out_policy.base_sampling_rate = calculated_rate;
+        } 
+        else {
+            std::cerr << "[WARNING] ONNX model returned unexpected action dimensions: " << action_dim << "\n";
+            return false;
+        }
+
+        return true;
+    } 
+    catch (const std::exception& e) {
+        std::cerr << "[ERROR] ONNX C++ Inference session failure: " << e.what() << "\n";
+        return false;
+    }
+}
+#else
+bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+    std::cerr << "\n[FATAL] ONNX Runtime in-process inference was requested with model: " 
+              << onnx_model_path_ << "\n";
+    std::cerr << "[FATAL] ONNX Runtime C++ API is not yet integrated into the build matrix.\n";
+    std::cerr << "[FATAL] Exiting execution gracefully as requested.\n";
+    std::exit(1);
+    return false;
+}
+#endif
 
 }  // namespace qos_harness

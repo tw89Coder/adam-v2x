@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# V2X DRL Model to ONNX Formatter Exporter
+# ==============================================================================
+"""
+@file export_onnx.py
+@brief Centralized pipeline to export PyTorch PPO Policy weights to ONNX format.
+
+Dynamically inspects the PyTorch checkpoint weights to auto-detect the action 
+dimensions and hidden layers topology, builds a matching actor model,
+loads the weights, and serializes the network to the ONNX graph format.
+"""
+
+import os
+import sys
+import torch
+import torch.nn as nn
+
+# Centralize paths relative to Python root tools/rl_bridge
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from src.config import RAW_CFG, ONLINE_BRAIN_PATH, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET
+
+def main():
+    print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
+    print(f"{C_INFO}│          V2X DRL ACTOR POLICY ONNX EXPORT PIPELINE           │{C_RESET}")
+    print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
+
+    # Determine checkpoint and export paths
+    checkpoint_path = os.path.join(PROJECT_ROOT, ONLINE_BRAIN_PATH)
+    onnx_output_path = os.path.join(PROJECT_ROOT, "checkpoints", "v2x_ppo_agent.onnx")
+
+    if not os.path.exists(checkpoint_path):
+        print(f"{C_ERROR}[FATAL] Target PyTorch checkpoint missing at: {checkpoint_path}{C_RESET}")
+        sys.exit(1)
+
+    # 1. Load the checkpoint weights dict to inspect the model's architecture
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    except Exception as load_err:
+        print(f"{C_ERROR}[FATAL] Failed to read checkpoint weights file: {load_err}{C_RESET}")
+        sys.exit(1)
+
+    # 2. Inspect keys to dynamically auto-detect architecture specs
+    try:
+        # Input features are the second dimension of the first linear weight matrix
+        input_dim = checkpoint['shared_layer.0.weight'].shape[1]
+        # Hidden dimension size
+        hidden_dim = checkpoint['shared_layer.0.weight'].shape[0]
+        # Action space size is the first dimension of the actor head linear weight matrix
+        action_dim = checkpoint['actor_head.0.weight'].shape[0]
+        # Detect if model was trained with 1 or 2 shared hidden linear layers
+        has_two_shared_layers = 'shared_layer.2.weight' in checkpoint
+    except KeyError as key_err:
+        print(f"{C_ERROR}[FATAL] Checkpoint format incompatible, missing standard key: {key_err}{C_RESET}")
+        sys.exit(1)
+
+    print(f"  ├── {C_INFO}Detected Topology{C_RESET}       : Inputs={input_dim} | Actions={action_dim} | Double Shared Layer={has_two_shared_layers}")
+
+    # 3. Define the Checkpoint-Adaptive Actor-Critic Network Topology
+    class AdaptiveExporterModel(nn.Module):
+        def __init__(self, in_dim, h_dim, out_dim, use_double_shared):
+            super().__init__()
+            if use_double_shared:
+                self.shared_layer = nn.Sequential(
+                    nn.Linear(in_dim, h_dim),
+                    nn.ReLU(),
+                    nn.Linear(h_dim, h_dim),
+                    nn.ReLU()
+                )
+            else:
+                self.shared_layer = nn.Sequential(
+                    nn.Linear(in_dim, h_dim),
+                    nn.ReLU()
+                )
+            self.actor_head = nn.Sequential(
+                nn.Linear(h_dim, out_dim),
+                nn.Sigmoid()
+            )
+            # Dummy heads to satisfy loading strictness structure
+            self.critic_head = nn.Linear(h_dim, 1)
+            self.log_std = nn.Parameter(torch.zeros(out_dim))
+
+    # 4. Instantiate the matching model structure and load weights
+    model = AdaptiveExporterModel(input_dim, hidden_dim, action_dim, has_two_shared_layers)
+    try:
+        model.load_state_dict(checkpoint, strict=False)
+        print(f"  ├── {C_SUCCESS}Model Struct Synced{C_RESET}  : Dynamic model structure aligned and loaded successfully.")
+    except Exception as err:
+        print(f"{C_ERROR}[FATAL] Mismatched state weights alignment: {err}{C_RESET}")
+        sys.exit(1)
+
+    model.eval()
+
+    # 5. Extract Actor sequence for ONNX export
+    class ActorOnlyModel(nn.Module):
+        def __init__(self, shared, actor):
+            super().__init__()
+            self.shared = shared
+            self.actor = actor
+
+        def forward(self, x):
+            return self.actor(self.shared(x))
+
+    actor_model = ActorOnlyModel(model.shared_layer, model.actor_head)
+    actor_model.eval()
+
+    # Create dynamic dummy input matching input features shape (Batch=1, Features=input_dim)
+    dummy_input = torch.randn(1, input_dim)
+
+    print(f"  ├── {C_INFO}Exporting Pipeline{C_RESET}      : Serializing Actor Graph to ONNX opset 18...")
+    
+    try:
+        os.makedirs(os.path.dirname(onnx_output_path), exist_ok=True)
+        torch.onnx.export(
+            actor_model,
+            dummy_input,
+            onnx_output_path,
+            export_params=True,
+            opset_version=18,
+            do_constant_folding=True,
+            input_names=['input_telemetry'],
+            output_names=['output_actions'],
+            dynamic_axes={'input_telemetry': {0: 'batch_size'}, 'output_actions': {0: 'batch_size'}}
+        )
+        print(f"  └── {C_SUCCESS}Export Complete{C_RESET}       : Model exported successfully to:")
+        print(f"      {onnx_output_path}")
+    except Exception as export_err:
+        print(f"{C_ERROR}[FATAL] ONNX serialization failed: {export_err}{C_RESET}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
