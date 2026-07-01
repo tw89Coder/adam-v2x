@@ -174,12 +174,13 @@ readonly REQ_CRYPTOPP="5.6.1"
 missing_packages=()
 
 print_usage() {
-    echo -e "${COLOR_INFO}Usage:${COLOR_RESET} $0 ${COLOR_SUCCESS}[patch|unpatch|all|freeze]${COLOR_RESET}"
+    echo -e "${COLOR_INFO}Usage:${COLOR_RESET} $0 ${COLOR_SUCCESS}[patch|unpatch|all|python|freeze]${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
     echo -e "  ${COLOR_SUCCESS}patch${COLOR_RESET}      Validate dependencies, configure Python environment, and compile the patched library."
     echo -e "  ${COLOR_SUCCESS}unpatch${COLOR_RESET}    Validate dependencies, configure Python environment, and compile the unpatched library."
     echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}        Validate dependencies, configure Python environment, and build both workspaces sequentially."
+    echo -e "  ${COLOR_SUCCESS}python${COLOR_RESET}     Only configure the Python virtual environment and install dependencies."
     echo -e "  ${COLOR_SUCCESS}freeze${COLOR_RESET}     Freeze the current Python virtual environment packages into requirements.txt."
 }
 
@@ -191,7 +192,7 @@ if [ $# -ne 1 ]; then
 fi
 
 readonly MODE="$1"
-if [ "$MODE" != "patch" ] && [ "$MODE" != "unpatch" ] && [ "$MODE" != "all" ] && [ "$MODE" != "freeze" ] && [ "$MODE" != "--freeze" ]; then
+if [ "$MODE" != "patch" ] && [ "$MODE" != "unpatch" ] && [ "$MODE" != "all" ] && [ "$MODE" != "freeze" ] && [ "$MODE" != "--freeze" ] && [ "$MODE" != "python" ] && [ "$MODE" != "venv" ]; then
     log_error "Unknown mode: '${MODE}'"
     print_usage
     exit 1
@@ -224,9 +225,61 @@ freeze_python_venv() {
     log_success "Updated requirements file at ${req_file} successfully."
 }
 
+setup_python_venv() {
+    local venv_dir="${SCRIPT_DIR}/tools/rl_bridge/venv"
+    local req_file="${SCRIPT_DIR}/tools/rl_bridge/requirements.txt"
+
+    # Warn the user and require explicit confirmation to avoid accidental global python pollution
+    if [ -t 0 ]; then
+        echo -e "${COLOR_WARNING}[WARNING] This step will verify/install Python dependencies inside the virtual environment under tools/rl_bridge/venv.${COLOR_RESET}"
+        read -p "Do you want to proceed with virtual environment package synchronization? (Y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            echo -e "${COLOR_WARNING}[WARNING] Python virtual environment synchronization bypassed by user.${COLOR_RESET}"
+            return 0
+        fi
+    fi
+
+    echo -e "${COLOR_INFO}[*] Setting up Python virtual environment...${COLOR_RESET}"
+
+    # Verify python3 is installed
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_error "Python 3 is required but not found in PATH."
+        exit 1
+    fi
+
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "$venv_dir" ]; then
+        echo -e "${COLOR_INFO}[*] Creating new virtual environment at ${venv_dir}...${COLOR_RESET}"
+        if ! python3 -m venv "$venv_dir" 2>/dev/null; then
+            # Attempt to install python3-venv if missing (Ubuntu/Debian)
+            log_warning "python3-venv module may be missing. Requesting installation..."
+            sudo apt-get install -y python3-venv
+            python3 -m venv "$venv_dir"
+        fi
+        log_success "Virtual environment created."
+    else
+        echo -e "${COLOR_SUCCESS}[SUCCESS] Python virtual environment already exists at ${venv_dir}.${COLOR_RESET}"
+    fi
+
+    # Apply requirements
+    if [ -f "$req_file" ]; then
+        echo -e "${COLOR_INFO}[*] Applying Python requirements from ${req_file}...${COLOR_RESET}"
+        "$venv_dir/bin/pip" install --upgrade pip
+        "$venv_dir/bin/pip" install -r "$req_file"
+        log_success "Python requirements successfully applied."
+    else
+        log_warning "requirements.txt not found at ${req_file}. Skipping package installation."
+    fi
+}
+
 # If the user requested freeze, exit early after doing so
 if [ "$MODE" == "freeze" ] || [ "$MODE" == "--freeze" ]; then
     freeze_python_venv
+    exit 0
+fi
+
+if [ "$MODE" == "python" ] || [ "$MODE" == "venv" ]; then
+    setup_python_venv
     exit 0
 fi
 
@@ -399,43 +452,6 @@ setup_onnxruntime() {
     rm "/tmp/${tarball}"
     
     echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library configured successfully at ${target_dir}.${COLOR_RESET}"
-}
-
-setup_python_venv() {
-    local venv_dir="${SCRIPT_DIR}/tools/rl_bridge/venv"
-    local req_file="${SCRIPT_DIR}/tools/rl_bridge/requirements.txt"
-
-    echo -e "${COLOR_INFO}[*] Setting up Python virtual environment...${COLOR_RESET}"
-
-    # Verify python3 is installed
-    if ! command -v python3 >/dev/null 2>&1; then
-        log_error "Python 3 is required but not found in PATH."
-        exit 1
-    fi
-
-    # Create virtual environment if it doesn't exist
-    if [ ! -d "$venv_dir" ]; then
-        echo -e "${COLOR_INFO}[*] Creating new virtual environment at ${venv_dir}...${COLOR_RESET}"
-        if ! python3 -m venv "$venv_dir" 2>/dev/null; then
-            # Attempt to install python3-venv if missing (Ubuntu/Debian)
-            log_warning "python3-venv module may be missing. Requesting installation..."
-            sudo apt-get install -y python3-venv
-            python3 -m venv "$venv_dir"
-        fi
-        log_success "Virtual environment created."
-    else
-        echo -e "${COLOR_SUCCESS}[SUCCESS] Python virtual environment already exists at ${venv_dir}.${COLOR_RESET}"
-    fi
-
-    # Apply requirements
-    if [ -f "$req_file" ]; then
-        echo -e "${COLOR_INFO}[*] Applying Python requirements from ${req_file}...${COLOR_RESET}"
-        "$venv_dir/bin/pip" install --upgrade pip
-        "$venv_dir/bin/pip" install -r "$req_file"
-        log_success "Python requirements successfully applied."
-    else
-        log_warning "requirements.txt not found at ${req_file}. Skipping package installation."
-    fi
 }
 
 # ------------------------------------------------------------------------------

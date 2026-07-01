@@ -104,6 +104,9 @@ Before building, use [setup.sh](./setup.sh) to verify systems requirements, conf
 # Build only the patched (hardened) workspace (and configure Python environment)
 ./setup.sh patch
 
+# Only configure/upgrade the Python virtual environment (skip all C++ steps)
+./setup.sh python
+
 # Freeze the current active Python virtual environment packages into requirements.txt
 ./setup.sh freeze
 ```
