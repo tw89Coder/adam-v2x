@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from src.config import C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, C_BOLD, CHECKPOINT_DIR
+from src.config import C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, C_BOLD, CHECKPOINT_DIR, RAW_CFG
 from src.utils.network_io import NetworkIOHelper
 
 class V2XOnlinePipeline:
@@ -87,6 +87,23 @@ class V2XOnlinePipeline:
                     pen = a_clamped[1].item() * 100.0
                     sq_t = int(400 + (a_clamped[2].item() * 400))
                     base_samp = 0.05 # Dynamic continuous heuristic base rate
+
+                    # Enforce Heuristic Safety Boundaries to prevent RL from going crazy
+                    safety_cfg = RAW_CFG.get("safety_boundaries", {})
+                    if safety_cfg.get("enabled", True):
+                        max_sq = safety_cfg.get("max_sq_threshold", 650)
+                        min_pen = safety_cfg.get("min_penalty_multiplier", 20.0)
+                        max_rec = safety_cfg.get("max_recovery_rate", 0.10)
+                        min_samp = safety_cfg.get("min_base_sampling_rate", 0.05)
+
+                        if sq_t > max_sq:
+                            sq_t = max_sq
+                        if pen < min_pen:
+                            pen = min_pen
+                        if rec > max_rec:
+                            rec = max_rec
+                        if base_samp < min_samp:
+                            base_samp = min_samp
 
                     # Pass all 4 updated parameters seamlessly through the network utility helper
                     response = NetworkIOHelper.serialize_policy(rec, pen, sq_t, base_samp)

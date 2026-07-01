@@ -236,10 +236,17 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         size_t action_dim = output_shape.back();
 
         // 1. Prepare Input Tensor (Shape: 1x3)
+        // Replicate Python feature engineering alignment:
+        // simulated_size = (anomaly_rate > 0.05) ? 1400.0 : 325.0
+        // Features:
+        // 0: simulated_size / 1500.0 (MAX_PACKET_SIZE)
+        // 1: avg_max_sum_sq / 65025.0 (MAX_F2_SQ)
+        // 2: anomaly_rate
+        float simulated_size = (telemetry.anomaly_rate > 0.05f) ? 1400.0f : 325.0f;
         std::vector<int64_t> input_shape = {1, 3};
         std::vector<float> input_tensor_values = {
-            static_cast<float>(telemetry.avg_max_sum_sq),
-            static_cast<float>(telemetry.avg_budget),
+            simulated_size / 1500.0f,
+            static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
             static_cast<float>(telemetry.anomaly_rate)
         };
 
@@ -293,6 +300,12 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             std::cerr << "[WARNING] ONNX model returned unexpected action dimensions: " << action_dim << "\n";
             return false;
         }
+
+        // 4. Enforce Heuristic Safety Boundaries to prevent RL from going crazy (FNR protection)
+        if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
+        if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
+        if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
+        if (out_policy.base_sampling_rate < 0.05) out_policy.base_sampling_rate = 0.05;
 
         return true;
     } 

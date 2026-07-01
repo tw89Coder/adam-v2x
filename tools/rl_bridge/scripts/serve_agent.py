@@ -27,7 +27,7 @@ if PROJECT_ROOT not in sys.path:
 import socket
 import torch
 
-from src.config import MAX_F2_SQ, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET
+from src.config import MAX_F2_SQ, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, RAW_CFG
 from src.models.policy_net import DefencePolicyNet
 from src.agents.v2x_agent import V2XAgent
 from src.utils.network_io import NetworkIOHelper
@@ -96,9 +96,27 @@ def main():
                 pred_recovery = action_mean[0].item() * 0.5
                 pred_penalty  = action_mean[1].item() * 100.0
                 pred_sq_thresh = int(400 + (action_mean[2].item() * 400))
-                
+                pred_base_samp = 0.05
+
+                # Enforce Heuristic Safety Boundaries to prevent RL from going crazy
+                safety_cfg = RAW_CFG.get("safety_boundaries", {})
+                if safety_cfg.get("enabled", True):
+                    max_sq = safety_cfg.get("max_sq_threshold", 650)
+                    min_pen = safety_cfg.get("min_penalty_multiplier", 20.0)
+                    max_rec = safety_cfg.get("max_recovery_rate", 0.10)
+                    min_samp = safety_cfg.get("min_base_sampling_rate", 0.05)
+
+                    if pred_sq_thresh > max_sq:
+                        pred_sq_thresh = max_sq
+                    if pred_penalty < min_pen:
+                        pred_penalty = min_pen
+                    if pred_recovery > max_rec:
+                        pred_recovery = max_rec
+                    if pred_base_samp < min_samp:
+                        pred_base_samp = min_samp
+
                 # Serialize payload and respond to C++ FSM gate
-                response = NetworkIOHelper.serialize_policy(pred_recovery, pred_penalty, pred_sq_thresh, 0.05)
+                response = NetworkIOHelper.serialize_policy(pred_recovery, pred_penalty, pred_sq_thresh, pred_base_samp)
                 client_socket.send(response)
                 
                 # Broadcast live production telemetry logging lines
