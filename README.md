@@ -4,6 +4,11 @@ This repository contains the evaluation framework, measurement harness, and data
 mitigating Abstract Syntax Notation One (ASN.1) structural recursion vulnerabilities (CWE-674) under 
 strict Maximum Transmission Unit (MTU) barriers in Vehicle-to-Everything (V2X) protocol deployments.
 
+### Open-Source Compliance & Attribution
+The V2X protocol simulation and packet processing core in this project is built upon **[Vanetza](https://github.com/riebl/vanetza)**, an open-source implementation of the ETSI C-ITS protocol suite developed by Raphael Riebl and contributors. 
+
+The original Vanetza codebase and the modifications contained in this repository are subject to the **GNU Lesser General Public License (LGPL) v3.0** (with GPL v3.0) as located in the [LICENSE](./LICENSE) file.
+
 ---
 
 ## 1. Technical Framework Architecture
@@ -47,9 +52,28 @@ parsing algorithms, automated matrix evaluation workflows, and the modular analy
 
 ---
 
-## 2. Automated Build Orchestration (`manage_build.sh`)
+## 2. Setup and Automated Build Orchestration
 
-Compilation matrices are fully automated to bypass legacy caching faults or stale object linkage corruptions.
+This framework provides two primary orchestration scripts to automate environment configuration, dependency checks, and parallel compilation.
+
+### 2.1 Environmental Setup & Smart Dependency Checking (`vanetza_setup.sh`)
+
+Before building, use [vanetza_setup.sh](./vanetza_setup.sh) to verify systems requirements, automatically install missing dependencies (Boost, GeographicLib, Crypto++, CMake), and kick off compilation.
+
+```bash
+# Verify environment and build both patched and unpatched libraries
+./vanetza_setup.sh all
+
+# Build only the unpatched (baseline) workspace
+./vanetza_setup.sh unpatch
+
+# Build only the patched (hardened) workspace
+./vanetza_setup.sh patch
+```
+
+### 2.2 Compilation Matrices Orchestration (`manage_build.sh`)
+
+Once dependencies are set up, use [manage_build.sh](./manage_build.sh) for fast incremental compilation or clean builds to bypass legacy caching faults.
 
 ```bash
 # Execute deep purge of historical cache objects and run a full clean CMake rebuild
@@ -59,7 +83,6 @@ Compilation matrices are fully automated to bypass legacy caching faults or stal
 # Execute high-speed parallel incremental compilation via naked make pipelines (2-second hot update)
 ./manage_build.sh unpatched fast
 ./manage_build.sh patched fast
-
 ```
 
 ---
