@@ -111,18 +111,24 @@ Before building, use [setup.sh](./setup.sh) to verify systems requirements, conf
 ./setup.sh freeze
 ```
 
-### 2.2 Compilation Matrices Orchestration (`manage_build.sh`)
+### 2.2 Compilation Matrices & Harness Synchronization Orchestration (`manage_build.sh`)
 
-Once dependencies are set up, use [manage_build.sh](./manage_build.sh) for fast incremental compilation or clean builds to bypass legacy caching faults.
+Once dependencies are set up, use [manage_build.sh](./manage_build.sh) for fast incremental compilation, clean builds, or synchronizing the DRL harness between workspaces.
 
 ```bash
 # Execute deep purge of historical cache objects and run a full clean CMake rebuild
 ./manage_build.sh unpatched clean
 ./manage_build.sh patched clean
 
-# Execute high-speed parallel incremental compilation via naked make pipelines (2-second hot update)
+# Execute high-speed parallel incremental compilation via make (2-second hot update)
 ./manage_build.sh unpatched fast
 ./manage_build.sh patched fast
+
+# Synchronize current unpatched harness modifications into the patched workspace (Default: unpatched -> patched)
+./manage_build.sh --sync-harness
+
+# Force reverse synchronization (Danger: overwrites unpatched harness with patched code)
+./manage_build.sh --sync-harness --reverse
 ```
 
 ---
