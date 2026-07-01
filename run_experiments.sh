@@ -20,6 +20,8 @@ PIN_CORE=${PIN_CORE:-9}
 TOTAL_PACKETS=1000000
 RUN_FILTER_OFF=true
 RUN_FILTER_ON=true
+RUN_ONNX=false
+ONNX_MODEL_PATH=""
 
 # Default global state machine mode and pollution density spectrum arrays
 DEFAULT_MODES=(0 1 2)
@@ -74,6 +76,16 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --onnx)
+            RUN_ONNX=true
+            if [[ -n "$2" && ! "$2" =~ ^- ]]; then
+                ONNX_MODEL_PATH="$2"
+                shift 2
+            else
+                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_ppo_agent.onnx"
+                shift
+            fi
+            ;;
         *)
             POSITIONAL_ARGS+=("$1")
             shift
@@ -83,6 +95,16 @@ done
 
 # Restore standard target routing tokens back to the positional parameter map
 set -- "${POSITIONAL_ARGS[@]}"
+
+# If ONNX mode is enabled, verify that the ONNX model file exists before execution
+if [ "$RUN_ONNX" = true ]; then
+    if [ ! -f "$ONNX_MODEL_PATH" ]; then
+        echo -e "${C_ERROR}[ERROR] ONNX model file not found at: ${ONNX_MODEL_PATH}${C_RESET}"
+        echo -e "${C_WARN}[NOTICE] Please make sure to compile and export the DRL model to ONNX format first.${C_RESET}"
+        echo -e "${C_INFO}[INFO] Gracefully exiting.${C_RESET}"
+        exit 0
+    fi
+fi
 
 print_usage() {
     echo -e "${C_INFO}Usage:${C_RESET} ./run_experiments.sh ${C_SUCCESS}[target]${C_RESET} ${C_WARN}[action]${C_RESET} [optional flags...]"
@@ -113,6 +135,7 @@ print_usage() {
     echo -e "  ${C_INFO}--filter-only${C_RESET}     Force --simulate-all batch scheduler to execute ONLY Filter=ON steps"
     echo -e "  ${C_INFO}--modes \"m1 m2\"${C_RESET}   Override default execution suite with custom target logic modes"
     echo -e "  ${C_INFO}--rates \"r1 r2\"${C_RESET}   Override default sweep steps with a custom range list of pollution floats"
+    echo -e "  ${C_INFO}--onnx [path]${C_RESET}      Enable inline ONNX model inference during simulation (Default path if omitted)"
     echo -e ""
     echo -e "${C_BOLD}Examples:${C_RESET}"
     echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET}                             \033[90m# Default 18-node sweep\033[0m"
@@ -181,7 +204,11 @@ execute_matrix_sweep() {
             # Conditionally execute the circuit-breaker state-machine hardened flow node
             if [ "$RUN_FILTER_ON" = true ]; then
                 echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  (Core: ${PIN_CORE})${C_RESET}"
-                taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f
+                if [ "$RUN_ONNX" = true ]; then
+                    taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f --onnx "$ONNX_MODEL_PATH"
+                else
+                    taskset -c $PIN_CORE "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode" -f
+                fi
             fi
             
             if [ "$RUN_FILTER_OFF" = true ] || [ "$RUN_FILTER_ON" = true ]; then
@@ -249,7 +276,8 @@ case "$ACTION" in
         fi
         echo -e "${C_SUCCESS}[SUCCESS] Interactive RL training pipeline execution complete. Telemetry converged.${C_RESET}"
         ;;
-        
+
+
     --train-online)
         if [ "$TARGET" != "python" ]; then
             echo -e "${C_ERROR}[ERROR] --train-online action is only compatible with 'python' target.${C_RESET}"
@@ -301,8 +329,14 @@ case "$ACTION" in
         fi
         shift 2
         EXEC_BIN="${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness"
-        echo -e "${C_INFO}[INFO] Invoking custom framework map... Args: $@${C_RESET}"
-        taskset -c $PIN_CORE "$EXEC_BIN" "$@"
+        
+        CUSTOM_ARGS=("$@")
+        if [ "$RUN_ONNX" = true ]; then
+            CUSTOM_ARGS+=("--onnx" "$ONNX_MODEL_PATH")
+        fi
+        
+        echo -e "${C_INFO}[INFO] Invoking custom framework map... Args: ${CUSTOM_ARGS[*]}${C_RESET}"
+        taskset -c $PIN_CORE "$EXEC_BIN" "${CUSTOM_ARGS[@]}"
         ;;
         
     *)

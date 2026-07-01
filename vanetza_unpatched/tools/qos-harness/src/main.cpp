@@ -126,6 +126,7 @@ void printHelp(const char* progName) {
               << "                     3 = Integrated Multi-Scenario Mix (RL Training Profile)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
               << "  --rl             Enable Interactive RL Training Mode (Sync via Socket)\n"
+              << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
               << "  --recovery       Override FSM Recovery Rate (AI/Custom)\n"
               << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
               << "  --sq-thresh      Override FSM SQ Threshold (AI/Custom)\n"
@@ -144,6 +145,8 @@ int main(int argc, char* argv[]) {
     bool profile_amp = false;
     bool diagnose_flood = false;
     bool rl_train_mode = false;
+    bool enable_onnx = false;
+    std::string onnx_model_path = "";
     bool has_custom_policy = false;
 
     // Hardcoded static fallback parameters for local overrides
@@ -166,6 +169,10 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--rl") {
             rl_train_mode = true;
             enable_filter = true; // Training DRL implies enabling the adaptive FSM pre-filter
+        } else if (arg == "--onnx" && i + 1 < argc) {
+            enable_onnx = true;
+            onnx_model_path = argv[++i];
+            enable_filter = true;
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -258,6 +265,9 @@ int main(int argc, char* argv[]) {
         if (rl_train_mode) {
             std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_rl.csv",
                           csv_target_dir.c_str(), pollution_rate, attack_mode);
+        } else if (enable_onnx) {
+            std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_onnx.csv",
+                          csv_target_dir.c_str(), pollution_rate, attack_mode);
         } else {
             std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_filtered.csv",
                           csv_target_dir.c_str(), pollution_rate, attack_mode);
@@ -268,7 +278,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "[*] Mode: " << attack_mode << " | Rate: " << pollution_rate
-              << "% | Filter: " << (enable_filter ? "ON" : "OFF") << "\n";
+              << "% | Filter: " << (enable_filter ? "ON" : "OFF")
+              << (enable_onnx ? " (ONNX Mode)" : "") << "\n";
     std::cout << "[*] Starting QoS Measurement...\n";
 
     // Initialize the main mitigation state machine
@@ -283,6 +294,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize socket co-simulation bridge for active DRL co-processing
     qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);
+    rl_bridge.initialize_onnx(enable_onnx, onnx_model_path);
     rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
 
     vanetza::RouterFuzzingContext context;
@@ -372,7 +384,7 @@ int main(int argc, char* argv[]) {
 
         // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
-            if (rl_train_mode) {
+            if (rl_train_mode || enable_onnx) {
                 // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet);
