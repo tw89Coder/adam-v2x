@@ -199,18 +199,26 @@ python tools/plot_engine.py --type qos --mode 1 --rate 10.0
 
 ## 5. Distributed Deep Reinforcement Learning Toolchain (`tools/rl_bridge/`)
 
-The framework integrates a decoupled, production-grade Proximal Policy Optimization (PPO) co-simulation engine. The DRL agent eliminates the structural blind spots of traditional finite state machines by dynamically regulating a **4-Dimensional Continuous Action Space**:
-1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
-2. **Mitigation Penalty Multiplier** ($a_1 \in [0.0, 100.0]$)
-3. **F2 Sketch Similarity Count Threshold** ($a_2 \in [400, 800]$)
-4. **State S0 Peacetime Active Inspection Sampling Rate** ($a_3 \in [0.0, 1.0]$)
+The framework integrates a decoupled, production-grade Proximal Policy Optimization (PPO) co-simulation engine. The DRL agent dynamically regulates the FSM parameters using a configurable action space. The C++ ONNX Runtime automatically adapts to both **3-Dimensional** or **4-Dimensional Continuous Action Spaces**:
+
+*   **3-Dimensional Action Space (Simplified)**:
+    1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
+    2. **Mitigation Penalty Multiplier** ($a_1 \in [0.0, 100.0]$)
+    3. **F2 Sketch Similarity Count Threshold** ($a_2 \in [400, 800]$)
+    *(The S0 peacetime sampling rate is dynamically computed in C++: `(1.0 / current_budget) * k`)*
+    
+*   **4-Dimensional Action Space (Fully Dynamic)**:
+    1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
+    2. **Mitigation Penalty Multiplier** ($a_1 \in [0.0, 100.0]$)
+    3. **F2 Sketch Similarity Count Threshold** ($a_2 \in [400, 800]$)
+    4. **State S0 Peacetime Active Inspection Sampling Rate** ($a_3 \in [0.0, 1.0]$)
 
 ### 5.1 Unified Configuration Subsystem (`config/ppo_agent.yaml`)
 
 To ensure clean algorithmic MLOps decoupling, all environmental boundaries, networking loops, and multi-objective reward shaping weights are isolated into a centralized YAML profile. This allows you to alter the behavior of the network without editing core Python routines.
 
 ```yaml
-# Target location: config/ppo_agent.yaml
+# Target location: tools/rl_bridge/config/ppo_agent.yaml
 infrastructure:
   host: "127.0.0.1"
   port: 8080
@@ -220,7 +228,7 @@ infrastructure:
 
 hyperparameters:
   input_dim: 3
-  action_dim: 4                         # 4D control space (includes S0 sampling)
+  action_dim: 3                         # Supports 3D or 4D control spaces
   lr_online: 0.0003
   batch_size: 32
 
@@ -293,4 +301,25 @@ python3 scripts/verify_brain.py -m checkpoints/v2x_online_brain.pth
 # Audit the historical offline matrix brain asset
 python3 scripts/verify_brain.py -m checkpoints/v2x_offline_rmix_e20.pth
 
+```
+
+### 5.6 Model Export to ONNX (`--export-onnx`)
+
+Once training completes, serialize the policy weights from PyTorch into an optimized ONNX model. The export pipeline automatically inspects the `.pth` file, dynamically adjusts target layers, and outputs the graph to the root `checkpoints/` folder. It automatically rewrites the model metadata header to set the ONNX IR version to 9 for full backward compatibility with C++ compilers:
+
+```bash
+# Export the online brain to ONNX format
+./run_experiments.sh python --export-onnx
+```
+
+### 5.7 In-Process C++ ONNX Inference (`--onnx`)
+
+During deployment, use the in-process ONNX inference engine to evaluate policy decisions directly in C++ memory without python and socket IPC overhead. Ensure the libraries are fetched and linked during workspace setup:
+
+```bash
+# Step 1: Fetch and compile ONNX Runtime C++ dynamic dependencies
+bash vanetza_setup.sh unpatch
+
+# Step 2: Run dynamic in-process ONNX inference simulation (custom example)
+./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx
 ```
