@@ -1,2 +1,25 @@
 .clang-format
 archive_pre_refactor/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ==============================================================================
+# V2X QoS DRL Bridge Local Telemetry Data Exclusion
+# ==============================================================================
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# IDE Settings
+.vscode/
+
+# Local third-party library dependencies (such as ONNX Runtime)
+third_party/
+
+# Exclude locally exported ONNX models
+checkpoints/*.onnx
+tools/rl_bridge/checkpoints/*.onnx
