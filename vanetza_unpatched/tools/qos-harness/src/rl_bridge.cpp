@@ -222,12 +222,14 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         
         // Input Node Names and Shapes
         static Ort::AllocatorWithDefaultOptions allocator;
-        static char* input_name = session.GetInputName(0, allocator);
-        static char* output_name = session.GetOutputName(0, allocator);
+        static Ort::AllocatedStringPtr input_name_ptr = session.GetInputNameAllocated(0, allocator);
+        static Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
+        const char* input_name = input_name_ptr.get();
+        const char* output_name = output_name_ptr.get();
         
         // Dynamic Dimension Inspection: check shape of output
         auto output_type_info = session.GetOutputTypeInfo(0);
-        auto output_tensor_info = output_type_info.GetTensorTypeAndOnnxTypeInfo();
+        auto output_tensor_info = output_type_info.GetTensorTypeAndShapeInfo();
         std::vector<int64_t> output_shape = output_tensor_info.GetShape();
         
         // Output dimension is the last dimension of the shape array
@@ -249,7 +251,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
 
         // 2. Run ONNX Session Inference
         const char* input_names[] = {input_name};
-        char* output_names[] = {output_name};
+        const char* output_names[] = {output_name};
         
         auto output_tensors = session.Run(
             Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1

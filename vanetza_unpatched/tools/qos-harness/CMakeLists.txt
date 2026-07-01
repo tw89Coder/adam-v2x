@@ -20,3 +20,20 @@ target_link_libraries(qos-harness PUBLIC vanetza)
 get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 
 target_compile_definitions(qos-harness PRIVATE REPO_ROOT="${REPO_ROOT}")
+
+# Dynamic ONNX Runtime detection and linking
+set(ONNXRT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/onnxruntime")
+
+if(EXISTS "${ONNXRT_ROOT}")
+    message(STATUS "[QoS-Harness] Found ONNX Runtime at ${ONNXRT_ROOT}. Enabling in-process inference.")
+    target_compile_definitions(qos-harness PRIVATE USE_ONNX)
+    target_include_directories(qos-harness PRIVATE ${ONNXRT_ROOT}/include)
+    target_link_directories(qos-harness PRIVATE ${ONNXRT_ROOT}/lib)
+    target_link_libraries(qos-harness PRIVATE onnxruntime)
+    
+    # Configure RPATH so the dynamic linker can locate libonnxruntime.so at runtime
+    set_target_properties(qos-harness PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "${ONNXRT_ROOT}/lib"
+    )
+endif()

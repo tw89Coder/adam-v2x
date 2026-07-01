@@ -30,7 +30,10 @@ def main():
 
     # Determine checkpoint and export paths
     checkpoint_path = os.path.join(PROJECT_ROOT, ONLINE_BRAIN_PATH)
-    onnx_output_path = os.path.join(PROJECT_ROOT, "checkpoints", "v2x_ppo_agent.onnx")
+    # Target the root-level checkpoints directory to align with run_experiments.sh
+    # PROJECT_ROOT is tools/rl_bridge, so we go up two levels to reach the workspace root
+    workspace_root = os.path.dirname(os.path.dirname(PROJECT_ROOT))
+    onnx_output_path = os.path.join(workspace_root, "checkpoints", "v2x_ppo_agent.onnx")
 
     if not os.path.exists(checkpoint_path):
         print(f"{C_ERROR}[FATAL] Target PyTorch checkpoint missing at: {checkpoint_path}{C_RESET}")
@@ -110,7 +113,7 @@ def main():
     # Create dynamic dummy input matching input features shape (Batch=1, Features=input_dim)
     dummy_input = torch.randn(1, input_dim)
 
-    print(f"  ├── {C_INFO}Exporting Pipeline{C_RESET}      : Serializing Actor Graph to ONNX opset 18...")
+    print(f"  ├── {C_INFO}Exporting Pipeline{C_RESET}      : Serializing Actor Graph to ONNX opset 16...")
     
     try:
         os.makedirs(os.path.dirname(onnx_output_path), exist_ok=True)
@@ -119,12 +122,21 @@ def main():
             dummy_input,
             onnx_output_path,
             export_params=True,
-            opset_version=18,
+            opset_version=16,
             do_constant_folding=True,
             input_names=['input_telemetry'],
             output_names=['output_actions'],
             dynamic_axes={'input_telemetry': {0: 'batch_size'}, 'output_actions': {0: 'batch_size'}}
         )
+        # Force the model's IR version to 9 if it exceeds the limit,
+        # ensuring compatibility with older C++ ONNX Runtime libraries.
+        import onnx
+        onnx_model = onnx.load(onnx_output_path)
+        if onnx_model.ir_version > 9:
+            onnx_model.ir_version = 9
+            onnx.save(onnx_model, onnx_output_path)
+            print(f"  ├── {C_WARN}[NOTICE]{C_RESET}             : Overrode model IR version to 9 for C++ compatibility.")
+            
         print(f"  └── {C_SUCCESS}Export Complete{C_RESET}       : Model exported successfully to:")
         print(f"      {onnx_output_path}")
     except Exception as export_err:

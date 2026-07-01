@@ -339,9 +339,42 @@ compile_library() {
     echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
 }
 
+setup_onnxruntime() {
+    local target_dir="${SCRIPT_DIR}/third_party/onnxruntime"
+    if [ -d "$target_dir" ]; then
+        echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library already configured at ${target_dir}.${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries...${COLOR_RESET}"
+    mkdir -p "${SCRIPT_DIR}/third_party"
+    
+    local version="1.16.3"
+    local tarball="onnxruntime-linux-x64-${version}.tgz"
+    local url="https://github.com/microsoft/onnxruntime/releases/download/v${version}/${tarball}"
+    
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --show-progress "$url" -O "/tmp/${tarball}"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -# "$url" -o "/tmp/${tarball}"
+    else
+        echo -e "${COLOR_DANGER}[ERROR] Neither wget nor curl found. Please install one of them to proceed.${COLOR_RESET}" >&2
+        exit 1
+    fi
+    
+    tar -xzf "/tmp/${tarball}" -C "/tmp"
+    mv "/tmp/onnxruntime-linux-x64-${version}" "$target_dir"
+    rm "/tmp/${tarball}"
+    
+    echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library configured successfully at ${target_dir}.${COLOR_RESET}"
+}
+
 # ------------------------------------------------------------------------------
 # Run Requested Actions
 # ------------------------------------------------------------------------------
+
+# Download and extract ONNX Runtime dependency
+setup_onnxruntime
 
 if [ "$MODE" == "patch" ]; then
     echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"

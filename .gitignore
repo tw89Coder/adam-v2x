@@ -13,3 +13,13 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+
+# IDE Settings
+.vscode/
+
+# Local third-party library dependencies (such as ONNX Runtime)
+third_party/
+
+# Exclude locally exported ONNX models
+checkpoints/*.onnx
+tools/rl_bridge/checkpoints/*.onnx
