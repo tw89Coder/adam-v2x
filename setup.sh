@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # ==============================================================================
-# Vanetza Environment Setup & Compilation Orchestrator
+# V2X QoS Full Environment Setup & Compilation Orchestrator
 # ==============================================================================
 # This script automates dependency verification, smart package installation,
-# patch management, and CMake-based compilation for the Vanetza protocol library.
+# python virtualenv creation, requirements sync, and CMake-based compilation
+# for the Vanetza protocol library and training environment.
 #
 # Supported Systems: Ubuntu / Debian
 # Naming Standards: PEP8/Google Style for Bash variables and functions
@@ -173,12 +174,13 @@ readonly REQ_CRYPTOPP="5.6.1"
 missing_packages=()
 
 print_usage() {
-    echo -e "${COLOR_INFO}Usage:${COLOR_RESET} $0 ${COLOR_SUCCESS}[patch|unpatch|all]${COLOR_RESET}"
+    echo -e "${COLOR_INFO}Usage:${COLOR_RESET} $0 ${COLOR_SUCCESS}[patch|unpatch|all|freeze]${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
-    echo -e "  ${COLOR_SUCCESS}patch${COLOR_RESET}      Validate dependencies, apply project patches, and compile the patched library."
-    echo -e "  ${COLOR_SUCCESS}unpatch${COLOR_RESET}    Validate dependencies, revert patches (original codebase), and compile the unpatched library."
-    echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}        Validate dependencies, then build both patched and unpatched libraries sequentially."
+    echo -e "  ${COLOR_SUCCESS}patch${COLOR_RESET}      Validate dependencies, configure Python environment, and compile the patched library."
+    echo -e "  ${COLOR_SUCCESS}unpatch${COLOR_RESET}    Validate dependencies, configure Python environment, and compile the unpatched library."
+    echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}        Validate dependencies, configure Python environment, and build both workspaces sequentially."
+    echo -e "  ${COLOR_SUCCESS}freeze${COLOR_RESET}     Freeze the current Python virtual environment packages into requirements.txt."
 }
 
 # Ensure command line arguments are present and valid
@@ -189,10 +191,43 @@ if [ $# -ne 1 ]; then
 fi
 
 readonly MODE="$1"
-if [ "$MODE" != "patch" ] && [ "$MODE" != "unpatch" ] && [ "$MODE" != "all" ]; then
+if [ "$MODE" != "patch" ] && [ "$MODE" != "unpatch" ] && [ "$MODE" != "all" ] && [ "$MODE" != "freeze" ] && [ "$MODE" != "--freeze" ]; then
     log_error "Unknown mode: '${MODE}'"
     print_usage
     exit 1
+fi
+
+# Get the script directory as the root path (define it early)
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ------------------------------------------------------------------------------
+# Action Helper Functions
+# ------------------------------------------------------------------------------
+
+freeze_python_venv() {
+    local venv_dir="${SCRIPT_DIR}/tools/rl_bridge/venv"
+    local req_file="${SCRIPT_DIR}/tools/rl_bridge/requirements.txt"
+
+    echo -e "${COLOR_INFO}[*] Freezing Python virtual environment packages...${COLOR_RESET}"
+
+    if [ ! -d "$venv_dir" ]; then
+        log_error "Python virtual environment does not exist at ${venv_dir}. Run setup first."
+        exit 1
+    fi
+
+    if [ ! -f "$venv_dir/bin/pip" ]; then
+        log_error "pip executable not found in virtual environment at ${venv_dir}."
+        exit 1
+    fi
+
+    "$venv_dir/bin/pip" freeze > "$req_file"
+    log_success "Updated requirements file at ${req_file} successfully."
+}
+
+# If the user requested freeze, exit early after doing so
+if [ "$MODE" == "freeze" ] || [ "$MODE" == "--freeze" ]; then
+    freeze_python_venv
+    exit 0
 fi
 
 echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
@@ -272,9 +307,6 @@ if [ ${#missing_packages[@]} -gt 0 ]; then
 else
     echo -e "${COLOR_SUCCESS}[SUCCESS] All prerequisites are satisfied. Skipping dependency installation.${COLOR_RESET}"
 fi
-
-# Get the script directory as the root path
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ------------------------------------------------------------------------------
 # Action Helper Functions
@@ -369,12 +401,52 @@ setup_onnxruntime() {
     echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library configured successfully at ${target_dir}.${COLOR_RESET}"
 }
 
+setup_python_venv() {
+    local venv_dir="${SCRIPT_DIR}/tools/rl_bridge/venv"
+    local req_file="${SCRIPT_DIR}/tools/rl_bridge/requirements.txt"
+
+    echo -e "${COLOR_INFO}[*] Setting up Python virtual environment...${COLOR_RESET}"
+
+    # Verify python3 is installed
+    if ! command -v python3 >/dev/null 2>&1; then
+        log_error "Python 3 is required but not found in PATH."
+        exit 1
+    fi
+
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "$venv_dir" ]; then
+        echo -e "${COLOR_INFO}[*] Creating new virtual environment at ${venv_dir}...${COLOR_RESET}"
+        if ! python3 -m venv "$venv_dir" 2>/dev/null; then
+            # Attempt to install python3-venv if missing (Ubuntu/Debian)
+            log_warning "python3-venv module may be missing. Requesting installation..."
+            sudo apt-get install -y python3-venv
+            python3 -m venv "$venv_dir"
+        fi
+        log_success "Virtual environment created."
+    else
+        echo -e "${COLOR_SUCCESS}[SUCCESS] Python virtual environment already exists at ${venv_dir}.${COLOR_RESET}"
+    fi
+
+    # Apply requirements
+    if [ -f "$req_file" ]; then
+        echo -e "${COLOR_INFO}[*] Applying Python requirements from ${req_file}...${COLOR_RESET}"
+        "$venv_dir/bin/pip" install --upgrade pip
+        "$venv_dir/bin/pip" install -r "$req_file"
+        log_success "Python requirements successfully applied."
+    else
+        log_warning "requirements.txt not found at ${req_file}. Skipping package installation."
+    fi
+}
+
 # ------------------------------------------------------------------------------
 # Run Requested Actions
 # ------------------------------------------------------------------------------
 
 # Download and extract ONNX Runtime dependency
 setup_onnxruntime
+
+# Configure Python virtual environment and install requirements
+setup_python_venv
 
 if [ "$MODE" == "patch" ]; then
     echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"

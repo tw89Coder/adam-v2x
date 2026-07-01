@@ -90,19 +90,22 @@ graph TD
 
 This framework provides two primary orchestration scripts to automate environment configuration, dependency checks, and parallel compilation.
 
-### 2.1 Environmental Setup & Smart Dependency Checking (`vanetza_setup.sh`)
+### 2.1 Environmental Setup & Smart Dependency Checking (`setup.sh`)
 
-Before building, use [vanetza_setup.sh](./vanetza_setup.sh) to verify systems requirements, automatically install missing dependencies (Boost, GeographicLib, Crypto++, CMake), and kick off compilation.
+Before building, use [setup.sh](./setup.sh) to verify systems requirements, configure the Python virtual environment with all required packages, install missing C++ dependencies (Boost, GeographicLib, Crypto++, CMake), download ONNX Runtime C++ prebuilt binaries, and kick off compilation.
 
 ```bash
-# Verify environment and build both patched and unpatched libraries
-./vanetza_setup.sh all
+# Verify environment, set up Python venv, and build both patched and unpatched libraries
+./setup.sh all
 
-# Build only the unpatched (baseline) workspace
-./vanetza_setup.sh unpatch
+# Build only the unpatched (baseline) workspace (and configure Python environment)
+./setup.sh unpatch
 
-# Build only the patched (hardened) workspace
-./vanetza_setup.sh patch
+# Build only the patched (hardened) workspace (and configure Python environment)
+./setup.sh patch
+
+# Freeze the current active Python virtual environment packages into requirements.txt
+./setup.sh freeze
 ```
 
 ### 2.2 Compilation Matrices Orchestration (`manage_build.sh`)
@@ -320,7 +323,7 @@ During deployment, use the in-process ONNX inference engine to evaluate policy d
 
 ```bash
 # Step 1: Fetch and compile ONNX Runtime C++ dynamic dependencies
-bash vanetza_setup.sh unpatch
+bash setup.sh unpatch
 
 # Step 2: Run dynamic in-process ONNX inference simulation (custom example)
 ./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx
