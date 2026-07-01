@@ -14,26 +14,42 @@
 # or any command in a pipeline fails.
 set -euo pipefail
 
-# Define output color formatting constants
-readonly COLOR_GREEN='\033[0;32m'
-readonly COLOR_YELLOW='\033[1;33m'
-readonly COLOR_RED='\033[0;31m'
-readonly COLOR_NC='\033[0m' # No Color
+# ------------------------------------------------------------------------------
+# Decoupled ANSI Color Escape Sequences (Consistent with run_experiments.sh)
+# ------------------------------------------------------------------------------
+readonly ANSI_RESET="\033[0m"
+readonly ANSI_BOLD="\033[1m"
+readonly ANSI_CYAN="\033[1;36m"
+readonly ANSI_GREEN="\033[1;32m"
+readonly ANSI_YELLOW="\033[1;33m"
+readonly ANSI_RED_BG="\033[1;41;37m"
+readonly ANSI_BLUE="\033[1;34m"
+
+# ------------------------------------------------------------------------------
+# Semantic Color Mapping
+# ------------------------------------------------------------------------------
+readonly COLOR_RESET="${ANSI_RESET}"
+readonly COLOR_BOLD="${ANSI_BOLD}"
+readonly COLOR_INFO="${ANSI_CYAN}"
+readonly COLOR_SUCCESS="${ANSI_GREEN}"
+readonly COLOR_WARNING="${ANSI_YELLOW}"
+readonly COLOR_DANGER="${ANSI_RED_BG}"
+readonly COLOR_PRIMARY="${ANSI_BLUE}"
 
 # ------------------------------------------------------------------------------
 # Logging Utilities
 # ------------------------------------------------------------------------------
 
 log_success() {
-    echo -e "${COLOR_GREEN}[SUCCESS] $1${COLOR_NC}"
+    echo -e "${COLOR_SUCCESS}[SUCCESS] $1${COLOR_RESET}"
 }
 
 log_warning() {
-    echo -e "${COLOR_YELLOW}[WARNING] $1${COLOR_NC}"
+    echo -e "${COLOR_WARNING}[WARNING] $1${COLOR_RESET}"
 }
 
 log_error() {
-    echo -e "${COLOR_RED}[ERROR] $1${COLOR_NC}" >&2
+    echo -e "${COLOR_DANGER}[ERROR] $1${COLOR_RESET}" >&2
 }
 
 # ------------------------------------------------------------------------------
@@ -157,12 +173,12 @@ readonly REQ_CRYPTOPP="5.6.1"
 missing_packages=()
 
 print_usage() {
-    echo "Usage: $0 [patch|unpatch|all]"
-    echo ""
-    echo "Modes:"
-    echo "  patch      Validate dependencies, apply project patches, and compile the patched library."
-    echo "  unpatch    Validate dependencies, revert patches (original codebase), and compile the unpatched library."
-    echo "  all        Validate dependencies, then build both patched and unpatched libraries sequentially."
+    echo -e "${COLOR_INFO}Usage:${COLOR_RESET} $0 ${COLOR_SUCCESS}[patch|unpatch|all]${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
+    echo -e "  ${COLOR_SUCCESS}patch${COLOR_RESET}      Validate dependencies, apply project patches, and compile the patched library."
+    echo -e "  ${COLOR_SUCCESS}unpatch${COLOR_RESET}    Validate dependencies, revert patches (original codebase), and compile the unpatched library."
+    echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}        Validate dependencies, then build both patched and unpatched libraries sequentially."
 }
 
 # Ensure command line arguments are present and valid
@@ -179,61 +195,61 @@ if [ "$MODE" != "patch" ] && [ "$MODE" != "unpatch" ] && [ "$MODE" != "all" ]; t
     exit 1
 fi
 
-echo "======================================================================"
-echo "[*] Step 1: Starting Smart Prerequisites Check..."
-echo "======================================================================"
+echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+echo -e "${COLOR_PRIMARY}[*] Step 1: Starting Smart Prerequisites Check...${COLOR_RESET}"
+echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
 
 # 1. Check C++11 Compiler (GCC / Clang)
 compiler_ver=$(get_compiler_version)
 if [ "$compiler_ver" != "0" ] && version_ge "$compiler_ver" "$REQ_COMPILER_GCC"; then
-    log_success "Compiler found: version ${compiler_ver} (supports C++11)"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} Compiler found: version ${COLOR_SUCCESS}${compiler_ver}${COLOR_RESET} (supports C++11)"
 else
-    log_warning "C++11 compatible compiler not found or insufficient version (${compiler_ver} < ${REQ_COMPILER_GCC})."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} C++11 compatible compiler not found or insufficient version (${COLOR_WARNING}${compiler_ver}${COLOR_RESET} < ${COLOR_INFO}${REQ_COMPILER_GCC}${COLOR_RESET})."
     missing_packages+=("build-essential" "g++")
 fi
 
 # 2. Check CMake
 cmake_ver=$(get_cmake_version)
 if [ "$cmake_ver" != "0" ] && version_ge "$cmake_ver" "$REQ_CMAKE"; then
-    log_success "CMake found: version ${cmake_ver} (>= ${REQ_CMAKE})"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} CMake found: version ${COLOR_SUCCESS}${cmake_ver}${COLOR_RESET} (>= ${COLOR_INFO}${REQ_CMAKE}${COLOR_RESET})"
 else
-    log_warning "CMake not found or insufficient version (${cmake_ver} < ${REQ_CMAKE})."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} CMake not found or insufficient version (${COLOR_WARNING}${cmake_ver}${COLOR_RESET} < ${COLOR_INFO}${REQ_CMAKE}${COLOR_RESET})."
     missing_packages+=("cmake")
 fi
 
 # 3. Check Boost
 boost_ver=$(get_boost_version)
 if [ "$boost_ver" != "0" ] && version_ge "$boost_ver" "$REQ_BOOST"; then
-    log_success "Boost found: version ${boost_ver} (>= ${REQ_BOOST})"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} Boost found: version ${COLOR_SUCCESS}${boost_ver}${COLOR_RESET} (>= ${COLOR_INFO}${REQ_BOOST}${COLOR_RESET})"
 else
-    log_warning "Boost not found or insufficient version (${boost_ver} < ${REQ_BOOST})."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} Boost not found or insufficient version (${COLOR_WARNING}${boost_ver}${COLOR_RESET} < ${COLOR_INFO}${REQ_BOOST}${COLOR_RESET})."
     missing_packages+=("libboost-dev" "libboost-all-dev")
 fi
 
 # 4. Check GeographicLib
 geo_ver=$(get_geographic_version)
 if [ "$geo_ver" != "0" ] && version_ge "$geo_ver" "$REQ_GEOGRAPHIC"; then
-    log_success "GeographicLib found: version ${geo_ver} (>= ${REQ_GEOGRAPHIC})"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} GeographicLib found: version ${COLOR_SUCCESS}${geo_ver}${COLOR_RESET} (>= ${COLOR_INFO}${REQ_GEOGRAPHIC}${COLOR_RESET})"
 else
-    log_warning "GeographicLib not found or insufficient version (${geo_ver} < ${REQ_GEOGRAPHIC})."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} GeographicLib not found or insufficient version (${COLOR_WARNING}${geo_ver}${COLOR_RESET} < ${COLOR_INFO}${REQ_GEOGRAPHIC}${COLOR_RESET})."
     missing_packages+=("libgeographic-dev")
 fi
 
 # 5. Check Crypto++
 crypto_ver=$(get_cryptopp_version)
 if [ "$crypto_ver" != "0" ] && version_ge "$crypto_ver" "$REQ_CRYPTOPP"; then
-    log_success "Crypto++ found: version ${crypto_ver} (>= ${REQ_CRYPTOPP})"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} Crypto++ found: version ${COLOR_SUCCESS}${crypto_ver}${COLOR_RESET} (>= ${COLOR_INFO}${REQ_CRYPTOPP}${COLOR_RESET})"
 else
-    log_warning "Crypto++ not found or insufficient version (${crypto_ver} < ${REQ_CRYPTOPP})."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} Crypto++ not found or insufficient version (${COLOR_WARNING}${crypto_ver}${COLOR_RESET} < ${COLOR_INFO}${REQ_CRYPTOPP}${COLOR_RESET})."
     missing_packages+=("libcrypto++-dev")
 fi
 
 # 6. Check OpenSSL (Optional backend)
 openssl_ver=$(get_openssl_version)
 if [ "$openssl_ver" != "0" ]; then
-    log_success "OpenSSL found: version ${openssl_ver}"
+    echo -e "${COLOR_SUCCESS}[SUCCESS]${COLOR_RESET} OpenSSL found: version ${COLOR_SUCCESS}${openssl_ver}${COLOR_RESET}"
 else
-    log_warning "OpenSSL not found. Marking optional package 'libssl-dev' for installation."
+    echo -e "${COLOR_WARNING}[WARNING]${COLOR_RESET} OpenSSL not found. Marking optional package ${COLOR_INFO}'libssl-dev'${COLOR_RESET} for installation."
     missing_packages+=("libssl-dev" "openssl")
 fi
 
@@ -241,20 +257,20 @@ fi
 # Install Missing Dependencies
 # ------------------------------------------------------------------------------
 if [ ${#missing_packages[@]} -gt 0 ]; then
-    log_warning "The following required dependencies are missing or outdated: ${missing_packages[*]}"
-    echo "[*] Requesting root privileges to install missing packages..."
+    echo -e "${COLOR_WARNING}[WARNING] The following required dependencies are missing or outdated:${COLOR_RESET} ${COLOR_INFO}${missing_packages[*]}${COLOR_RESET}"
+    echo -e "${COLOR_INFO}[*] Requesting root privileges to install missing packages...${COLOR_RESET}"
     
     # Check if apt-get is available
     if ! command -v apt-get >/dev/null 2>&1; then
-        log_error "apt-get package manager not found. Please install the dependencies manually."
+        echo -e "${COLOR_DANGER}[ERROR] apt-get package manager not found. Please install the dependencies manually.${COLOR_RESET}" >&2
         exit 1
     fi
     
     sudo apt-get update
     sudo apt-get install -y "${missing_packages[@]}"
-    log_success "Prerequisites successfully installed via package manager."
+    echo -e "${COLOR_SUCCESS}[SUCCESS] Prerequisites successfully installed via package manager.${COLOR_RESET}"
 else
-    log_success "All prerequisites are satisfied. Skipping dependency installation."
+    echo -e "${COLOR_SUCCESS}[SUCCESS] All prerequisites are satisfied. Skipping dependency installation.${COLOR_RESET}"
 fi
 
 # Get the script directory as the root path
@@ -266,7 +282,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 apply_patches() {
     local target_dir="$1"
-    echo "[*] Preparing workspace at ${target_dir}..."
+    echo -e "${COLOR_INFO}[*] Preparing workspace at ${target_dir}...${COLOR_RESET}"
     
     # ==========================================
     # TODO / PLACEHOLDER: Insert patch commands
@@ -274,15 +290,15 @@ apply_patches() {
     # Add your custom patch applications here.
     # E.g., patch -p1 < custom_mitigation.patch
     # ==========================================
-    log_warning "TODO: Insert custom patch application commands in this block."
+    echo -e "${COLOR_WARNING}[WARNING] TODO: Insert custom patch application commands in this block.${COLOR_RESET}"
     # ==========================================
     
-    log_success "Patch configuration successfully applied."
+    echo -e "${COLOR_SUCCESS}[SUCCESS] Patch configuration successfully applied.${COLOR_RESET}"
 }
 
 revert_patches() {
     local target_dir="$1"
-    echo "[*] Preparing workspace at ${target_dir}..."
+    echo -e "${COLOR_INFO}[*] Preparing workspace at ${target_dir}...${COLOR_RESET}"
     
     # ==========================================
     # TODO / PLACEHOLDER: Insert unpatch commands
@@ -290,21 +306,21 @@ revert_patches() {
     # Add your commands to revert/remove patches.
     # E.g., patch -R -p1 < custom_mitigation.patch
     # ==========================================
-    log_warning "TODO: Insert custom patch reversion commands in this block."
+    echo -e "${COLOR_WARNING}[WARNING] TODO: Insert custom patch reversion commands in this block.${COLOR_RESET}"
     # ==========================================
     
-    log_success "Patch configuration successfully reverted."
+    echo -e "${COLOR_SUCCESS}[SUCCESS] Patch configuration successfully reverted.${COLOR_RESET}"
 }
 
 compile_library() {
     local target_dir="$1"
     local mode_name="$2"
-    echo "======================================================================"
-    echo "[*] Compiling Vanetza Library at ${target_dir}..."
-    echo "======================================================================"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Compiling Vanetza Library at ${target_dir}...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
 
     if [ ! -d "$target_dir" ]; then
-        log_error "Target directory does not exist: ${target_dir}"
+        echo -e "${COLOR_DANGER}[ERROR] Target directory does not exist: ${target_dir}${COLOR_RESET}" >&2
         exit 1
     fi
 
@@ -312,15 +328,15 @@ compile_library() {
     mkdir -p "$build_dir"
     cd "$build_dir"
 
-    echo "[*] Running CMake configuration..."
+    echo -e "${COLOR_INFO}[CMAKE] Running CMake configuration...${COLOR_RESET}"
     cmake ..
 
     local cores=$(nproc)
-    echo "[*] Starting compilation on ${cores} CPU cores..."
+    echo -e "${COLOR_INFO}[MAKE] Starting compilation on ${COLOR_SUCCESS}${cores}${COLOR_RESET} ${COLOR_INFO}CPU cores...${COLOR_RESET}"
     make -j"${cores}"
 
-    log_success "Vanetza library compilation complete in ${mode_name} mode."
-    echo "======================================================================"
+    echo -e "${COLOR_SUCCESS}[SUCCESS] Vanetza library compilation complete in ${COLOR_WARNING}${mode_name}${COLOR_RESET} mode."
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
 }
 
 # ------------------------------------------------------------------------------
@@ -328,29 +344,29 @@ compile_library() {
 # ------------------------------------------------------------------------------
 
 if [ "$MODE" == "patch" ]; then
-    echo "======================================================================"
-    echo "[*] Step 2: Processing Patch Configuration..."
-    echo "======================================================================"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Step 2: Processing Patch Configuration...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
     apply_patches "${SCRIPT_DIR}/vanetza_patched"
     compile_library "${SCRIPT_DIR}/vanetza_patched" "patch"
 
 elif [ "$MODE" == "unpatch" ]; then
-    echo "======================================================================"
-    echo "[*] Step 2: Processing Patch Configuration..."
-    echo "======================================================================"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Step 2: Processing Patch Configuration...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
     revert_patches "${SCRIPT_DIR}/vanetza_unpatched"
     compile_library "${SCRIPT_DIR}/vanetza_unpatched" "unpatch"
 
 elif [ "$MODE" == "all" ]; then
-    echo "======================================================================"
-    echo "[*] Step 2: Processing Patch Configuration for 'unpatch'..."
-    echo "======================================================================"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Step 2: Processing Patch Configuration for 'unpatch'...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
     revert_patches "${SCRIPT_DIR}/vanetza_unpatched"
     compile_library "${SCRIPT_DIR}/vanetza_unpatched" "unpatch"
 
-    echo "======================================================================"
-    echo "[*] Step 3: Processing Patch Configuration for 'patch'..."
-    echo "======================================================================"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Step 3: Processing Patch Configuration for 'patch'...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
     apply_patches "${SCRIPT_DIR}/vanetza_patched"
     compile_library "${SCRIPT_DIR}/vanetza_patched" "patch"
 fi
