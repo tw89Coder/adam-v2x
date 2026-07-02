@@ -68,7 +68,7 @@ $$A_i = \text{clamp}\left( a_{\text{min}, i} + \text{sigmoid}(a_{t, i}) \cdot (a
 ### 2.3 Reward Shaping Formulations
 The reward function dynamically switches between two modes depending on the current anomaly rate threshold (configured at $\theta = 0.005$):
 
-#### A. Active Attack Mitigation Mode ($o_{anomaly} \ge \theta$):
+#### A. Active Attack Mitigation Mode ($o_{\text{anomaly}} \ge \theta$):
 Prioritizes preventing budget collapse and resource exhaustion.
 
 $$R_{\text{attack}} = - \left( w_{\text{penalty}} \cdot a_1 + w_{\text{sq}} \cdot \left(\frac{a_2}{650}\right)^2 + w_{\text{budget}} \cdot V_{\text{budget}} \right)$$
@@ -77,7 +77,7 @@ $$R_{\text{attack}} = - \left( w_{\text{penalty}} \cdot a_1 + w_{\text{sq}} \cdo
 * $w_{\text{sq}} = 0.2$ (penalizes keeping sketch thresholds unnecessarily low).
 * $w_{\text{budget}} = 10.0$ (heavily penalizes cases where remaining FSM CPU budget drops near zero).
 
-#### B. Peacetime Mode ($o_{anomaly} < \theta$):
+#### B. Peacetime Mode ($o_{\text{anomaly}} < \theta$):
 Prioritizes maximizing throughput and minimizing inspection overhead.
 
 $$R_{\text{nominal}} = w_{\text{recovery}} \cdot a_0 - w_{\text{overhead}} \cdot a_3$$
@@ -153,7 +153,7 @@ You can run experiments using either direct Python commands inside `tools/rl_bri
 This section provides step-by-step instructions and code details for expanding the RL bridge framework.
 
 ### 5.1 How to Adjust Neural Network Depth and Layers
-The neural network's structural depth is defined dynamically in `config/ppo_agent.yaml`. To modify the capacity of the model, you can edit the architecture without rebuilding the harness.
+The neural network's structural depth is defined dynamically in `config/ppo_agent.yaml`. To modify the capacity of the model, edit the architecture in the configuration.
 
 #### Step 1: Open the configuration file
 Open `config/ppo_agent.yaml` and look for the `models` block:
@@ -174,8 +174,8 @@ models:
     - 64
 ```
 
-#### Step 2: Customizing the Activation Function or Layer Types
-If you want to customize the actual layers in PyTorch (e.g. swap `ReLU` for `Tanh` or add Batch Normalization), open **`src/models/policy_net.py`** and modify the `__init__` constructor.
+#### Step 2: Customizing the Activation Function or Layer Types in PyTorch
+To customize the actual layers in PyTorch (e.g. swap `ReLU` for `Tanh` or add Batch Normalization), open **`src/models/policy_net.py`** and modify the `__init__` constructor.
 Locate the loop creating the linear layers (around line 34):
 ```python
 # [File: src/models/policy_net.py]
@@ -249,7 +249,6 @@ class SACLearner(BaseLearner):
         actions = torch.stack(trajectory_buffer["actions"])
         
         # 2. (Algorithm-Specific Math) Compute Critic Loss & Actor Loss
-        # Example dummy gradient step:
         loss = torch.tensor(0.0, requires_grad=True)
         
         self.optimizer.zero_grad()
@@ -292,6 +291,19 @@ You can now pass the `-a sac` parameter to select and execute the Soft Actor-Cri
 ./run_experiments.sh python --train-online -a sac
 ```
 *Note: If `-a` is omitted, the framework defaults to `"ppo"` (or whichever value is configured in `config/ppo_agent.yaml`).*
+
+---
+
+### 5.4 Production Inference Server Deployment (Noise-Free Eval Mode)
+Once interactive training converges, exploration noise must be deactivated to maximize defensive stability. The production server loads the trained weights, locks the layers into deterministic execution (`model.eval()`), and maps actions directly to their mathematical mean values (`action_mean`) to crush low-density exploit leakage.
+
+```bash
+# Step 1: Spin up the inference daemon targeting your newly trained 2D model
+./run_experiments.sh python --deploy -m checkpoints/v2x_offline_rmix_e20.pth
+
+# Step 2: In a separate terminal, execute the verification sweep on the C++ side
+./run_experiments.sh unpatched --train-rl
+```
 
 ---
 
