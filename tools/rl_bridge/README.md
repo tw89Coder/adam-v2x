@@ -42,21 +42,21 @@ To help engineers understand the training dynamics, the mathematical formulation
 ### 2.1 Observation (State) Space Normalization
 The network receives a 3-dimensional normalized observation vector $s_t \in \mathbb{R}^3$ at each control window boundary (every 1000 packets):
 
-$$s_t = \begin{bmatrix} o_{size} \\ o_{sq} \\ o_{anomaly} \end{bmatrix}$$
+$$s_t = \begin{bmatrix} o_{\text{size}} \\ o_{\text{sq}} \\ o_{\text{anomaly}} \end{bmatrix}$$
 
-1. **Normalized Packet Size ($o_{size}$)**: Maps raw packet length (up to MTU) to $[0, 1]$:
-   $$o_{size} = \frac{\text{simulated\_packet\_size}}{1500.0}$$
-2. **Normalized Sum-of-Squares similarity ($o_{sq}$)**: Maps F2 sketch similarities (up to maximum signature value) to $[0, 1]$:
-   $$o_{sq} = \frac{\text{avg\_max\_sum\_sq}}{65025.0}$$
-3. **Raw Anomaly Ratio ($o_{anomaly}$)**: The ratio of packets flagged as anomalies by the filter FSM:
-   $$o_{anomaly} = \frac{\text{malware\_packet\_count}}{\text{total\_packets\_in\_window}}$$
+1. **Normalized Packet Size ($o_{\text{size}}$)**: Maps raw packet length $S_{\text{raw}}$ (up to MTU) to $[0, 1]$:
+   $$o_{\text{size}} = \frac{S_{\text{raw}}}{1500.0}$$
+2. **Normalized Sum-of-Squares similarity ($o_{\text{sq}}$)**: Maps F2 sketch similarities $Q_{\text{avg}}$ (up to maximum signature value) to $[0, 1]$:
+   $$o_{\text{sq}} = \frac{Q_{\text{avg}}}{65025.0}$$
+3. **Raw Anomaly Ratio ($o_{\text{anomaly}}$)**: The ratio of malware packets $N_{\text{malware}}$ to total packets $N_{\text{total}}$ in the window:
+   $$o_{\text{anomaly}} = \frac{N_{\text{malware}}}{N_{\text{total}}}$$
 
 ---
 
 ### 2.2 Action Space & Action Adapter Mapping
-The model output action vector $a_t \in \mathbb{R}^d$ matches the active dimensions defined in the configuration. The **Action Adapter** maps the network's unbounded stochastic outputs to the valid physical simulation ranges:
+The model output action vector $a_t \in \mathbb{R}^d$ matches the active dimensions defined in the configuration. The **Action Adapter** maps the network's unbounded stochastic outputs to the valid physical simulation ranges $A_t \in \mathbb{R}^4$:
 
-$$\text{physical\_action}_i = \text{clamp}\left( a_{\text{min}, i} + \text{sigmoid}(a_{t, i}) \cdot (a_{\text{max}, i} - a_{\text{min}, i}), \ a_{\text{min}, i}, \ a_{\text{max}, i} \right)$$
+$$A_i = \text{clamp}\left( a_{\text{min}, i} + \text{sigmoid}(a_{t, i}) \cdot (a_{\text{max}, i} - a_{\text{min}, i}), \ a_{\text{min}, i}, \ a_{\text{max}, i} \right)$$
 
 * **Recovery Rate Coefficient ($a_0$)**: Clamped to $[0.01, 0.10]$ (controls FSM budget recovery speed).
 * **Mitigation Penalty Multiplier ($a_1$)**: Clamped to $[20.0, 100.0]$ (controls FSM budget deduction severity).
