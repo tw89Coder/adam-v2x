@@ -21,6 +21,7 @@ C_ERROR = "\033[1;31m"
 
 # Locate the external YAML file layout relative to project infrastructure
 CONFIG_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WORKSPACE_ROOT = os.path.dirname(os.path.dirname(CONFIG_DIR))
 YAML_PATH = os.path.join(CONFIG_DIR, "config", "ppo_agent.yaml")
 
 # Fallback fail-safe default maps in case YAML file loading encounters issues
@@ -73,9 +74,9 @@ else:
 # Export flat global constants to prevent breaking current downstream scripts
 HOST = cfg["infrastructure"]["host"]
 PORT = cfg["infrastructure"]["port"]
-CHECKPOINT_DIR = cfg["infrastructure"]["checkpoint_dir"]
-ONLINE_BRAIN_PATH = cfg["infrastructure"]["online_brain_path"]
-OFFLINE_BRAIN_PATH = cfg["infrastructure"]["offline_brain_path"]
+CHECKPOINT_DIR = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["checkpoint_dir"])
+ONLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["online_brain_path"])
+OFFLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["offline_brain_path"])
 
 MAX_PACKET_SIZE = cfg["v2x_bounds"]["max_packet_size"]
 MAX_F2_SQ = cfg["v2x_bounds"]["max_f2_sq"]
@@ -85,5 +86,4 @@ WINDOW_SIZE = cfg["v2x_bounds"]["window_size"]
 RAW_CFG = cfg
 
 # Dynamically locate the outputs/rl_env directory from workspace root
-WORKSPACE_ROOT = os.path.dirname(os.path.dirname(CONFIG_DIR))
 DATA_DIR = os.path.join(WORKSPACE_ROOT, "outputs", "rl_env")

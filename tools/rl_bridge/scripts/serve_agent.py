@@ -22,25 +22,62 @@ if PROJECT_ROOT not in sys.path:
 
 import socket
 import torch
+import argparse
 
-from src.config import MAX_PACKET_SIZE, MAX_F2_SQ, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, RAW_CFG
+from src.config import MAX_PACKET_SIZE, MAX_F2_SQ, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, RAW_CFG, ONLINE_BRAIN_PATH
 from src.models.policy_net import DefencePolicyNet
 from src.agents.v2x_agent import V2XAgent
 from src.utils.network_io import NetworkIOHelper
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="V2X DRL Production Serving Console")
+    parser.add_argument("-m", "--model", type=str, default=None, help="Target optimized brain checkpoint path")
+    return parser.parse_args()
+
 def main():
+    args = parse_arguments()
     host = RAW_CFG["infrastructure"]["host"]
     port = RAW_CFG["infrastructure"]["port"]
     
-    # Target the optimized brain binary generated from live interactive sessions
-    checkpoint_path = os.path.join(PROJECT_ROOT, RAW_CFG["infrastructure"]["online_brain_path"])
+    # Target the optimized brain binary (command-line override takes priority)
+    if args.model:
+        checkpoint_path = args.model
+        print(f"  ├── {C_INFO}Target Brain{C_RESET} : Loading user-specified checkpoint -> {checkpoint_path}")
+    else:
+        checkpoint_path = ONLINE_BRAIN_PATH
+        print(f"  ├── {C_INFO}Target Brain{C_RESET} : Defaulting to online brain path -> {checkpoint_path}")
 
     print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
     print(f"{C_INFO}│       V2X DRL LIVE PRODUCTION INFERENCE SERVE DAEMON         │{C_RESET}")
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
 
     if not os.path.exists(checkpoint_path):
-        print(f"{C_ERROR}[FATAL] Target brain asset missing at: {checkpoint_path}{C_RESET}")
+        print(f"{C_ERROR}[FATAL] Target brain asset missing! No checkpoint found at: {os.path.abspath(checkpoint_path)}{C_RESET}")
+        print(f"  └── {C_WARN}[SUGGESTION] By default, the serve daemon targets the online training brain checkpoint.")
+        print(f"      To load a specific model (e.g. offline trained weights), please specify it explicitly via the -m flag.")
+        
+        # Scan and list available checkpoints with modified times
+        checkpoint_dir = os.path.join(PROJECT_ROOT, RAW_CFG["infrastructure"].get("checkpoint_dir", "checkpoints"))
+        if os.path.exists(checkpoint_dir):
+            pth_files = [f for f in os.listdir(checkpoint_dir) if f.endswith(".pth")]
+            if pth_files:
+                print(f"\n      {C_INFO}Available checkpoints in '{checkpoint_dir}':{C_RESET}")
+                import datetime
+                # Sort by modification time descending (newest first)
+                pth_files_with_time = []
+                for f in pth_files:
+                    f_path = os.path.join(checkpoint_dir, f)
+                    mtime = os.path.getmtime(f_path)
+                    pth_files_with_time.append((f, mtime))
+                pth_files_with_time.sort(key=lambda x: x[1], reverse=True)
+                
+                for f, mtime in pth_files_with_time:
+                    dt = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"        * {f:<30} (Modified: {dt})")
+                print(f"\n      {C_INFO}Usage example:{C_RESET}")
+                print(f"      ./run_experiments.sh python --deploy -m checkpoints/{pth_files_with_time[0][0]}")
+            else:
+                print(f"\n      {C_INFO}(No other .pth checkpoint files found in '{checkpoint_dir}' directory){C_RESET}")
         sys.exit(1)
 
     # Construct network topology and map structural parameters
@@ -48,7 +85,12 @@ def main():
     try:
         model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
     except Exception as load_err:
-        print(f"{C_ERROR}[FATAL] Failed to load checkpoint binary weights: {load_err}{C_RESET}")
+        print(f"{C_ERROR}[FATAL] Failed to load checkpoint binary weights!{C_RESET}")
+        print(f"  ├── {C_INFO}Target File Path{C_RESET} : {os.path.abspath(checkpoint_path)}")
+        print(f"  ├── {C_INFO}Error Message{C_RESET}    : {load_err}")
+        print(f"  └── {C_WARN}[SUGGESTION] This size/key mismatch usually occurs when your config/ppo_agent.yaml structure")
+        print(f"      (e.g., hidden_layers or active action space dimensions) does not match the loaded checkpoint.")
+        print(f"      Please either train a new model to overwrite it, delete the old file, or point to a new checkpoint.")
         sys.exit(1)
         
     # Force evaluation mode to deactivate stochastic exploration noise

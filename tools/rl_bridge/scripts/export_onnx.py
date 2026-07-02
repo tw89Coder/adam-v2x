@@ -11,6 +11,7 @@ dimensions and hidden layers topology, builds a matching actor model,
 loads the weights, and serializes the network to the ONNX graph format.
 """
 
+import argparse
 import os
 import sys
 import torch
@@ -23,20 +24,62 @@ if PROJECT_ROOT not in sys.path:
 
 from src.config import RAW_CFG, ONLINE_BRAIN_PATH, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="V2X DRL Actor Policy ONNX Export Pipeline")
+    parser.add_argument("-m", "--model", type=str, default=None, help="Path to input PyTorch checkpoint (.pth)")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Path to output ONNX model (.onnx)")
+    return parser.parse_args()
+
 def main():
+    args = parse_arguments()
+
     print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
     print(f"{C_INFO}│          V2X DRL ACTOR POLICY ONNX EXPORT PIPELINE           │{C_RESET}")
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
 
-    # Determine checkpoint and export paths
-    checkpoint_path = os.path.join(PROJECT_ROOT, ONLINE_BRAIN_PATH)
-    # Target the root-level checkpoints directory to align with run_experiments.sh
-    # PROJECT_ROOT is tools/rl_bridge, so we go up two levels to reach the workspace root
-    workspace_root = os.path.dirname(os.path.dirname(PROJECT_ROOT))
-    onnx_output_path = os.path.join(workspace_root, "checkpoints", "v2x_ppo_agent.onnx")
+    # Determine input checkpoint path (command-line override takes priority)
+    if args.model:
+        if os.path.isabs(args.model) or os.path.exists(args.model):
+            checkpoint_path = args.model
+        else:
+            checkpoint_path = os.path.join(PROJECT_ROOT, args.model)
+    else:
+        checkpoint_path = ONLINE_BRAIN_PATH
+
+    # Determine output ONNX path
+    if args.output:
+        onnx_output_path = args.output
+    else:
+        workspace_root = os.path.dirname(os.path.dirname(PROJECT_ROOT))
+        onnx_output_path = os.path.join(workspace_root, "checkpoints", "v2x_agent.onnx")
 
     if not os.path.exists(checkpoint_path):
-        print(f"{C_ERROR}[FATAL] Target PyTorch checkpoint missing at: {checkpoint_path}{C_RESET}")
+        print(f"{C_ERROR}[FATAL] Target PyTorch checkpoint missing at: {os.path.abspath(checkpoint_path)}{C_RESET}")
+        print(f"  └── {C_WARN}[SUGGESTION] By default, the exporter targets the online brain checkpoint.")
+        print(f"      To export a specific model (e.g. offline pre-trained weights), please specify it explicitly via the -m flag.")
+        
+        # Scan and list available checkpoints with modified times
+        checkpoint_dir = os.path.join(os.path.dirname(os.path.dirname(PROJECT_ROOT)), RAW_CFG["infrastructure"].get("checkpoint_dir", "checkpoints"))
+        if os.path.exists(checkpoint_dir):
+            pth_files = [f for f in os.listdir(checkpoint_dir) if f.endswith(".pth")]
+            if pth_files:
+                print(f"\n      {C_INFO}Available checkpoints in '{checkpoint_dir}':{C_RESET}")
+                import datetime
+                # Sort by modification time descending (newest first)
+                pth_files_with_time = []
+                for f in pth_files:
+                    f_path = os.path.join(checkpoint_dir, f)
+                    mtime = os.path.getmtime(f_path)
+                    pth_files_with_time.append((f, mtime))
+                pth_files_with_time.sort(key=lambda x: x[1], reverse=True)
+                
+                for f, mtime in pth_files_with_time:
+                    dt = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"        * {f:<30} (Modified: {dt})")
+                print(f"\n      {C_INFO}Usage example:{C_RESET}")
+                print(f"      ./run_experiments.sh python --export-onnx -m checkpoints/{pth_files_with_time[0][0]}")
+            else:
+                print(f"\n      {C_INFO}(No other .pth checkpoint files found in '{checkpoint_dir}' directory){C_RESET}")
         sys.exit(1)
 
     # 1. Load the checkpoint weights dict to inspect the model's architecture

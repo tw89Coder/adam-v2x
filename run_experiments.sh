@@ -194,7 +194,7 @@ while [[ $# -gt 0 ]]; do
                 ONNX_MODEL_PATH="$2"
                 shift 2
             else
-                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_ppo_agent.onnx"
+                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_agent.onnx"
                 shift
             fi
             ;;

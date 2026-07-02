@@ -83,7 +83,14 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                     print(f"  └── {C_SUCCESS}[SUCCESS] Brain weights checkpoint saved -> {ONLINE_BRAIN_PATH}{C_RESET}")
                     
     except KeyboardInterrupt:
-        print(f"\n{C_WARN}[*] Releasing TCP server and closing connections safely...{C_RESET}")
+        print(f"\n{C_WARN}[*] Interrupted by user. Saving final weights checkpoint to: {ONLINE_BRAIN_PATH}{C_RESET}")
+        try:
+            os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+            torch.save(agent.model.state_dict(), ONLINE_BRAIN_PATH)
+            print(f"  └── {C_SUCCESS}[SUCCESS] Final weights successfully saved!{C_RESET}")
+        except Exception as save_err:
+            print(f"  └── {C_ERROR}[ERROR] Failed to save final weights: {save_err}{C_RESET}")
+        print(f"{C_WARN}[*] Releasing TCP server and closing connections safely...{C_RESET}")
     finally:
         env.close()
 
