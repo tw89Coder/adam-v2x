@@ -1,143 +1,162 @@
-# V2X QoS Reinforcement Learning Bridge (Developer Guide)
+# V2X QoS Deep Reinforcement Learning Bridge
+## Industrial Developer Reference Manual
 
-This directory houses the Reinforcement Learning (RL) bridge linking the C++ V2X simulation harness with PyTorch deep learning models. Refactored around clean software engineering principles (Separation of Concerns and SOLID), this codebase separates environment interfaces, decision-making agents, optimization algorithms, and network transport formatting.
-
----
-
-## 1. Directory Layout & Architecture
-
-```text
-tools/rl_bridge/
-├── README.md                  # This documentation guide
-├── config/
-│   └── ppo_agent.yaml         # Centralized system configurations (hyperparameters, mapping, defaults)
-├── checkpoints/               # Directory containing exported PyTorch weight files (*.pth)
-├── data/                      # Place historical CSV trajectory training files here
-├── scripts/                   # CLI entry points for orchestrating training/serving
-│   ├── train_online.py        # Starts online interactive socket co-simulation training
-│   ├── train_offline.py       # Starts offline batch dataset sweeps
-│   ├── serve_agent.py         # Production daemon hosting models (inference-only)
-│   └── verify_brain.py        # Diagnostic script checking policy outputs on scenario matrices
-├── src/                       # Source package directory
-│   ├── __init__.py
-│   ├── config.py              # Ingests configuration and dynamically exposes constants
-│   ├── main.py                # Core orchestrator executing either online or offline runs
-│   ├── envs/                  # Environment simulator wrappers
-│   │   ├── __init__.py
-│   │   ├── base_env.py        # Gymnasium-style abstract environment interface
-│   │   ├── online_socket_env.py # Gym-style socket server interface (handles TCP IPC)
-│   │   └── offline_dataset_env.py # Gym-style CSV reader sliding window step interface
-│   ├── agents/                # Decision wrappers
-│   │   ├── __init__.py
-│   │   ├── base_agent.py      # Abstract agent interface
-│   │   └── v2x_agent.py       # V2X Agent managing policy model queries and the Action Adapter
-│   ├── models/                # PyTorch neural layers
-│   │   ├── __init__.py
-│   │   └── policy_net.py      # Actor-Critic network (dynamic depth and widths)
-│   ├── algorithms/            # Math optimization loops
-│   │   ├── __init__.py
-│   │   ├── base_learner.py    # Abstract base learner class
-│   │   ├── ppo_learner.py     # PPO optimizer calculating Actor/Critic/Entropy losses
-│   │   └── sac_learner.py     # Skeleton template illustrating another RL implementation
-│   └── utils/                 # Utilities
-│       ├── __init__.py
-│       ├── network_io.py      # Stateless telemetry parsing and policy serialization
-│       └── data_loader.py     # Ingests and blends offline CSV traces
-```
+This directory contains the reinforcement learning (RL) co-simulation bridge connecting the C++ V2X simulation harness (built on Vanetza) with PyTorch policy networks. The system uses Proximal Policy Optimization (PPO) to dynamically tune the mitigation parameters of an Adaptive Filter Finite State Machine (FSM), protecting V2X stacks against CWE-674 structural workload amplification.
 
 ---
 
-## 2. Telemetry and Action Data Pathways
+## 1. System Architecture & Design Philosophy
 
-The co-simulation works as a transactional loop synchronizing Python and C++ over an IPv4 TCP Socket.
-
-### A. Observation/Telemetry Path (Inbound)
-1. The C++ simulator gathers telemetry statistics within a sliding time window.
-2. C++ connects to Python over TCP and sends a CSV message containing three variables:
-   `avg_max_sum_sq,avg_budget,anomaly_rate\n`
-3. `online_socket_env` accepts the connection, reads the socket buffer, and delegates parsing to `NetworkIOHelper.parse_telemetry()`.
-4. The environment applies feature normalization and returns a 3D PyTorch state tensor:
-   `[avg_packet_size / 1500.0, avg_max_sum_sq / 65025.0, anomaly_rate]`
-
-### B. Action Command Path (Outbound)
-1. The state tensor is evaluated by `V2XAgent` through the policy network `DefencePolicyNet`.
-2. The network outputs a raw vector matching the size of `rl_controlled_actions` (e.g., 2 variables: `recovery_rate`, `penalty_multiplier`).
-3. The **Action Adapter** maps and clamps these active variables to their dynamic bounds.
-4. The Action Adapter reads `wire_protocol_parameters` to build a combined action list, filling the remaining parameters with static defaults from the YAML configuration.
-5. `NetworkIOHelper.serialize_policy()` formats the parameters sequentially:
-   `val_0,val_1,val_2,val_3\n` (e.g. `recovery_rate,penalty_multiplier,sq_threshold,base_sampling_rate\n`)
-6. `online_socket_env` transmits the string payload back to the socket and closes the connection.
-7. The C++ client receives the packet, parses the 4 values, updates its local QoS configurations, and steps the simulator forward.
-
-### C. Sequence Diagram
+The codebase is built on **Separation of Concerns (SoC)** and **SOLID** principles, isolating execution pipelines, environments, network interfaces, and mathematical optimization loops.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant CppClient as C++ QoS Harness (C++)
-    participant Env as Socket Environment (online_socket_env)
-    participant Agent as RL Agent & Action Adapter (v2x_agent)
-    participant Net as Policy Net (policy_net)
-    participant Learner as PPO Learner (ppo_learner)
+graph TD
+    subgraph C++ Environment (vanetza_unpatched)
+        Harness[QoS Harness Engine] <--> Bridge[RL Bridge Client]
+    end
 
-    CppClient->>Env: Sends telemetry (avg_sq, avg_budget, anomaly_rate)
-    Env->>Env: Parses telemetry & normalizes observations
-    Env->>Agent: Passes normalized state tensor s_t
-    Agent->>Net: Forward pass: Net(s_t)
-    Net->>Agent: Returns Gaussian policy mean & state value V(s_t)
-    Agent->>Agent: Samples stochastic action, executes Action Adapter mapping
-    Agent->>Env: Returns 4D parameters list (clamped & combined with defaults)
-    Env->>CppClient: Sends serialized CSV string payload over TCP
-    CppClient->>CppClient: Updates FSM variables & runs next simulation step
-    Env->>Learner: Stores transition transition (s, a, r, log_p, V)
-    opt When batch_size is reached
-        Learner->>Learner: Computes target advantages
-        Learner->>Net: Backprop (PPO Actor Loss, Critic Loss, Entropy Loss)
+    subgraph IPC Channel (TCP Loopback)
+        Bridge <-->|Port 8080 / JSON-like CSV| SocketEnv[Online Socket Env]
+    end
+
+    subgraph Python DRL Bridge (tools/rl_bridge)
+        SocketEnv <-->|step / reset| Agent[V2X Agent]
+        Agent <-->|act / adapt| Model[Policy Net / Actor-Critic]
+        Agent <-->|store transition| Buffer[Trajectory Buffer]
+        Buffer -->|sample batch| Learner[PPO Learner]
+        Learner -->|optimize gradients| Model
     end
 ```
 
----
-
-## 3. Running Execution Commands
-
-Make sure to run all scripts from the `tools/rl_bridge/` folder using Python inside your virtual environment.
-
-### A. Online Co-Simulation Training (TCP Socket Server)
-Launches the socket server listening for live interactive C++ co-simulation connections.
-```bash
-python -m src.main --mode online --port 8080
-# Or using the script CLI:
-python scripts/train_online.py --port 8080 --batch 32
-```
-
-### B. Offline Batch Dataset Training
-Loads pre-recorded traffic logs matching `data/training_trace_*_mode3.csv` to pre-train model checkpoints.
-```bash
-python -m src.main --mode offline --epochs 20 --rate mix
-# Or using the script CLI:
-python scripts/train_offline.py --rate mix --epochs 20 --lr 0.001
-```
-
-### C. Live Serving Daemon (Inference Only)
-Hosts a live server that uses optimal deterministic weights (no exploration noise) to serve defense parameters to the simulator in production.
-```bash
-python scripts/serve_agent.py
-```
-
-### D. Verification Audit Script
-Evaluates model actions against two predefined test scenarios (nominal traffic and attack storm) to audit model decisions.
-```bash
-python scripts/verify_brain.py -m checkpoints/v2x_offline_rmix_e20.pth
-```
+### Core Design Patterns:
+* **Orchestrator Pattern (`src/main.py`)**: Acts as a centralized factory to initialize environments, policies, and learners based on the central YAML configuration.
+* **Adapter Pattern (Action Adapter in `src/agents/v2x_agent.py`)**: Maps variable-dimension neural network outputs (e.g. 2D actions) into fixed 4D physical parameter ranges, filling in static defaults and enforcing safety boundaries.
+* **Strategy Pattern (`src/algorithms/`)**: Defines interchangeable RL learner interfaces (`BaseLearner`), allowing PPO and SAC to be swapped transparently.
 
 ---
 
-## 4. Developer Extension Guide
+## 2. Mathematical Modeling & Core Formulations
 
-All runtime updates can be implemented entirely in Python and YAML, without modifying the compiled C++ code.
+To help engineers understand the training dynamics, the mathematical formulations used in the environments, models, and optimization updates are defined below.
 
-### A. Adjusting Neural Network Architecture (Layer Depth/Width)
-To change neural network capacity, open `config/ppo_agent.yaml` and edit the `models` layer array:
+### 2.1 Observation (State) Space Normalization
+The network receives a 3-dimensional normalized observation vector $s_t \in \mathbb{R}^3$ at each control window boundary (every 1000 packets):
+
+$$s_t = \begin{bmatrix} o_{size} \\ o_{sq} \\ o_{anomaly} \end{bmatrix}$$
+
+1. **Normalized Packet Size ($o_{size}$)**: Maps raw packet length (up to MTU) to $[0, 1]$:
+   $$o_{size} = \frac{\text{simulated\_packet\_size}}{1500.0}$$
+2. **Normalized Sum-of-Squares similarity ($o_{sq}$)**: Maps F2 sketch similarities (up to maximum signature value) to $[0, 1]$:
+   $$o_{sq} = \frac{\text{avg\_max\_sum\_sq}}{65025.0}$$
+3. **Raw Anomaly Ratio ($o_{anomaly}$)**: The ratio of packets flagged as anomalies by the filter FSM:
+   $$o_{anomaly} = \frac{\text{malware\_packet\_count}}{\text{total\_packets\_in\_window}}$$
+
+---
+
+### 2.2 Action Space & Action Adapter Mapping
+The model output action vector $a_t \in \mathbb{R}^d$ matches the active dimensions defined in the configuration. The **Action Adapter** maps the network's unbounded stochastic outputs to the valid physical simulation ranges:
+
+$$\text{physical\_action}_i = \text{clamp}\left( a_{\text{min}, i} + \text{sigmoid}(a_{t, i}) \cdot (a_{\text{max}, i} - a_{\text{min}, i}), \ a_{\text{min}, i}, \ a_{\text{max}, i} \right)$$
+
+* **Recovery Rate Coefficient ($a_0$)**: Clamped to $[0.01, 0.10]$ (controls FSM budget recovery speed).
+* **Mitigation Penalty Multiplier ($a_1$)**: Clamped to $[20.0, 100.0]$ (controls FSM budget deduction severity).
+* **F2 Sketch Similarity Threshold ($a_2$)**: Clamped to $[400, 650]$ (controls FSM attack sensitivity).
+* **Peacetime Active Inspection Sampling Rate ($a_3$)**: Clamped to $[0.05, 1.00]$ (controls S0 active audit rate).
+
+---
+
+### 2.3 Reward Shaping Formulations
+The reward function dynamically switches between two modes depending on the current anomaly rate threshold (configured at $\theta = 0.005$):
+
+#### A. Active Attack Mitigation Mode ($o_{anomaly} \ge \theta$):
+Prioritizes preventing budget collapse and resource exhaustion.
+
+$$R_{\text{attack}} = - \left( w_{\text{penalty}} \cdot a_1 + w_{\text{sq\_overhead}} \cdot \left(\frac{a_2}{650}\right)^2 + w_{\text{budget}} \cdot \text{Violation}_{\text{budget}} \right)$$
+
+* $w_{\text{penalty}} = 0.5$ (penalizes excessive rate limiting).
+* $w_{\text{sq\_overhead}} = 0.2$ (penalizes keeping sketch thresholds unnecessarily low).
+* $w_{\text{budget}} = 10.0$ (heavily penalizes cases where remaining FSM CPU budget drops near zero).
+
+#### B. Peacetime Mode ($o_{anomaly} < \theta$):
+Prioritizes maximizing throughput and minimizing inspection overhead.
+
+$$R_{\text{nominal}} = w_{\text{recovery}} \cdot a_0 - w_{\text{overhead}} \cdot a_3$$
+
+* $w_{\text{recovery}} = 10.0$ (rewards fast budget recovery when no threat is present).
+* $w_{\text{overhead}} = 8.0$ (penalizes high inspection sampling rates during peacetime).
+
+---
+
+### 2.4 Proximal Policy Optimization (PPO) Objectives
+The policy network is trained using the PPO-Clip objective to stabilize updates.
+
+#### A. Clipped Surrogate Objective:
+$$L^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left( r_t(\theta)\hat{A}_t, \ \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t \right) \right]$$
+
+* $r_t(\theta) = \frac{\pi_\theta(a_t | s_t)}{\pi_{\theta_{\text{old}}}(a_t | s_t)}$ represents the probability ratio.
+* $\epsilon = 0.2$ (clipping ratio).
+* $\hat{A}_t$ is the Generalized Advantage Estimation (GAE).
+
+#### B. Value Function Loss (Critic Objective):
+$$L^{\text{VF}}(\theta) = \hat{\mathbb{E}}_t \left[ \left( V_\theta(s_t) - V^{\text{targ}}_t \right)^2 \right]$$
+
+#### C. Entropy Bonus:
+To encourage exploration and prevent premature policy convergence, an entropy term $H(\pi_\theta(\cdot | s_t))$ is added. The combined objective function updated via gradient ascent is:
+
+$$\text{Maximize } L^{\text{PPO}}(\theta) = \hat{\mathbb{E}}_t \left[ L^{\text{CLIP}}(\theta) - c_1 L^{\text{VF}}(\theta) + c_2 H(\pi_\theta(\cdot | s_t)) \right]$$
+
+* $c_1 = 0.5$ (value function coefficient).
+* $c_2 = 0.01$ (entropy coefficient).
+
+---
+
+## 3. Directory Layout & Core Components
+
+Below is a detailed breakdown of the classes and responsibilities within the package:
+
+| Directory/File | Target Class/Module | Primary Responsibility |
+| :--- | :--- | :--- |
+| `src/config.py` | `Global Config Parser` | Parses `ppo_agent.yaml` and exposes system constants and bounds. |
+| `src/main.py` | `main()` Orchestrator | CLI entry point. Sets up training modes and initializes pipelines. |
+| `src/envs/base_env.py` | `BaseV2XEnv` | Abstract interface defining standardized `reset()` and `step()` loops. |
+| `src/envs/online_socket_env.py`| `V2XOnlineSocketEnv` | Runs loopback TCP server on port 8080 to receive C++ telemetry and send actions. |
+| `src/envs/offline_dataset_env.py`| `V2XOfflineDatasetEnv` | Simulates packet flows using CSV telemetry files for fast offline training. |
+| `src/agents/base_agent.py` | `BaseV2XAgent` | Abstract interface for target agents. |
+| `src/agents/v2x_agent.py` | `V2XAgent` | Manages the policy network and uses the **Action Adapter** to format actions. |
+| `src/models/policy_net.py` | `DefencePolicyNet` | PyTorch network. Dynamically creates hidden layers from config. |
+| `src/algorithms/base_learner.py`| `BaseLearner` | Abstract interface for learning algorithms. |
+| `src/algorithms/ppo_learner.py`| `PPOLearner` | Evaluates loss gradients, applies entropy bonuses, and updates policy weights. |
+| `src/utils/network_io.py` | `NetworkIOHelper` | Handles stateless CSV parsing and string formatting for TCP transmission. |
+| `src/utils/data_loader.py` | `TraceLoader` | Blends historical trace CSV files into training matrices. |
+
+---
+
+## 4. Execution Commands (Direct Python vs. Root Bash Wrapper)
+
+You can run experiments using either direct Python commands inside `tools/rl_bridge/` (ideal for debug hacking) or the unified `run_experiments.sh` wrapper script in the repository root (recommended for standard operation).
+
+### Translation Reference Map:
+
+| Execution Goal | Direct Python Command <br>*(Run inside `tools/rl_bridge/`)* | Equivalent Root Bash Command <br>*(Run in repository root)* |
+| :--- | :--- | :--- |
+| **1. Online Training (TCP Server)** | `python3 scripts/train_online.py` | `./run_experiments.sh python --train-online` |
+| **2. Offline Training** | `python3 scripts/train_offline.py --rate mix --epochs 20` | `./run_experiments.sh python --train-offline -r mix -e 20` |
+| **3. Production Serve Daemon** | `python3 scripts/serve_agent.py` | `./run_experiments.sh python --deploy` |
+| **4. Brain Decision Auditing** | `python3 scripts/verify_brain.py -m checkpoints/v2x_offline_rmix_e20.pth` | `./run_experiments.sh python --verify-brain -m checkpoints/v2x_offline_rmix_e20.pth` |
+| **5. Model Export to ONNX** | `python3 scripts/export_onnx.py` | `./run_experiments.sh python --export-onnx` |
+| **6. Visualization Plotting** | `python3 ../plot_engine.py --all` | `./run_experiments.sh python --plot --all` |
+
+---
+
+## 5. Developer Guide (Deep Walkthrough Recipes)
+
+This section provides step-by-step instructions and code details for expanding the RL bridge framework.
+
+### 5.1 How to Adjust Neural Network Depth and Layers
+The neural network's structural depth is defined dynamically in `config/ppo_agent.yaml`. To modify the capacity of the model, you can edit the architecture without rebuilding the harness.
+
+#### Step 1: Open the configuration file
+Open `config/ppo_agent.yaml` and look for the `models` block:
 ```yaml
 models:
   hidden_layers:
@@ -145,79 +164,153 @@ models:
     - 128
     - 64
 ```
-The constructor in `src/models/policy_net.py` reads this array at startup and dynamically builds the network using `nn.ModuleList`. **No code modifications are required.**
-
-### B. Changing Parameters Under RL Control (Zero-Code)
-If you want to start simple (e.g. control only 2 variables) and scale up, modify `action_space` inside `config/ppo_agent.yaml`:
+Modify the sizes or add entries. For example, to make it a deeper network with 4 hidden layers:
 ```yaml
-action_space:
-  # Parameters under RL control (PyTorch output dimension matches this size)
-  rl_controlled_actions:
-    - recovery_rate
-    - penalty_multiplier
-
-  # Fallback default values for parameters NOT under RL control
-  static_defaults:
-    sq_threshold: 650.0
-    base_sampling_rate: 0.05
+models:
+  hidden_layers:
+    - 256
+    - 256
+    - 128
+    - 64
 ```
-* If a parameter is listed in `rl_controlled_actions`, the policy network will dynamically resize to control it.
-* If a parameter is removed from `rl_controlled_actions`, the Action Adapter will automatically fill it with its `static_defaults` value when sending commands to C++.
 
-### C. Adding a New 5th Parameter to the Protocol
-To add a new parameter to your simulation framework:
-1. Open `config/ppo_agent.yaml`.
-2. Add your variable name to `wire_protocol_parameters` in the position expected by the C++ parser:
-   ```yaml
-   wire_protocol_parameters:
-     - recovery_rate
-     - penalty_multiplier
-     - sq_threshold
-     - base_sampling_rate
-     - new_inspection_rate # Added
-   ```
-3. Put the variable under either `static_defaults` (if fixed) or `rl_controlled_actions` (if learned).
-4. Update the C++ client code to split and read the 5th item in the received TCP CSV string. **Zero Python changes are required.**
-
-### D. Implementing a New Reinforcement Learning Algorithm (e.g. SAC)
-1. Under `src/algorithms/`, create a class inheriting from `BaseLearner` (e.g., see the code template in `src/algorithms/sac_learner.py`):
-   ```python
-   from src.algorithms.base_learner import BaseLearner
-   
-   class SACLearner(BaseLearner):
-       def update(self, trajectory_buffer):
-           # Calculate SAC Q-losses, Policy losses, temperature optimization, and apply gradients
-           return {"actor_loss": actor_loss.item(), "critic_loss": critic_loss.item()}
-   ```
-2. Update the Factory builder in `src/main.py` (`main()` method) to register your new class.
-3. Switch the active optimizer inside `config/ppo_agent.yaml`:
-   ```yaml
-   algorithm: "sac"
-   ```
+#### Step 2: Customizing the Activation Function or Layer Types
+If you want to customize the actual layers in PyTorch (e.g. swap `ReLU` for `Tanh` or add Batch Normalization), open **`src/models/policy_net.py`** and modify the `__init__` constructor.
+Locate the loop creating the linear layers (around line 34):
+```python
+# [File: src/models/policy_net.py]
+# Original loop:
+for h_dim in hidden_layers:
+    layers.append(nn.Linear(in_dim, h_dim))
+    layers.append(nn.ReLU()) # <--- Replace nn.ReLU() with nn.Tanh() or similar
+    in_dim = h_dim
+```
+You can rewrite it to add Batch Normalization or alternate activations:
+```python
+# Custom loop example:
+for h_dim in hidden_layers:
+    layers.append(nn.Linear(in_dim, h_dim))
+    layers.append(nn.BatchNorm1d(h_dim)) # Added Batch Norm
+    layers.append(nn.Tanh())             # Changed to Tanh activation
+    in_dim = h_dim
+```
 
 ---
 
-## 5. Standard Component Interfaces
+### 5.2 How to Change Training Parameters (Training Depth & Hyperparameters)
+You can tune learning parameters (the "training depth") globally in the configuration or directly via the command-line arguments.
 
-### A. Environment (`src/envs/base_env.py`)
-```python
-class BaseV2XEnv(ABC):
-    def reset(self) -> torch.Tensor:
-        """Returns normalized initial state observation [3]"""
-    def step(self, action: list) -> Tuple[torch.Tensor, float, bool, Dict[str, Any]]:
-        """Sends action parameters list, blocks until next telemetry response, returns (s', r, done, info)"""
+#### Method A: Configuration file adjustments
+Open `config/ppo_agent.yaml` and modify the training rates and discounts:
+```yaml
+# [File: config/ppo_agent.yaml]
+hyperparameters:
+  lr_online: 0.0003     # Policy network learning rate
+  ppo_clip: 0.2         # PPO clipping limit (epsilon)
+  batch_size: 32        # Number of control steps before running a PPO gradient step
+  gamma: 0.99           # Discount factor for future rewards
+  gae_lambda: 0.95      # GAE parameter for trade-off between bias and variance
 ```
 
-### B. Agent (`src/agents/base_agent.py`)
+#### Method B: Modifying the execution parameters (epochs, lr) via Bash
+To increase training epochs or adjust the learning rate during offline training runs:
+```bash
+# Run a deeper search with 50 epochs and a lower learning rate (0.0001)
+./run_experiments.sh python --train-offline -e 50 --lr 0.0001
+```
+*Behind the scenes, `-e 50` is mapped directly to `train_offline.py`'s `--epochs` parameter, modifying the loops in `src/main.py`.*
+
+---
+
+### 5.3 How to Implement and Register a New RL Algorithm (e.g., SAC)
+To implement a custom continuous RL algorithm (such as Soft Actor-Critic), follow this step-by-step cookbook.
+
+#### Step 1: Create the learner class
+Create a new file **`src/algorithms/sac_learner.py`** and inherit from `BaseLearner`. Implement the `update` method:
 ```python
-class BaseV2XAgent(ABC):
-    def act(self, state_tensor: torch.Tensor) -> Tuple[torch.Tensor, Tuple[list, list], torch.Tensor, torch.Tensor]:
-        """Runs policy forward pass, outputs actions, runs Action Adapter, and returns transition elements"""
+# [File: src/algorithms/sac_learner.py]
+import torch
+from src.algorithms.base_learner import BaseLearner
+
+class SACLearner(BaseLearner):
+    def __init__(self, policy_net, lr=0.0003):
+        super().__init__(policy_net)
+        # Initialize your SAC Q-networks, target networks, and optimizers here
+        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
+        print("  └── [INIT] SAC Learner successfully initialized.")
+        
+    def update(self, trajectory_buffer):
+        """
+        Executes Soft Actor-Critic gradient optimization.
+        trajectory_buffer: dict containing lists of torch.Tensors (states, actions, rewards, etc.)
+        """
+        # 1. Parse buffer transitions
+        states = torch.stack(trajectory_buffer["states"])
+        actions = torch.stack(trajectory_buffer["actions"])
+        
+        # 2. (Algorithm-Specific Math) Compute Critic Loss & Actor Loss
+        # Example dummy gradient step:
+        loss = torch.tensor(0.0, requires_grad=True)
+        
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        
+        # 3. Return dictionary of metrics for console printing
+        return {
+            "actor_loss": 0.0,
+            "critic_loss": loss.item()
+        }
 ```
 
-### C. Learner (`src/algorithms/base_learner.py`)
+#### Step 2: Register the new algorithm in the Orchestrator
+Open **`src/main.py`** and import and register your new learner class in the `main()` method.
+Locate the learner factory code block:
 ```python
-class BaseLearner(ABC):
-    def update(self, trajectory_buffer: Dict[str, List[torch.Tensor]]) -> Dict[str, float]:
-        """Calculates loss updates (Actor/Critic/Entropy) and executes optimization gradient steps"""
+# [File: src/main.py]
+# Ingest the configured algorithm choice
+algo_name = config.get("algorithm", "ppo").lower()
+
+if algo_name == "ppo":
+    learner = PPOLearner(policy_net, lr=lr, ppo_clip=ppo_clip)
+elif algo_name == "sac":
+    # ── REGISTER SAC HERE ──────────────────────────────────────────────────
+    from src.algorithms.sac_learner import SACLearner
+    learner = SACLearner(policy_net, lr=lr)
+    # ───────────────────────────────────────────────────────────────────────
+else:
+    raise ValueError(f"Unsupported algorithm: {algo_name}")
 ```
+
+#### Step 3: Switch the active algorithm in YAML
+Open `config/ppo_agent.yaml` and update the `algorithm` target:
+```yaml
+# config/ppo_agent.yaml
+algorithm: "sac"
+```
+*Run `./run_experiments.sh python --train-offline` or `--train-online`. The orchestrator will now automatically route all optimization updates through your `SACLearner` class.*
+
+---
+
+## 6. Troubleshooting & MLOps FAQ
+
+**Q1: Address already in use (socket binding conflict / port 8080/9090 locked)**
+* **Symptom**: `OSError: [Errno 98] Address already in use`
+* **Resolution**: An old training session may still be running in the background. Kill the process occupying the port:
+  ```bash
+  sudo lsof -t -i:8080 | xargs kill -9
+  ```
+
+**Q2: ONNX Runtime Shape Mismatch when deploying to C++**
+* **Symptom**: `[ERROR] Unexpected action dimensions: X`
+* **Resolution**: The exported ONNX model's output size must match the configured action space. Ensure the C++ `rl_bridge.cpp` decoder block supports your selected output dimension (`action_dim` = 2, 3, or 4). If you change the action dimensions in Python, you must run the export pipeline again:
+  ```bash
+  ./run_experiments.sh python --export-onnx
+  ```
+
+**Q3: Virtual Environment (venv) missing packages or package imports failing**
+* **Symptom**: `ModuleNotFoundError: No module named 'torch'`
+* **Resolution**: Use the setup tool to rebuild the virtual environment and fetch missing dependencies:
+  ```bash
+  ./setup.sh python
+  ```
