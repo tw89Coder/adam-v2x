@@ -41,6 +41,8 @@ print_usage() {
     echo -e "  ${C_WARN}--verify-brain${C_RESET}       Audit brain checkpoints on baseline scenarios"
     echo -e "  ${C_WARN}--export-onnx${C_RESET}        Export trained PyTorch model weights to ONNX format"
     echo -e "  ${C_WARN}--plot${C_RESET}               Execute verification and plotting engine scripts"
+    echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
+    echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
     echo -e ""
     echo -e "${C_BOLD}Automation Configuration Modifiers (Short & Long Flags):${C_RESET}"
     echo -e "  ${C_INFO}-c, --core <id>${C_RESET}       Hardware CPU core index for taskset processor locking (Default: 9)"

@@ -154,6 +154,10 @@ The automated harness overrides hardcoded loops, supporting continuous hardware 
 
 ```
 
+> [!TIP]
+> **Python Action Parameters**: You can append `-h` or `--help` directly to any `python` action command (e.g. `./run_experiments.sh python --train-online -h` or `./run_experiments.sh python --verify-brain -h`) to view all script-specific arguments (such as `-p` for port, `-b` for batch size, `-e` for training epochs, or `-lr` for learning rate).
+
+
 ### Automation Configuration Modifiers
 
 Modifiers can be flexibly placed anywhere within the command-line interface sequence:
