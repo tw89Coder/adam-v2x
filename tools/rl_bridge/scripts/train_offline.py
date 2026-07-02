@@ -26,6 +26,7 @@ from src.models.policy_net import DefencePolicyNet
 from src.agents.v2x_agent import V2XAgent
 from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
 from src.algorithms.ppo_learner import PPOLearner
+from src.algorithms.sac_learner import SACLearner
 from src.utils.data_loader import load_telemetry_data
 from src.main import run_offline
 
@@ -38,6 +39,7 @@ def parse_arguments():
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
     parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic learning parameter ceiling")
     parser.add_argument("--clip", type=float, default=0.2, help="PPO boundary clipping limits")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac"], default="ppo", help="RL algorithm to use")
     return parser.parse_args()
 
 def main():
@@ -48,7 +50,7 @@ def main():
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
     print(f"  ├── Hardware Context : Pytorch Device -> [ {C_BOLD}CPU{C_RESET} ]")
     print(f"  ├── Target Profile   : Anomaly Density -> [ {C_WARN}{args.rate}{C_RESET} ]")
-    print(f"  ├── Hyperparameters  : Learning Rate  -> [ {args.lr} ] | PPO Clip -> [ {args.clip} ]")
+    print(f"  ├── Hyperparameters  : Learning Rate  -> [ {args.lr} ] | PPO Clip -> [ {args.clip} ] | Algo -> [ {args.algo.upper()} ]")
 
     # Load static CSV simulation historical trajectory dumps
     raw_data = load_telemetry_data(args.rate)
@@ -57,7 +59,14 @@ def main():
     model = DefencePolicyNet()
     agent = V2XAgent(model)
     env = V2XOfflineDatasetEnv(raw_data)
-    learner = PPOLearner(agent, lr=args.lr)
+
+    if args.algo == "ppo":
+        learner = PPOLearner(agent, lr=args.lr)
+    elif args.algo == "sac":
+        learner = SACLearner(agent, lr=args.lr)
+        print(f"  └── {C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
+    else:
+        raise ValueError(f"Unsupported algorithm type: {args.algo}")
 
     print(f"\n{C_WARN}[*] Compiling policy graphs. Executing Proximal Policy Optimization loops...{C_RESET}\n")
     

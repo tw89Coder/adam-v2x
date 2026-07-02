@@ -282,13 +282,16 @@ else:
     raise ValueError(f"Unsupported algorithm: {algo_name}")
 ```
 
-#### Step 3: Switch the active algorithm in YAML
-Open `config/ppo_agent.yaml` and update the `algorithm` target:
-```yaml
-# config/ppo_agent.yaml
-algorithm: "sac"
+#### Step 3: Launch training using the algorithm flag
+You can now pass the `-a sac` parameter to select and execute the Soft Actor-Critic algorithm directly:
+```bash
+# Offline dataset training with SAC
+./run_experiments.sh python --train-offline -a sac -e 20
+
+# Online interactive training server with SAC
+./run_experiments.sh python --train-online -a sac
 ```
-*Run `./run_experiments.sh python --train-offline` or `--train-online`. The orchestrator will now automatically route all optimization updates through your `SACLearner` class.*
+*Note: If `-a` is omitted, the framework defaults to `"ppo"` (or whichever value is configured in `config/ppo_agent.yaml`).*
 
 ---
 
