@@ -1,5 +1,5 @@
 # ==============================================================================
-# V2X QoS DRL Framework Industrial Configuration Matrix
+# V2X QoS DRL Refactored Configuration Matrix
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -21,19 +21,69 @@ v2x_bounds:
   window_size: 64                       # Number of bytes in the sliding-window F2 sketch window (O(W) cap)
 
 # ------------------------------------------------------------------------------
-# 3. PPO Hyperparameters: Dimensions, Learning Rates, Epochs, and Exploration
+# 3. Model Architecture Parameters
+# ------------------------------------------------------------------------------
+models:
+  # Adjust network depth and widths here. The PyTorch builder will dynamically construct the layers.
+  hidden_layers:
+    - 64
+    - 64
+
+# ------------------------------------------------------------------------------
+# 4. Action Space & Custom Variable Parameter Mapping
+# ------------------------------------------------------------------------------
+action_space:
+  # The exact sequence of parameters expected by the C++ wire protocol.
+  # The Python socket transmitter will serialize values in this order.
+  # To add a 5th parameter, simply add it to the bottom of this list.
+  wire_protocol_parameters:
+    - recovery_rate
+    - penalty_multiplier
+    - sq_threshold
+    - base_sampling_rate
+
+  # The subset of parameters from wire_protocol_parameters to be controlled by the RL policy.
+  # The network action output size (action_dim) will dynamically match this list size.
+  # Change these list items to experiment with different parameter control subsets.
+  rl_controlled_actions:
+    - recovery_rate
+    - penalty_multiplier
+
+  # Static default/heuristic values for parameters NOT currently under RL control.
+  static_defaults:
+    sq_threshold: 650.0
+    base_sampling_rate: 0.05
+
+  # Dynamic scaling boundaries mapping network outputs [0.0, 1.0] to simulation parameters.
+  scaling_bounds:
+    recovery_rate:
+      min: 0.0
+      max: 0.5
+    penalty_multiplier:
+      min: 0.0
+      max: 100.0
+    sq_threshold:
+      min: 400.0
+      max: 800.0
+    base_sampling_rate:
+      min: 0.01
+      max: 0.20
+
+# ------------------------------------------------------------------------------
+# 5. RL/PPO Hyperparameters: Dimensions, Learning Rates, Epochs, and Exploration
 # ------------------------------------------------------------------------------
 hyperparameters:
   input_dim: 3                          # State tensor observation size (1. Norm Size, 2. Norm SQ, 3. Anomaly Rate)
-  action_dim: 3                         # Action space dimension (3D: Recovery, Penalty, SQ Threshold)
-  lr_online: 0.0003                     # Learning rate (alpha) of Adam optimizer for online PPO updates [1e-4, 1e-3]
-  batch_size: 32                        # Number of window telemetry samples gathered per PPO update step [16, 128]
-  ppo_epochs_online: 5                  # Inner-loop optimization epochs per rollout batch update [3, 10]
-  clip_eps: 0.2                         # PPO policy ratio clipping threshold (epsilon) [0.1, 0.3]
-  gamma: 0.99                           # MDP discount factor for future cumulative expected rewards [0.90, 0.99]
+  lr_online: 0.0003                     # Learning rate (alpha) of Adam optimizer for online updates
+  lr_offline: 0.001                     # Learning rate (alpha) of Adam optimizer for offline updates
+  batch_size: 32                        # Number of samples gathered per update step
+  ppo_epochs_online: 5                  # Inner-loop optimization epochs per online batch update
+  ppo_epochs_offline: 10                # Inner-loop optimization epochs per offline update
+  clip_eps: 0.2                         # Policy ratio clipping threshold (epsilon)
+  gamma: 0.99                           # MDP discount factor for future expected rewards
 
 # ------------------------------------------------------------------------------
-# 4. Multi-Objective Reward Shaping: Governs policy optimization objectives
+# 6. Multi-Objective Reward Shaping: Governs policy optimization objectives
 # ------------------------------------------------------------------------------
 reward_shaping:
   # Pollution rate above which the environment transitions from nominal peacetime to active attack phase
@@ -52,9 +102,8 @@ reward_shaping:
     overhead_penalty_scale: 8.0         # Penalty scale for unnecessary high active inspection rates during peacetime
 
 # ------------------------------------------------------------------------------
-# 5. Heuristic Safety Boundaries: Static guards preventing the RL agent from
+# 7. Heuristic Safety Boundaries: Static guards preventing the RL agent from
 #    going out of safe bounds, which could trigger high FNR or system collapse.
-#    Enforced in both Python (TCP serving/training) and C++ (ONNX inference).
 # ------------------------------------------------------------------------------
 safety_boundaries:
   enabled: true                         # Set to true to enforce defensive guards on output actions

@@ -7,9 +7,8 @@
 @brief Diagnostic evaluation utility auditing offline policy parameters.
 
 This script parses a path to a target brain checkpoint `.pth` file, constructs 
-predefined environmental scenarios (Normal traffic baseline and High-potency 
-Attack storm), executes forward inference passes through the policy network, 
-and prints rescaled output continuous parameter values.
+predefined environmental scenarios, executes forward inference passes through 
+the policy network, and prints continuous parameter values mapped by the Action Adapter.
 """
 
 import os
@@ -25,6 +24,7 @@ import torch
 
 from src.config import C_ERROR, C_RESET, MAX_PACKET_SIZE, MAX_F2_SQ
 from src.models.policy_net import DefencePolicyNet 
+from src.agents.v2x_agent import V2XAgent
 
 def parse_arguments():
     """
@@ -39,7 +39,7 @@ def parse_arguments():
     )
     return parser.parse_args()
 
-def consult_brain(model, name, size, sq, anomaly):
+def consult_brain(agent: V2XAgent, name: str, size: float, sq: float, anomaly: float):
     """
     Queries policy network to print model responses to predefined test cases.
     """
@@ -47,22 +47,27 @@ def consult_brain(model, name, size, sq, anomaly):
     state = torch.tensor([size/MAX_PACKET_SIZE, sq/MAX_F2_SQ, anomaly], dtype=torch.float32)
     
     with torch.no_grad():
-        # Execute forward inference pass to unpack parameters
-        action_mean, _ = model(state)
+        # Execute forward inference pass
+        action_mean, _ = agent.model(state)
     
-    # Scale network outputs back to original C++ operational boundaries
-    rec = action_mean[0].item() * 0.5
-    pen = action_mean[1].item() * 100.0
-    sq_t = 400 + (action_mean[2].item() * 400)
+    # Map and scale action using Action Adapter
+    raw_actions, safe_actions = agent.map_actions_to_environment(action_mean)
+    
+    # Extract mapped variables dynamically from the safe action list
+    rec = safe_actions[0]
+    pen = safe_actions[1]
+    sq_t = safe_actions[2]
+    base_samp = safe_actions[3]
     
     print(f"[{name}] Input: Size={size}B, F2_SQ={sq}, Anomaly={anomaly*100:.1f}%")
-    print(f"       -> AI Action: Recovery={rec:.3f}, Penalty={pen:.1f}, SQ_Thresh={int(sq_t)}\n")
+    print(f"       -> AI Action: Recovery={rec:.3f}, Penalty={pen:.1f}, SQ_Thresh={int(sq_t)}, Base_Sampling={base_samp:.3f}\n")
 
 def main():
     args = parse_arguments()
 
-    if not os.path.exists(args.model):
-        print(f"{C_ERROR}[ERROR] Specified brain checkpoint missing at: {args.model}{C_RESET}")
+    checkpoint_path = os.path.join(PROJECT_ROOT, args.model)
+    if not os.path.exists(checkpoint_path):
+        print(f"{C_ERROR}[ERROR] Specified brain checkpoint missing at: {checkpoint_path}{C_RESET}")
         print("Please provide a valid path via '-m checkpoints/YOUR_MODEL.pth'")
         sys.exit(1)
 
@@ -70,12 +75,14 @@ def main():
     
     # Instantiate neural layers and inject stored binary weights
     model = DefencePolicyNet()
-    model.load_state_dict(torch.load(args.model))
+    model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
     model.eval()
+    
+    agent = V2XAgent(model)
 
     print("================ Brain Decision Verification ================\n")
-    consult_brain(model, "NORMAL TRAFFIC", size=325, sq=120, anomaly=0.0)
-    consult_brain(model, "ATTACK STORM  ", size=1400, sq=850, anomaly=0.45)
+    consult_brain(agent, "NORMAL TRAFFIC", size=325, sq=120, anomaly=0.0)
+    consult_brain(agent, "ATTACK STORM  ", size=1400, sq=850, anomaly=0.45)
 
 if __name__ == "__main__":
     main()

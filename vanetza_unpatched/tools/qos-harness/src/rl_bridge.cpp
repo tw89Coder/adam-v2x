@@ -307,6 +307,15 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             
             out_policy.base_sampling_rate = calculated_rate;
         } 
+        else if (action_dim == 2) {
+            // 2D Action Space: [recovery, penalty]
+            out_policy.recovery_rate = float_output[0] * 0.5;
+            out_policy.penalty_multiplier = float_output[1] * 100.0;
+            
+            // Static defaults for the non-RL controlled variables
+            out_policy.sq_threshold = 650;
+            out_policy.base_sampling_rate = 0.05;
+        }
         else {
             std::cerr << "[WARNING] ONNX model returned unexpected action dimensions: " << action_dim << "\n";
             return false;

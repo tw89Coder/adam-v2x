@@ -24,8 +24,10 @@ if PROJECT_ROOT not in sys.path:
 from src.config import C_INFO, C_RESET, C_BOLD, C_WARN, C_SUCCESS, CHECKPOINT_DIR
 from src.models.policy_net import DefencePolicyNet
 from src.agents.v2x_agent import V2XAgent
-from src.pipelines.offline_trainer import V2XOfflinePipeline
+from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
+from src.algorithms.ppo_learner import PPOLearner
 from src.utils.data_loader import load_telemetry_data
+from src.main import run_offline
 
 def parse_arguments():
     """
@@ -54,14 +56,13 @@ def main():
     # Initialize modular standardized components
     model = DefencePolicyNet()
     agent = V2XAgent(model)
-    
-    # Bind dependencies to pipeline controller 
-    pipeline = V2XOfflinePipeline(agent, lr=args.lr, clip_eps=args.clip, ppo_epochs=10)
+    env = V2XOfflineDatasetEnv(raw_data)
+    learner = PPOLearner(agent, lr=args.lr)
 
     print(f"\n{C_WARN}[*] Compiling policy graphs. Executing Proximal Policy Optimization loops...{C_RESET}\n")
     
     # Launch matrix optimization execution loop
-    pipeline.train_episodes(raw_data, args.epochs)
+    run_offline(env, agent, learner, args.epochs)
 
     # Export optimized binary parameters
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)

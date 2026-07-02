@@ -3,14 +3,11 @@
 @brief Actor-Critic Neural Network architecture for V2X FSM parameter regulation.
 
 This module defines the PyTorch neural network architecture representing the
-DRL agent's brain. It utilizes a shared feature extraction layer feeding into
-two distinct heads:
-1. An Actor head that outputs the mean vector (mu) of a Gaussian distribution 
-   for continuous action sampling.
-2. A Critic head that outputs the estimated value V(s) of the current state 
-   context, used for computing on-policy advantages in PPO updates.
+DRL agent's brain. It constructs a dynamic shared feature extraction torso feeding 
+into two distinct heads (Actor and Critic).
 """
 
+from typing import List, Tuple
 import torch
 import torch.nn as nn
 from src.config import RAW_CFG
@@ -18,39 +15,47 @@ from src.config import RAW_CFG
 class DefencePolicyNet(nn.Module):
     """
     Actor-Critic Neural Network Topology for V2X FSM Parameter Regulation.
-    Dynamically binds input and action dimensions from the global YAML matrix.
+    Dynamically binds input/action dimensions and layer depths from global config.
     """
-    def __init__(self, input_dim=None, action_dim=None, hidden_dim=64):
+    def __init__(self, input_dim: int = None, action_dim: int = None, hidden_layers: List[int] = None):
         super(DefencePolicyNet, self).__init__()
         
-        # Automatically pull dimensions from global YAML configuration if not specified
+        cfg = RAW_CFG
+        # Automatically pull dimensions/layers from global YAML configuration if not specified
         if input_dim is None:
-            input_dim = RAW_CFG["hyperparameters"]["input_dim"]
+            input_dim = cfg["hyperparameters"]["input_dim"]
         if action_dim is None:
-            action_dim = RAW_CFG["hyperparameters"]["action_dim"]
+            action_dim = len(cfg["action_space"]["rl_controlled_actions"])
+        if hidden_layers is None:
+            hidden_layers = cfg.get("models", {}).get("hidden_layers", [64, 64])
         
-        # Shared feature representation layer (multi-layer perceptron feature extractor)
-        self.shared_layer = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
+        # Dynamic construction of MLP shared feature extraction torso
+        layers = []
+        prev_dim = input_dim
+        for h_dim in hidden_layers:
+            layers.append(nn.Linear(prev_dim, h_dim))
+            layers.append(nn.ReLU())
+            prev_dim = h_dim
+            
+        self.shared_layer = nn.Sequential(*layers)
         
-        # Actor head: Outputs mean (mu) for Gaussian policy distribution, normalized via Sigmoid to [0, 1]
+        # Last hidden dimension index of the torso
+        last_hidden_dim = hidden_layers[-1] if len(hidden_layers) > 0 else input_dim
+        
+        # Actor head: Outputs mean vector (mu) for Gaussian policy distribution, normalized via Sigmoid to [0, 1]
         self.actor_head = nn.Sequential(
-            nn.Linear(hidden_dim, action_dim),
+            nn.Linear(last_hidden_dim, action_dim),
             nn.Sigmoid()
         )
         
         # Critic head: Outputs scalar state value V(s) to guide policy gradient direction
-        self.critic_head = nn.Linear(hidden_dim, 1)
+        self.critic_head = nn.Linear(last_hidden_dim, 1)
         
         # Trainable log standard deviation parameter for stochastic continuous exploration.
         # Initialized to -1.0 corresponding to exp(-1) ~= 0.368 baseline standard deviation.
         self.log_std = nn.Parameter(torch.zeros(action_dim) - 1.0)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Executes a synchronized parallel forward pass across both network heads.
         """

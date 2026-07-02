@@ -5,10 +5,6 @@
 This module initializes ANSI terminal colors for formatting log outputs, ingests
 the centralized hyperparameters and boundaries from the YAML configuration file,
 and falls back to hardcoded default configurations if the file loading fails.
-
-NOTE FOR CODE REVIEW:
-This file currently does not export the `DATA_DIR` constant, which is imported by
-data_loader.py, causing an ImportError when running offline training scripts.
 """
 
 import os
@@ -35,11 +31,32 @@ _defaults = {
         "offline_brain_path": "checkpoints/v2x_offline_rmix_e20.pth"
     },
     "v2x_bounds": {"max_packet_size": 1500.0, "max_f2_sq": 65025.0, "window_size": 64},
-    "hyperparameters": {"lr_online": 0.0003, "lr_offline": 0.001, "batch_size": 32, "clip_eps": 0.2, "gamma": 0.99},
+    "models": {
+        "hidden_layers": [64, 64]
+    },
+    "action_space": {
+        "wire_protocol_parameters": ["recovery_rate", "penalty_multiplier", "sq_threshold", "base_sampling_rate"],
+        "rl_controlled_actions": ["recovery_rate", "penalty_multiplier"],
+        "static_defaults": {"sq_threshold": 650.0, "base_sampling_rate": 0.05},
+        "scaling_bounds": {
+            "recovery_rate": {"min": 0.0, "max": 0.5},
+            "penalty_multiplier": {"min": 0.0, "max": 100.0},
+            "sq_threshold": {"min": 400.0, "max": 800.0},
+            "base_sampling_rate": {"min": 0.01, "max": 0.20}
+        }
+    },
+    "hyperparameters": {
+        "input_dim": 3, "lr_online": 0.0003, "lr_offline": 0.001, "batch_size": 32,
+        "ppo_epochs_online": 5, "ppo_epochs_offline": 10, "clip_eps": 0.2, "gamma": 0.99
+    },
     "reward_shaping": {
-        "anomaly_sensitivity_threshold": 0.05,
-        "active_attack_weights": {"penalty_scale": 0.2, "sq_thresh_scale": 0.1, "budget_violation_scale": 5.0},
-        "nominal_traffic_weights": {"recovery_scale": 10.0, "sq_overhead_scale": 0.1}
+        "anomaly_sensitivity_threshold": 0.005,
+        "active_attack_weights": {"penalty_scale": 0.5, "sq_thresh_scale": 0.2, "budget_violation_scale": 10.0},
+        "nominal_traffic_weights": {"recovery_scale": 10.0, "sq_overhead_scale": 0.1, "overhead_penalty_scale": 8.0}
+    },
+    "safety_boundaries": {
+        "enabled": True, "max_sq_threshold": 650, "min_penalty_multiplier": 20.0,
+        "max_recovery_rate": 0.10, "min_base_sampling_rate": 0.05
     }
 }
 

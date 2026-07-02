@@ -159,11 +159,18 @@ The automated harness overrides hardcoded loops, supporting continuous hardware 
 Modifiers can be flexibly placed anywhere within the command-line interface sequence:
 
 * `-c, --core <id>`: Target hardware CPU core index for taskset processor locking (Default: 9)
-* `--no-filter-only`: Force `--simulate-all` batch scheduler to execute ONLY Filter=OFF evaluation steps
-* `--filter-only`: Force `--simulate-all` batch scheduler to execute ONLY Filter=ON evaluation steps
-* `--modes "m1 m2"`: Override default execution matrix with custom target protocol simulation states
-* `--rates "r1 r2"`: Override default sweep intervals with a custom whitespace-separated list of pollution floats
-* `--disable-safety`: Disable heuristic safety clamping boundaries for the RL agent (allows raw RL outputs)
+* `-n, --no-taskset`: Disable CPU core pinning (allows dynamic OS scheduling; recommended for RL)
+* `-B, --baseline-only`: Execute ONLY Filter=OFF simulation steps (No mitigation)
+* `-F, --filter-only`: Execute ONLY Filter=ON simulation steps (Mitigation active)
+* `-m, --modes "m1 m2"`: Override default simulation scenario modes (Default: "0 1 2"):
+    * `0` = Uniform Random Attack (Malware dispersed randomly)
+    * `1` = Single Pulse Attack (Sudden burst at 30%-50% window)
+    * `2` = Periodic On-Off (5 waves of peak attack cycles)
+    * `3` = Grand Mix Scenario (Dynamic hybrid mix for RL training)
+* `-r, --rates "r1 r2"`: Override default sweep pollution density rates (e.g. `1.0 5.0 10.0` or `mix`)
+    * `mix` blends historical trajectories of multiple intensities (1.0%, 5.0%, 10.0% mode3 traces) for offline training.
+* `-o, --onnx [path]`: Enable in-process ONNX model inference during simulation
+* `-s, --disable-safety`: Disable heuristic safety clamping boundaries for the RL agent (allows raw RL outputs)
 
 ### Full-Scale Matrix Evaluation Examples
 
@@ -171,21 +178,14 @@ Modifiers can be flexibly placed anywhere within the command-line interface sequ
 # Launch default 18-node comparative matrix sweep across modes (0,1,2) and rates (1%,5%,10%)
 ./run_experiments.sh unpatched --simulate-all
 
-# Launch automated DRL training session sweeping custom pollution boundaries on pinned core indices
-./run_experiments.sh unpatched --train-rl --rates "5.0 10.0 20.0" --core 4
+# Launch automated DRL training session sweeping custom pollution boundaries without core pinning
+./run_experiments.sh unpatched --train-rl -r "5.0 10.0 20.0" -n
 
 # Execute a highly optimized baseline sweep to generate absolute unattacked 0.0% references
-./run_experiments.sh all --simulate-all --modes "0" --rates "0.0"
+./run_experiments.sh all --simulate-all -m "0" -r "0.0"
 
-```
-
-### Custom Independent Parameter Injections & Policy Overrides
-
-```bash
-# Arguments format: -t [total_frames] -p [pollution_rate] -m [attack_mode] [-f enable_filter] [--recovery r]
-./run_experiments.sh unpatched --custom -t 50000 -p 2.5 -m 0
-./run_experiments.sh unpatched --custom -t 100000 -p 5.0 -m 1 -f --recovery 0.25 --penalty 35.0 --sq-thresh 550
-
+# Run in-process ONNX inference simulation sweep without core locking
+./run_experiments.sh unpatched --simulate-all -o -n -F
 ```
 
 ---
@@ -213,7 +213,12 @@ The centralized plotting suite features a deferred lazy-loading architecture to 
 
 ## 5. Distributed Deep Reinforcement Learning Toolchain (`tools/rl_bridge/`)
 
-The framework integrates a decoupled, production-grade Proximal Policy Optimization (PPO) co-simulation engine. The DRL agent dynamically regulates the FSM parameters using a configurable action space. The C++ ONNX Runtime automatically adapts to both **3-Dimensional** or **4-Dimensional Continuous Action Spaces**:
+The framework integrates a decoupled, production-grade Proximal Policy Optimization (PPO) co-simulation engine. The DRL agent dynamically regulates the FSM parameters using a configurable action space. The C++ ONNX Runtime automatically adapts to **2-Dimensional**, **3-Dimensional**, or **4-Dimensional Continuous Action Spaces**:
+
+*   **2-Dimensional Action Space (Highly Targeted)**:
+    1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
+    2. **Mitigation Penalty Multiplier** ($a_1 \in [0.0, 100.0]$)
+    *(The S0 peacetime sampling rate is static at 0.05, and similarity count threshold is static at 650)*
 
 *   **3-Dimensional Action Space (Simplified)**:
     1. **Recovery Rate Expansion Coefficient** ($a_0 \in [0.0, 0.5]$)
@@ -264,15 +269,11 @@ reward_shaping:
 This pipeline handles real-time synchronization between the C++ network filter simulation and the PyTorch optimization engine. It utilizes a stochastic Gaussian policy distribution (`dist.sample()`) to actively explore the boundary space.
 
 ```bash
-# Navigate to the reinforcement learning bridge environment core
-cd tools/rl_bridge/
-
-# Step 1: Launch the interactive background optimization server 
-python3 scripts/train_online.py
+# Step 1: Launch the interactive background PPO server
+./run_experiments.sh python --train-online
 
 # Step 2: Open a separate terminal and trigger the C++ co-simulation harness
 ./run_experiments.sh unpatched --train-rl
-
 ```
 
 ### 5.3 Production Inference Server Deployment (Noise-Free Eval Mode)
@@ -280,15 +281,11 @@ python3 scripts/train_online.py
 Once interactive training converges, exploration noise must be deactivated to maximize defensive stability. The production server loads the trained weights, locks the layers into deterministic execution (`model.eval()`), and maps actions directly to their mathematical mean values (`action_mean`) to crush low-density exploit leakage.
 
 ```bash
-# Navigate to the reinforcement learning bridge environment core
-cd tools/rl_bridge/
-
 # Step 1: Terminate any active training loops and spin up the inference daemon
-python3 scripts/serve_agent.py
+./run_experiments.sh python --deploy
 
 # Step 2: In a separate terminal, execute the verification sweep on the C++ side
 ./run_experiments.sh unpatched --train-rl
-
 ```
 
 ### 5.4 Offline Historical Matrix Batch Optimization
@@ -296,12 +293,8 @@ python3 scripts/serve_agent.py
 For benchmarking against legacy pipelines or training policies on pre-recorded static datasets without firing up the C++ socket harness, utilize the matrix batch optimization engine. It features $K$-epoch inner-loop updates to ensure PPO advantage convergence.
 
 ```bash
-# Navigate to the reinforcement learning bridge environment core
-cd tools/rl_bridge/
-
-# Run a 20-epoch sweep across mixed dataset trace dumps
-python3 scripts/train_offline.py --rate mix --epochs 20
-
+# Run a 20-epoch sweep across mixed dataset trace dumps using short flags
+./run_experiments.sh python --train-offline -r mix -e 20
 ```
 
 ### 5.5 Static Policy Verification & Brain Auditing
@@ -310,11 +303,10 @@ Use this diagnostic CLI utility to inspect exactly what defensive decisions an e
 
 ```bash
 # Audit the interactive online brain asset
-python3 scripts/verify_brain.py -m checkpoints/v2x_online_brain.pth
+./run_experiments.sh python --verify-brain -m checkpoints/v2x_online_brain.pth
 
 # Audit the historical offline matrix brain asset
-python3 scripts/verify_brain.py -m checkpoints/v2x_offline_rmix_e20.pth
-
+./run_experiments.sh python --verify-brain -m checkpoints/v2x_offline_rmix_e20.pth
 ```
 
 ### 5.6 Model Export to ONNX (`--export-onnx`)
@@ -326,7 +318,7 @@ Once training completes, serialize the policy weights from PyTorch into an optim
 ./run_experiments.sh python --export-onnx
 ```
 
-### 5.7 In-Process C++ ONNX Inference (`--onnx`)
+### 5.7 In-Process C++ ONNX Inference (`-o, --onnx`)
 
 During deployment, use the in-process ONNX inference engine to evaluate policy decisions directly in C++ memory without python and socket IPC overhead. Ensure the libraries are fetched and linked during workspace setup:
 
@@ -334,9 +326,9 @@ During deployment, use the in-process ONNX inference engine to evaluate policy d
 # Step 1: Fetch and compile ONNX Runtime C++ dynamic dependencies
 bash setup.sh unpatch
 
-# Step 2: Run dynamic in-process ONNX inference simulation (custom example)
-./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx
+# Step 2: Run dynamic in-process ONNX inference simulation sweep (custom example)
+./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f -o
 
-# Step 3: Run dynamic ONNX inference WITHOUT heuristic safety boundaries (insurance off)
-./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f --onnx --disable-safety
+# Step 3: Run dynamic ONNX inference WITHOUT heuristic safety boundaries (safety clamp off)
+./run_experiments.sh unpatched --custom -p 1.0 -m 2 -f -o -s
 ```

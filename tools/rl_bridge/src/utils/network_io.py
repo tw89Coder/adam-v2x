@@ -3,7 +3,7 @@
 @brief Socket string parsing and serialization helper aligning with the C++ wire protocol.
 
 This module houses the NetworkIOHelper utility. It deserializes plain telemetry CSV
-strings from C++ into Python dictionaries and serializes continuous continuous action 
+strings from C++ into Python dictionaries and serializes continuous action 
 parameters into comma-separated output wire strings.
 """
 
@@ -32,10 +32,19 @@ class NetworkIOHelper:
             return None
 
     @staticmethod
-    def serialize_policy(recovery: float, penalty: float, sq_thresh: int, base_sampling: float) -> bytes:
+    def serialize_policy(parameters: list) -> bytes:
         """
-        UPGRADED: Serializes 4 continuous parameters into the extended wire protocol.
-        Format: "recovery_rate,penalty_multiplier,sq_threshold,base_sampling_rate\n"
+        Serializes a list of continuous policy parameters dynamically into the wire protocol.
+        Format: "val_0,val_1,val_2,...\n"
         """
-        payload = f"{recovery:.6f},{penalty:.6f},{int(sq_thresh)},{base_sampling:.6f}\n"
+        tokens = []
+        for val in parameters:
+            if isinstance(val, (int, bool)):
+                tokens.append(str(int(val)))
+            elif isinstance(val, float):
+                tokens.append(f"{val:.6f}")
+            else:
+                tokens.append(str(val))
+        
+        payload = ",".join(tokens) + "\n"
         return payload.encode('utf-8')

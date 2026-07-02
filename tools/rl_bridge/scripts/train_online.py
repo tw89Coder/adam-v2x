@@ -21,7 +21,9 @@ if PROJECT_ROOT not in sys.path:
 from src.config import C_INFO, C_RESET
 from src.models.policy_net import DefencePolicyNet
 from src.agents.v2x_agent import V2XAgent
-from src.pipelines.online_server import V2XOnlinePipeline
+from src.envs.online_socket_env import V2XOnlineSocketEnv
+from src.algorithms.ppo_learner import PPOLearner
+from src.main import run_online
 
 def parse_arguments():
     """
@@ -42,13 +44,14 @@ def main():
     print(f"  ├── Co-Sim Paradigm : Real-Time Closed-Loop Socket Optimization")
     print(f"  ├── Hyperparameters : Learning Rate -> [ {args.lr} ] | Batch Size -> [ {args.batch} ]")
 
-    # Layer initialization via industrial components
+    # Layer initialization via modular refactored components
     model = DefencePolicyNet()
     agent = V2XAgent(model)
+    learner = PPOLearner(agent, lr=args.lr)
+    env = V2XOnlineSocketEnv(port=args.port)
     
-    # Inject dependencies into pipeline controller
-    pipeline = V2XOnlinePipeline(agent, lr=args.lr, batch_size=args.batch)
-    pipeline.start_server(port=args.port)
+    # Run the online serving co-simulation loop
+    run_online(env, agent, learner, batch_size=args.batch)
 
 if __name__ == "__main__":
     main()
