@@ -69,7 +69,8 @@ def main():
         if os.path.isabs(args.model) or os.path.exists(args.model):
             checkpoint_path = args.model
         else:
-            checkpoint_path = os.path.join(PROJECT_ROOT, args.model)
+            from src.config import WORKSPACE_ROOT
+            checkpoint_path = os.path.join(WORKSPACE_ROOT, args.model)
     else:
         from src.config import ONLINE_BRAIN_PATH
         checkpoint_path = ONLINE_BRAIN_PATH

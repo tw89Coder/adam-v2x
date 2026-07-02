@@ -41,7 +41,11 @@ def main():
     
     # Target the optimized brain binary (command-line override takes priority)
     if args.model:
-        checkpoint_path = args.model
+        if os.path.isabs(args.model) or os.path.exists(args.model):
+            checkpoint_path = args.model
+        else:
+            from src.config import WORKSPACE_ROOT
+            checkpoint_path = os.path.join(WORKSPACE_ROOT, args.model)
         print(f"  ├── {C_INFO}Target Brain{C_RESET} : Loading user-specified checkpoint -> {checkpoint_path}")
     else:
         checkpoint_path = ONLINE_BRAIN_PATH
