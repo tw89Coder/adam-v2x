@@ -74,21 +74,21 @@ The co-simulation works as a transactional loop synchronizing Python and C++ ove
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C++ Client as C++ QoS Harness (C++)
+    participant CppClient as C++ QoS Harness (C++)
     participant Env as Socket Environment (online_socket_env)
     participant Agent as RL Agent & Action Adapter (v2x_agent)
     participant Net as Policy Net (policy_net)
     participant Learner as PPO Learner (ppo_learner)
 
-    C++ Client->>Env: Sends telemetry (avg_sq, avg_budget, anomaly_rate)
+    CppClient->>Env: Sends telemetry (avg_sq, avg_budget, anomaly_rate)
     Env->>Env: Parses telemetry & normalizes observations
     Env->>Agent: Passes normalized state tensor s_t
     Agent->>Net: Forward pass: Net(s_t)
     Net->>Agent: Returns Gaussian policy mean & state value V(s_t)
     Agent->>Agent: Samples stochastic action, executes Action Adapter mapping
     Agent->>Env: Returns 4D parameters list (clamped & combined with defaults)
-    Env->>C++ Client: Sends serialized CSV string payload over TCP
-    C++ Client->>C++ Client: Updates FSM variables & runs next simulation step
+    Env->>CppClient: Sends serialized CSV string payload over TCP
+    CppClient->>CppClient: Updates FSM variables & runs next simulation step
     Env->>Learner: Stores transition transition (s, a, r, log_p, V)
     opt When batch_size is reached
         Learner->>Learner: Computes target advantages
