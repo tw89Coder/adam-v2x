@@ -11,15 +11,15 @@ The codebase is built on **Separation of Concerns (SoC)** and **SOLID** principl
 
 ```mermaid
 graph TD
-    subgraph C++ Environment (vanetza_unpatched)
+    subgraph cpp_env ["C++ Environment (vanetza_unpatched)"]
         Harness[QoS Harness Engine] <--> Bridge[RL Bridge Client]
     end
 
-    subgraph IPC Channel (TCP Loopback)
+    subgraph ipc_channel ["IPC Channel (TCP Loopback)"]
         Bridge <-->|Port 8080 / JSON-like CSV| SocketEnv[Online Socket Env]
     end
 
-    subgraph Python DRL Bridge (tools/rl_bridge)
+    subgraph python_bridge ["Python DRL Bridge (tools/rl_bridge)"]
         SocketEnv <-->|step / reset| Agent[V2X Agent]
         Agent <-->|act / adapt| Model[Policy Net / Actor-Critic]
         Agent <-->|store transition| Buffer[Trajectory Buffer]
@@ -71,10 +71,10 @@ The reward function dynamically switches between two modes depending on the curr
 #### A. Active Attack Mitigation Mode ($o_{anomaly} \ge \theta$):
 Prioritizes preventing budget collapse and resource exhaustion.
 
-$$R_{\text{attack}} = - \left( w_{\text{penalty}} \cdot a_1 + w_{\text{sq\_overhead}} \cdot \left(\frac{a_2}{650}\right)^2 + w_{\text{budget}} \cdot \text{Violation}_{\text{budget}} \right)$$
+$$R_{\text{attack}} = - \left( w_{\text{penalty}} \cdot a_1 + w_{\text{sq}} \cdot \left(\frac{a_2}{650}\right)^2 + w_{\text{budget}} \cdot V_{\text{budget}} \right)$$
 
 * $w_{\text{penalty}} = 0.5$ (penalizes excessive rate limiting).
-* $w_{\text{sq\_overhead}} = 0.2$ (penalizes keeping sketch thresholds unnecessarily low).
+* $w_{\text{sq}} = 0.2$ (penalizes keeping sketch thresholds unnecessarily low).
 * $w_{\text{budget}} = 10.0$ (heavily penalizes cases where remaining FSM CPU budget drops near zero).
 
 #### B. Peacetime Mode ($o_{anomaly} < \theta$):
