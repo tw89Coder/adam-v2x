@@ -109,7 +109,7 @@ void RLBridge::write_csv_header() {
 void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
     PacketFeature feat{
         static_cast<float>(pkt_size) / 1500.0f,
-        static_cast<float>(max_sum_sq) / 65025.0f,ㄋ
+        static_cast<float>(max_sum_sq) / 65025.0f,
         is_anomalous ? 1.0f : 0.0f
     };
 

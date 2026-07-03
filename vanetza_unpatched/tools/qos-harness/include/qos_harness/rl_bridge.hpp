@@ -22,7 +22,6 @@ namespace qos_harness {
 };
 
 static constexpr size_t OBS_HISTORY_LEN = 100;
-std::deque<PacketFeature> packet_history_;
 
 //==================================================================
 
@@ -111,6 +110,7 @@ private:
     double window_budget_sum_ = 0;
     int window_malware_count_ = 0;
 
+    std::deque<PacketFeature> packet_history_;
     std::ofstream csv_file_;
 
     void write_csv_header();
