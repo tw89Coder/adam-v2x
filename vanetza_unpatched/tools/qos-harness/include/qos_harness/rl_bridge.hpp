@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "qos_harness/pre_filter.hpp"
 
@@ -92,7 +93,24 @@ private:
     double window_budget_sum_ = 0;
     int window_malware_count_ = 0;
 
+    /**
+     * @brief Struct storing raw telemetry fields in memory before batch flushing.
+     */
+    struct PacketTelemetry {
+        size_t pkt_size;
+        int max_sum_sq;
+        double budget;
+        int state;
+        bool is_anomalous;
+    };
+
     std::ofstream csv_file_;
+    std::vector<PacketTelemetry> packet_buffer_;
+
+    /**
+     * @brief Flushes buffered telemetry data to the CSV file on disk.
+     */
+    void flush_telemetry_buffer();
 
     void write_csv_header();
     bool handshake_with_agent(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
