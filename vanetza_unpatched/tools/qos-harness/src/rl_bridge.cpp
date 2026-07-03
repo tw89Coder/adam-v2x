@@ -105,18 +105,18 @@ void RLBridge::write_csv_header() {
  * @param state Current FSM state index (0 to 3).
  * @param is_anomalous True if the packet was dropped.
  */
-void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
-    if (csv_file_.is_open()) {
-        csv_file_ << pkt_size << "," << max_sum_sq << "," << budget << "," << state << "," << (is_anomalous ? 1 : 0)
-                  << "\n";
-    }
 
-    // Accumulate sliding window statisticians
-    window_packet_count_++;
-    window_sq_sum_ += max_sum_sq;
-    window_budget_sum_ += budget;
-    if (is_anomalous) {
-        window_malware_count_++;
+void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
+    PacketFeature feat{
+        static_cast<float>(pkt_size) / 1500.0f,
+        static_cast<float>(max_sum_sq) / 65025.0f,ㄋ
+        is_anomalous ? 1.0f : 0.0f
+    };
+
+    packet_history_.push_back(feat);
+
+    if (packet_history_.size() > OBS_HISTORY_LEN) {
+        packet_history_.pop_front();
     }
 }
 

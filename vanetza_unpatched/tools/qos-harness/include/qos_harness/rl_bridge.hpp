@@ -3,10 +3,28 @@
 
 #include <fstream>
 #include <string>
+#include <deque>
 
 #include "qos_harness/pre_filter.hpp"
 
 namespace qos_harness {
+
+//==================================================================
+//======chian: Packet Feature Array ================================
+//==================================================================
+/**
+ * @brief an entity in array presents the packet feartures 
+ */
+    struct PacketFeature {
+    float packet_size_norm;
+    float max_sum_sq_norm;
+    float is_anomalous;
+};
+
+static constexpr size_t OBS_HISTORY_LEN = 100;
+std::deque<PacketFeature> packet_history_;
+
+//==================================================================
 
 /**
  * @brief Structure holding defense policy parameters received from RL agent.
@@ -26,6 +44,7 @@ struct WindowTelemetry {
     double avg_budget;
     double anomaly_rate;
 };
+
 
 /**
  * @brief OOP Bridge manager handling telemetry logging and socket synchronization with Python RL side.
