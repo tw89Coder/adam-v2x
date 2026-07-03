@@ -1,0 +1,13 @@
+**/build/
+**/venv/
+**/.git/
+**/.vscode/
+**/.cache/
+outputs/csv_raw/
+outputs/rl_env/
+checkpoints/
+third_party/onnxruntime/
+*.tar.gz
+*.tgz
+*.pth
+*.onnx
