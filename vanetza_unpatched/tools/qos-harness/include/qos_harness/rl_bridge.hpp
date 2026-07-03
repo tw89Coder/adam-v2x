@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 #include <deque>
+#include <vector>
 
 #include "qos_harness/pre_filter.hpp"
 
@@ -42,6 +43,14 @@ struct WindowTelemetry {
     double avg_max_sum_sq;
     double avg_budget;
     double anomaly_rate;
+};
+
+struct PacketTelemetry {
+    size_t pkt_size;
+    int max_sum_sq;
+    double budget;
+    int state;
+    bool is_anomalous;
 };
 
 
