@@ -130,6 +130,7 @@ RUN_FILTER_ON=true
 RUN_ONNX=false
 ONNX_MODEL_PATH=""
 DISABLE_SAFETY=false
+RUN_TRACE=false
 
 # Default global state machine mode and pollution density spectrum arrays
 DEFAULT_MODES=(0 1 2)
@@ -141,6 +142,10 @@ POLLUTION_RATES=("${DEFAULT_RATES[@]}")
 # Loop through C++ specific arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -t|-T|--trace)
+            RUN_TRACE=true
+            shift
+            ;;
         -c|--core)
             if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
                 PIN_CORE="$2"
@@ -297,6 +302,9 @@ execute_matrix_sweep() {
                 fi
                 if [ "$DISABLE_SAFETY" = true ]; then
                     sweep_args+=("--disable-safety")
+                fi
+                if [ "$RUN_TRACE" = true ]; then
+                    sweep_args+=("--trace")
                 fi
                 execute_cmd "$exec_bin" "${sweep_args[@]}"
             fi

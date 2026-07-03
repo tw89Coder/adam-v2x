@@ -149,6 +149,7 @@ int main(int argc, char* argv[]) {
     std::string onnx_model_path = "";
     bool disable_safety = false;
     bool has_custom_policy = false;
+    bool enable_trace = false;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -193,6 +194,8 @@ int main(int argc, char* argv[]) {
             pollution_rate = std::atof(argv[++i]);
         } else if (arg == "-m" && i + 1 < argc) {
             attack_mode = std::atoi(argv[++i]);
+        } else if (arg == "--trace") {
+            enable_trace = true;
         }
     }
 
@@ -301,7 +304,9 @@ int main(int argc, char* argv[]) {
         rl_bridge.set_safety_guards(false);
     }
     rl_bridge.initialize_onnx(enable_onnx, onnx_model_path);
-    rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
+    if (enable_trace || rl_train_mode) {
+        rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
+    }
 
     vanetza::RouterFuzzingContext context;
 
@@ -390,10 +395,12 @@ int main(int argc, char* argv[]) {
 
         // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
-            if (rl_train_mode || enable_onnx) {
+            if (enable_trace || rl_train_mode) {
                 // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet);
+            }
+            if (rl_train_mode || enable_onnx) {
                 rl_bridge.check_and_sync_window(i, filter_fsm);
             }
         }

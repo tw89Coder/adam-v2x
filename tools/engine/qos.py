@@ -294,3 +294,67 @@ class QoSPlotter(BasePlotter):
         print(f"  Dropped Volumetric Ingress: {len(dropped)} / {total_in_atk} -> Effective Drop Rate: {100*len(dropped)/total_in_atk:.1f}%")
         print(f"  Benign Packets Misclassified: {len(fp)} / {total_safe} -> Empirical Matrix FPR: {100*len(fp)/total_safe:.2f}%")
         print(LogStyle.LINE + "="*60 + "\n" + LogStyle.RESET)
+
+    def plot_budget_vs_attack(self, target_mode, target_rate):
+        """
+        Plots the attack distribution curve vs risk budget curve.
+        """
+        LogStyle.log_stage(f"Generating Budget vs Attack Intensity Curve: Mode {target_mode} @ {target_rate}%")
+        
+        # 1. Try to load the structured manual FSM trace first
+        trace_filename = f"fsm_trace_rate_{float(target_rate):.1f}_mode{target_mode}.csv"
+        target_path = os.path.join(self.root_output_dir, "traces", "unpatched", trace_filename)
+        
+        # 2. Fallback to training trace path if manual trace doesn't exist
+        if not os.path.exists(target_path):
+            training_filename = f"training_trace_{float(target_rate):.1f}_mode{target_mode}.csv"
+            target_path = os.path.join(self.root_output_dir, "rl_env", training_filename)
+        
+        if not os.path.exists(target_path):
+            LogStyle.log_error(f"Required trace file does not exist (checked both traces/ and rl_env/): '{target_path}'")
+            return
+            
+        df = self._load_csv_file(target_path)
+        if df is None or df.empty:
+            LogStyle.log_error(f"Trace file is empty: '{target_path}'")
+            return
+            
+        if 'max_sum_sq' not in df.columns or 'current_budget' not in df.columns:
+            LogStyle.log_error(f"Trace file is missing required columns in '{target_path}'")
+            return
+
+        # Smooth using rolling average (1000 packets window)
+        window = 1000
+        df['smoothed_max_sum_sq'] = df['max_sum_sq'].rolling(window=window, min_periods=1).mean()
+        df['smoothed_budget'] = df['current_budget'].rolling(window=window, min_periods=1).mean()
+
+        # Downsample to speed up rendering
+        plot_df = df.iloc[::100].reset_index(drop=True)
+
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+
+        # Left Axis: Attack Intensity (F2 Sketch Square Sum)
+        color = '#d62728'
+        ax1.set_xlabel('Packet Index')
+        ax1.set_ylabel('Attack Intensity (Smoothed F2 Sum Sq)', color=color)
+        line1 = ax1.plot(plot_df.index * 100, plot_df['smoothed_max_sum_sq'], color=color, label='Attack Intensity', alpha=0.8)
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, linestyle=':', alpha=0.6)
+
+        # Right Axis: FSM Virtual CPU Budget
+        ax2 = ax1.twinx()
+        color = '#1f77b4'
+        ax2.set_ylabel('Virtual CPU Risk Budget (0-100)', color=color)
+        line2 = ax2.plot(plot_df.index * 100, plot_df['smoothed_budget'], color=color, label='Risk Budget', alpha=0.8, linestyle='--')
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        # Combine legend
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='upper right')
+
+        plt.title(f'Attack Distribution vs Risk Budget Curve (Mode {target_mode} @ {target_rate}%)')
+
+        self.export_figure(fig, "qos/budget", f"budget_vs_attack_mode{target_mode}_{target_rate}pct")
+        plt.close(fig)
+        LogStyle.log_success(f"Budget curve generated successfully.")

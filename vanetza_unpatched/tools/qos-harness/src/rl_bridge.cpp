@@ -63,14 +63,30 @@ RLBridge::~RLBridge() {
 void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_mode) {
     socket_enabled_ = enable_socket;
 
-    // Create outputs folder for reinforcement learning offline/online telemetry
-    std::string dir_path = repo_root_ + "/outputs/rl_env";
-    mkdir(dir_path.c_str(), 0755);
-
-    // Route trace files dynamically to prevent overlapping executions from overwriting matrices
+    std::string dir_path;
     char file_path[512];
-    std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
-                  attack_mode);
+
+    if (socket_enabled_) {
+        // [DRL Training Mode] output to outputs/rl_env
+        dir_path = repo_root_ + "/outputs/rl_env";
+        mkdir(dir_path.c_str(), 0755);
+        std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
+                      attack_mode);
+    } else {
+        // [Manual Trace Mode] output to outputs/traces/{build_type}/
+        std::string build_type = "unpatched";
+        if (repo_root_.find("vanetza_patched") != std::string::npos) {
+            build_type = "patched";
+        }
+
+        std::string base_dir = repo_root_ + "/outputs/traces";
+        mkdir(base_dir.c_str(), 0755);
+        dir_path = base_dir + "/" + build_type;
+        mkdir(dir_path.c_str(), 0755);
+
+        std::snprintf(file_path, sizeof(file_path), "%s/fsm_trace_rate_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
+                      attack_mode);
+    }
 
     // Open file using truncation to ensure clean episodic runs
     csv_file_.open(file_path, std::ios::out);
@@ -107,6 +123,11 @@ void RLBridge::write_csv_header() {
  */
 
 void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
+    if (csv_file_.is_open()) {
+        csv_file_ << pkt_size << "," << max_sum_sq << "," << budget << "," << state << "," << (is_anomalous ? 1 : 0)
+                  << "\n";
+    }
+
     PacketFeature feat{
         static_cast<float>(pkt_size) / 1500.0f,
         static_cast<float>(max_sum_sq) / 65025.0f,

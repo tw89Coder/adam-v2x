@@ -1,3 +1,21 @@
+/**
+ * @file amplification_profiler.cpp
+ * @brief Implementation of the V2X parsing latency profiler and flood region diagnostic tool.
+ * 
+ * DESIGN CONTEXT & ARCHITECTURAL ROLE:
+ * This module measures, diagnoses, and profiles parser CPU workload amplification 
+ * factors. It compares baseline standards-compliant packets with mutated 
+ * ASN.1 recursion exploits (CWE-674) to quantify performance degradation and 
+ * establish defensive benchmarks under strict Maximum Transmission Unit (MTU) barriers.
+ * 
+ * PROFILING METHODOLOGY:
+ * - Benchmarks processing latencies by feeding packet payloads to the parser harness.
+ * - Simulates mutated payloads by grafting various structural flood strategies onto the 
+ *   ASN.1 exploit header region.
+ * - Sweeps total packet sizes up to the MTU limit (1400 bytes) to characterize the scaling 
+ *   factor of structural recursion amplification.
+ */
+
 #include "qos_harness/amplification_profiler.hpp"
 
 #include <sys/stat.h>
@@ -17,29 +35,44 @@
 namespace qos_harness {
 
 namespace {
+
+/**
+ * @brief Telemetry results representing a baseline packet latency benchmark.
+ */
 struct BaselineResult {
-    long long avg_ns;
-    long long median_ns;
-    long long min_ns;
-    long long max_ns;
-    int valid_runs;
-    int crashed_runs;
+    long long avg_ns;       // Average parsing duration in nanoseconds
+    long long median_ns;    // Median parsing duration in nanoseconds
+    long long min_ns;       // Minimum observed latency in nanoseconds
+    long long max_ns;       // Maximum observed latency in nanoseconds
+    int valid_runs;         // Count of successful parsing trials
+    int crashed_runs;       // Count of trials resulting in parser errors or crashes
 };
 
+/**
+ * @brief Telemetry results representing a fuzzed size probe execution.
+ */
 struct ProbeResult {
-    long long avg_ns;
-    long long median_ns;
-    long long min_ns;
-    long long max_ns;
-    int valid_runs;
-    int crashed_runs;
-    bool sufficient;
+    long long avg_ns;       // Average latency in nanoseconds
+    long long median_ns;    // Median latency in nanoseconds
+    long long min_ns;       // Minimum observed latency
+    long long max_ns;       // Maximum observed latency
+    int valid_runs;         // Successful parsing runs
+    int crashed_runs;       // Parser rejection runs
+    bool sufficient;        // True if the minimum valid runs requirement was met
 };
 
-const size_t MTU_LIMIT = 1400;
-const double SIZE_STEP_FACTOR = 1.10;
-const size_t EXPLOIT_HEADER_SIZE = 64;
+const size_t MTU_LIMIT = 1400;              // Standard MTU capacity ceiling
+const double SIZE_STEP_FACTOR = 1.10;       // Multiplier for geometric size progressions
+const size_t EXPLOIT_HEADER_SIZE = 64;      // exploit offset separating the structural headers
 
+/**
+ * @brief Measures latency statistics for a packet buffer across repeated benchmark trials.
+ * 
+ * @param pkt Packet byte buffer payload.
+ * @param runs Total count of parsing runs.
+ * @param label Console output prefix string.
+ * @return BaselineResult containing latency statistics.
+ */
 BaselineResult measureRepeatedLatency(const vanetza::ByteBuffer& pkt, int runs, const std::string& label) {
     BaselineResult r = {0, 0, LLONG_MAX, 0, 0, 0};
     std::vector<long long> samples;
@@ -55,6 +88,8 @@ BaselineResult measureRepeatedLatency(const vanetza::ByteBuffer& pkt, int runs, 
         } else {
             r.crashed_runs++;
         }
+        
+        // Output progress based on size and category classification labels
         long long current_med = !samples.empty() ? samples[samples.size() / 2] : 0LL;
         if (pkt.size() <= 400 && label == "baseline") {
             ConsolePresenter::printBaselineProgress("baseline", i + 1, runs, r.valid_runs, r.crashed_runs,
@@ -73,11 +108,18 @@ BaselineResult measureRepeatedLatency(const vanetza::ByteBuffer& pkt, int runs, 
     for (const long long s : samples) total += s;
     r.avg_ns = total / (long long)samples.size();
 
+    // Sort to extract the median latency sample
     std::sort(samples.begin(), samples.end());
     r.median_ns = samples[samples.size() / 2];
     return r;
 }
 
+/**
+ * @brief Computes a geometric sequence of target packet sizes up to the MTU capacity limit.
+ * 
+ * @param poc_size Starting packet size in bytes.
+ * @return Vector of target sizes in bytes.
+ */
 std::vector<size_t> buildSizeSteps(size_t poc_size) {
     std::vector<size_t> steps;
     double total = static_cast<double>(poc_size);
@@ -94,6 +136,17 @@ std::vector<size_t> buildSizeSteps(size_t poc_size) {
     return steps;
 }
 
+/**
+ * @brief Evaluates various flood payloads for a given target size to find the most potent mutation.
+ * 
+ * @param poc_packet Base POC exploit buffer.
+ * @param target_total Desired total packet size in bytes.
+ * @param exploit_header_size exploit header size threshold separating ASN.1 headers.
+ * @param runs_per_size Count of benchmark runs to execute.
+ * @param min_valid_runs Minimum count of valid runs required to accept a strategy.
+ * @param max_attempts_factor Scaling factor limiting maximum trials.
+ * @return ProbeResult containing the best strategy's performance telemetry.
+ */
 ProbeResult probeOneSize(const vanetza::ByteBuffer& poc_packet, size_t target_total, size_t exploit_header_size,
                          int runs_per_size, int min_valid_runs, int max_attempts_factor) {
     ProbeResult best = {0, 0, LLONG_MAX, 0, 0, 0, false};
@@ -104,6 +157,7 @@ ProbeResult probeOneSize(const vanetza::ByteBuffer& poc_packet, size_t target_to
     auto strategies = TrafficGenerator::makeStrategies();
     int total_attempts = 0, total_rejected = 0;
 
+    // Iterate through all fuzzer flood strategies to find the one causing the highest median latency
     for (int si = 0; si < (int)strategies.size(); si++) {
         const auto& [name, fn] = strategies[si];
         vanetza::ByteBuffer test_pkt(exploit_header_size);
@@ -143,6 +197,7 @@ ProbeResult probeOneSize(const vanetza::ByteBuffer& poc_packet, size_t target_to
         for (const long long s : samples) total_lat += s;
         long long avg = total_lat / valid;
 
+        // Keep the strategy that yields the worst-case (highest) median processing latency
         if (!best.sufficient || median > best.median_ns) {
             best.avg_ns = avg;
             best.median_ns = median;
@@ -163,6 +218,12 @@ ProbeResult probeOneSize(const vanetza::ByteBuffer& poc_packet, size_t target_to
 }
 }  // namespace
 
+/**
+ * @brief Compares normal traffic vs. exploit packets and analyzes the workload contribution
+ *        of mutated suffix structures.
+ * 
+ * @param poc_packet Base exploit packet buffer.
+ */
 void AmplificationProfiler::runFloodDiagnosis(const vanetza::ByteBuffer& poc_packet) {
     ConsolePresenter::printDiagnosisHeader();
     const int RUNS = 10000;
@@ -189,6 +250,7 @@ void AmplificationProfiler::runFloodDiagnosis(const vanetza::ByteBuffer& poc_pac
         ConsolePresenter::printRatioRow("POC / NORMAL ratio:", poc_vs_normal_ratio);
     }
 
+    // Build mutated test packets to isolate parsing bottlenecks
     vanetza::ByteBuffer var_02 = poc_packet;
     vanetza::ByteBuffer var_00 = poc_packet;
     for (size_t i = EXPLOIT_HEADER_SIZE; i < var_00.size(); ++i) {
@@ -220,6 +282,12 @@ void AmplificationProfiler::runFloodDiagnosis(const vanetza::ByteBuffer& poc_pac
     ConsolePresenter::printDiagnosisEndBox();
 }
 
+/**
+ * @brief Automatically executes geometric packet size sweeps, generates target payloads,
+ *        and logs processing metrics to a CSV profile.
+ * 
+ * @param poc_packet Base exploit packet buffer.
+ */
 void AmplificationProfiler::runAmplificationProfiling(const vanetza::ByteBuffer& poc_packet) {
     ConsolePresenter::printProfilerHeader();
     const int RUNS_PER_SIZE = 10000;

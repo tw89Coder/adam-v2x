@@ -19,9 +19,9 @@ def main():
     )
     
     parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
-    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug'], help="Isolate target execution pipelines.")
-    parser.add_argument('--mode', type=int, choices=[0, 1, 2], default=0, help="Target protocol simulation state logic mode (Default: 0).")
-    parser.add_argument('--rate', type=float, choices=[1.0, 5.0, 10.0], default=10.0, help="Attack intensity flood multiplier scaling percentage (Default: 10.0).")
+    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget'], help="Isolate target execution pipelines.")
+    parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
+    parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
 
     args = parser.parse_args()
@@ -64,7 +64,9 @@ def main():
 
         elif args.type == 'qos':
             qos_engine.compute_all_combinations_stats()
-            qos_engine.plot_master_cdf(target_mode=args.mode, target_rate=args.rate)
+            rates = [float(r) for r in args.rate.split()]
+            for r in rates:
+                qos_engine.plot_master_cdf(target_mode=args.mode, target_rate=r)
 
         elif args.type == 'timeline':
             qos_engine.plot_pulse_timeline()
@@ -72,6 +74,11 @@ def main():
 
         elif args.type == 'debug':
             qos_engine.print_diagnostic_debug()
+
+        elif args.type == 'budget':
+            rates = [float(r) for r in args.rate.split()]
+            for r in rates:
+                qos_engine.plot_budget_vs_attack(target_mode=args.mode, target_rate=r)
 
     except KeyboardInterrupt:
         print(f"\n{LogStyle.WARN}[SIGINT DETECTED] Processing loop gracefully aborted by user event link.{LogStyle.RESET}\n")
