@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  rl-bridge:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: v2x-qos-bridge:latest
+    container_name: v2x-rl-bridge
+    command: ["/workspace/tools/rl_bridge/venv/bin/python3", "/workspace/tools/rl_bridge/scripts/train_online.py"]
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount the project root to synchronize code edits in real-time
+      - .:/workspace
+      # Protect and preserve the container's built-in virtualenv and third-party libraries
+      - /workspace/tools/rl_bridge/venv
+      - /workspace/third_party
+    stdin_open: true
+    tty: true
+
+  qos-simulation:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: v2x-qos-bridge:latest
+    container_name: v2x-qos-simulation
+    # Use network_mode: "service:rl-bridge" so the C++ simulation shares the exact localhost
+    # network namespace as the python server. This enables communication on 127.0.0.1:8080.
+    network_mode: "service:rl-bridge"
+    # Delay startup slightly to guarantee that the Python server is listening on port 8080
+    command: >
+      bash -c "sleep 3 && ./run_experiments.sh unpatched --train-rl"
+    environment:
+      # Configure the dynamic library loader to find the ONNX Runtime library inside the container
+      - LD_LIBRARY_PATH=/workspace/third_party/onnxruntime/lib
+    volumes:
+      # Mount project root and preserve container libraries identically to the bridge
+      - .:/workspace
+      - /workspace/tools/rl_bridge/venv
+      - /workspace/third_party
+      # Protect and preserve the container-built binaries to prevent host WSL builds from masking them
+      - /workspace/vanetza_unpatched/build
+      - /workspace/vanetza_patched/build
+    depends_on:
+      - rl-bridge
