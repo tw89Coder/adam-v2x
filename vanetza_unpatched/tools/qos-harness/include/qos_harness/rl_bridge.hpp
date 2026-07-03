@@ -112,6 +112,12 @@ private:
 
     std::deque<PacketFeature> packet_history_;
     std::ofstream csv_file_;
+    std::vector<PacketTelemetry> packet_buffer_;
+
+    /**
+     * @brief Flushes buffered telemetry data to the CSV file on disk.
+     */
+    void flush_telemetry_buffer();
 
     void write_csv_header();
     bool handshake_with_agent(const WindowTelemetry& telemetry, FilterPolicy& out_policy);

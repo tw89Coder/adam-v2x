@@ -48,6 +48,8 @@ RLBridge::~RLBridge() {
     if (server_fd_ >= 0) {
         close(server_fd_);
     }
+    // Batching Optimization: Flush any remaining packet data in the buffer to disk before closing the file.
+    flush_telemetry_buffer();
     if (csv_file_.is_open()) {
         csv_file_.close();
     }
@@ -124,8 +126,12 @@ void RLBridge::write_csv_header() {
 
 void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
     if (csv_file_.is_open()) {
-        csv_file_ << pkt_size << "," << max_sum_sq << "," << budget << "," << state << "," << (is_anomalous ? 1 : 0)
-                  << "\n";
+        // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on IO),
+        // we store the data in an in-memory buffer and batch-flush it.
+        packet_buffer_.push_back({pkt_size, max_sum_sq, budget, state, is_anomalous});
+        if (packet_buffer_.size() >= static_cast<size_t>(CTRL_WINDOW_SIZE)) {
+            flush_telemetry_buffer();
+        }
     }
 
     PacketFeature feat{
@@ -233,10 +239,19 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
     }
 
     // Extract policy tokens and write to output parameters
-    out_policy.recovery_rate = std::stod(res.substr(0, pos1));
-    out_policy.penalty_multiplier = std::stod(res.substr(pos1 + 1, pos2 - pos1 - 1));
-    out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1, pos3 - pos2 - 1));
-    out_policy.base_sampling_rate = std::stod(res.substr(pos3 + 1));  // Dynamically regulated by DRL
+    // CWE-248 Mitigation: Wrap string-to-numeric conversions in a try-catch block.
+    // If the socket receives malformed, incomplete data, or non-numeric error output from Python,
+    // stod/stoi throws exceptions. Catching them prevents the simulator from crashing,
+    // allowing the caller to fallback to safe baseline heuristic parameters.
+    try {
+        out_policy.recovery_rate = std::stod(res.substr(0, pos1));
+        out_policy.penalty_multiplier = std::stod(res.substr(pos1 + 1, pos2 - pos1 - 1));
+        out_policy.sq_threshold = std::stoi(res.substr(pos2 + 1, pos3 - pos2 - 1));
+        out_policy.base_sampling_rate = std::stod(res.substr(pos3 + 1));  // Dynamically regulated by DRL
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] Parsing policy variables from network failed: " << e.what() << "\n";
+        return false;
+    }
 
     return true;
 }
@@ -244,36 +259,48 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
 #ifdef USE_ONNX
 bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
     try {
-        // Initialize ONNX Runtime Env and Session on first call (thread-safe static initialization)
+        // ONNX Environment and Session initialization.
+        // Using "static" ensures that the ONNX Environment, session options, and network weights
+        // are loaded and compiled exactly once on the first call (lazy initialization).
+        // This is safe since the simulation engine runs on a single main thread.
         static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "V2X_ONNX_Inference");
         static Ort::SessionOptions session_options;
+        
+        // Single-threaded configuration: 
+        // Force ONNX Runtime to use exactly 1 thread for internal operators. This eliminates OS scheduling jitter,
+        // context-switch overhead, and potential CPU resource contention with the V2X simulator's main thread.
         session_options.SetIntraOpNumThreads(1);
         session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
         
+        // Load the ONNX model from the specified filesystem path and instantiate the session.
         static Ort::Session session(env, onnx_model_path_.c_str(), session_options);
         
-        // Input Node Names and Shapes
+        // Inspect model input/output metadata.
+        // We retrieve the static input and output names using the default allocator.
         static Ort::AllocatorWithDefaultOptions allocator;
         static Ort::AllocatedStringPtr input_name_ptr = session.GetInputNameAllocated(0, allocator);
         static Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
         const char* input_name = input_name_ptr.get();
         const char* output_name = output_name_ptr.get();
         
-        // Dynamic Dimension Inspection: check shape of output
+        // Dynamic Dimension Inspection:
+        // Read output tensor description to determine the model's action dimension dynamically.
+        // This allows C++ to seamlessly support 2D, 3D, or 4D models without code modifications.
         auto output_type_info = session.GetOutputTypeInfo(0);
         auto output_tensor_info = output_type_info.GetTensorTypeAndShapeInfo();
         std::vector<int64_t> output_shape = output_tensor_info.GetShape();
         
-        // Output dimension is the last dimension of the shape array
+        // The last element of output shape vector is the action dimension (e.g. 2, 3, or 4).
         size_t action_dim = output_shape.back();
 
         // 1. Prepare Input Tensor (Shape: 1x3)
-        // Replicate Python feature engineering alignment:
-        // simulated_size = (anomaly_rate > 0.05) ? 1400.0 : 325.0
+        // Feature Engineering Alignment:
+        // Construct the normalized 3D state vector exactly matching Python training pipelines.
+        // Simulated packet size is mapped stochastically depending on anomaly rate (325.0 during nominal, 1400.0 during attack).
         // Features:
-        // 0: simulated_size / 1500.0 (MAX_PACKET_SIZE)
-        // 1: avg_max_sum_sq / 65025.0 (MAX_F2_SQ)
-        // 2: anomaly_rate
+        // [0]: normalized_packet_size (0.0 to 1.0)
+        // [1]: normalized_max_f2_similarity (0.0 to 1.0)
+        // [2]: raw_anomaly_rate (0.0 to 1.0)
         float simulated_size = (telemetry.anomaly_rate > 0.05f) ? 1400.0f : 325.0f;
         std::vector<int64_t> input_shape = {1, 3};
         std::vector<float> input_tensor_values = {
@@ -282,13 +309,14 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             static_cast<float>(telemetry.anomaly_rate)
         };
 
+        // Create the CPU tensor representation. The memory is allocated locally on the thread's stack.
         auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
             memory_info, input_tensor_values.data(), input_tensor_values.size(),
             input_shape.data(), input_shape.size()
         );
 
-        // 2. Run ONNX Session Inference
+        // 2. Execute ONNX Model Inference (Synchronous feedforward pass)
         const char* input_names[] = {input_name};
         const char* output_names[] = {output_name};
         
@@ -296,44 +324,41 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1
         );
 
+        // Retrieve raw floating point outputs from the output tensor.
         float* float_output = output_tensors.front().GetTensorMutableData<float>();
 
-        // 3. Dynamic Action Space Mapping (Handles 3D vs 4D outputs)
+        // 3. Dynamic Action Space Mapping (Adapts to model complexity)
         if (action_dim == 4) {
-            // 4D Action Space: [recovery, penalty, sq_thresh, sampling_rate]
+            // 4D Model Output: [recovery_rate, penalty_multiplier, sq_threshold, base_sampling_rate]
             out_policy.recovery_rate = float_output[0] * 0.5;
             out_policy.penalty_multiplier = float_output[1] * 100.0;
             out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-            out_policy.base_sampling_rate = float_output[3]; // Sigmoid output [0.0, 1.0]
+            out_policy.base_sampling_rate = float_output[3];
         } 
         else if (action_dim == 3) {
-            // 3D Action Space: [recovery, penalty, sq_thresh]
+            // 3D Model Output: [recovery_rate, penalty_multiplier, sq_threshold]
             out_policy.recovery_rate = float_output[0] * 0.5;
             out_policy.penalty_multiplier = float_output[1] * 100.0;
             out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
             
-            // Dynamic S0 Peacetime Active Inspection Sampling Rate calculation:
-            // sampling_rate = (1 / risk_budget) * k * 100%
-            // In C++, telemetry.avg_budget represents the average remaining CPU budget [0.0, 1.0].
-            // To prevent division by zero, we enforce a minimum budget floor.
+            // Derive active sampling rate heuristically from current budget (stateless feedback loop)
             double current_budget = telemetry.avg_budget;
             if (current_budget < 0.01) current_budget = 0.01;
             
-            double k = 0.01; // Constant factor
+            double k = 0.01; // Scale factor matching safe heuristics
             double calculated_rate = (1.0 / current_budget) * k;
             
-            // Enforce bounds [0.0, 1.0]
             if (calculated_rate < 0.0) calculated_rate = 0.0;
             if (calculated_rate > 1.0) calculated_rate = 1.0;
             
             out_policy.base_sampling_rate = calculated_rate;
         } 
         else if (action_dim == 2) {
-            // 2D Action Space: [recovery, penalty]
+            // 2D Model Output: [recovery_rate, penalty_multiplier]
             out_policy.recovery_rate = float_output[0] * 0.5;
             out_policy.penalty_multiplier = float_output[1] * 100.0;
             
-            // Static defaults for the non-RL controlled variables
+            // Set static defaults for remaining unmanaged variables
             out_policy.sq_threshold = 650;
             out_policy.base_sampling_rate = 0.05;
         }
@@ -342,7 +367,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             return false;
         }
 
-        // 4. Enforce Heuristic Safety Boundaries to prevent RL from going crazy (FNR protection)
+        // 4. Heuristic Safety Clamping (Layer 2 Safeguard)
+        // Keeps actions bounded within empirically proven safety limits to guarantee FNR performance floors.
         if (safety_guards_enabled_) {
             if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
             if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
@@ -367,5 +393,15 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
     return false;
 }
 #endif
+
+void RLBridge::flush_telemetry_buffer() {
+    if (csv_file_.is_open() && !packet_buffer_.empty()) {
+        for (const auto& pkt : packet_buffer_) {
+            csv_file_ << pkt.pkt_size << "," << pkt.max_sum_sq << "," << pkt.budget << "," << pkt.state << ","
+                      << (pkt.is_anomalous ? 1 : 0) << "\n";
+        }
+        packet_buffer_.clear();
+    }
+}
 
 }  // namespace qos_harness
