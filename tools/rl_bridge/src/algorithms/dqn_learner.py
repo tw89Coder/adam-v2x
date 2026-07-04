@@ -194,13 +194,15 @@ def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None):
     translator = DqnActionTranslator()
     reward_strategy = DqnSamplingReward()
     
-    model = DQNNet()
-    agent = DQNAgent(model, action_translator=translator)
-    
     if mode == "online":
         env = V2XOnlineSocketEnv(port=port, action_translator=translator, reward_strategy=reward_strategy)
     else:
         env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
         
+    state_dim = len(env.active_features) if hasattr(env, "active_features") else 3
+    action_dim = translator.get_action_space().n
+    
+    model = DQNNet(state_dim=state_dim, action_dim=action_dim)
+    agent = DQNAgent(model, action_translator=translator)
     learner = DQNLearner(agent, lr=lr)
     return env, agent, learner
