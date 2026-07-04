@@ -48,6 +48,7 @@ struct WindowTelemetry {
 struct PacketTelemetry {
     size_t pkt_size;
     int max_sum_sq;
+    double budget;
     int state;
     bool is_anomalous;
 };
