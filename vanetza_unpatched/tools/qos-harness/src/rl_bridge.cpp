@@ -133,18 +133,26 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
             flush_telemetry_buffer();
         }
     }
-
+    
+    //===================================================================================
+    //================== Chi-Aan: An array of each packet's features . ==================
+    //===================================================================================
     PacketFeature feat{
         static_cast<float>(pkt_size) / 1500.0f,
         static_cast<float>(max_sum_sq) / 65025.0f,
         is_anomalous ? 1.0f : 0.0f
     };
 
-    packet_history_.push_back(feat);
+    packet_feature_arr.push_back(feat);
 
-    if (packet_history_.size() > OBS_HISTORY_LEN) {
-        packet_history_.pop_front();
+    if (packet_feature_arr.size() > OBS_HISTORY_LEN) {
+        packet_feature_arr.pop_front();
+
+    
     }
+
+
+
 }
 
 /**

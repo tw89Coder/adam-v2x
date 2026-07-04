@@ -48,7 +48,6 @@ struct WindowTelemetry {
 struct PacketTelemetry {
     size_t pkt_size;
     int max_sum_sq;
-    double budget;
     int state;
     bool is_anomalous;
 };
@@ -118,8 +117,8 @@ private:
     double window_sq_sum_ = 0;
     double window_budget_sum_ = 0;
     int window_malware_count_ = 0;
-
-    std::deque<PacketFeature> packet_history_;
+    
+    std::deque<PacketFeature> packet_feature_arr;
     std::ofstream csv_file_;
     std::vector<PacketTelemetry> packet_buffer_;
 
