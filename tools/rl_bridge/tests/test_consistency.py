@@ -1,15 +1,15 @@
 """
 @file test_consistency.py
-@brief Unit test validating consistency between Python DRL strategies and PyTorch ONNX deployment wrappers.
-Guarantees zero Training-Serving Skew.
+@brief pytest unit test asserting mathematical equivalence between Python translation strategies and ONNX wrappers.
 """
 
 import os
 import sys
 import torch
 import numpy as np
+import pytest
 
-# Ensure absolute paths resolve relative to Python root tools/rl_bridge
+# Adjust sys.path to find src modules relative to Python root tools/rl_bridge
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
@@ -29,16 +29,16 @@ def cpp_scale(onnx_output):
     base_sampling_rate = onnx_output[3]
     return [recovery, penalty, sq_threshold, base_sampling_rate]
 
-def test_dqn_consistency():
-    print("[TEST] Running DQN Action Translator vs. ONNX Wrapper consistency check...")
-    
-    # 1. Setup parameters
+@pytest.fixture
+def dqn_setup():
+    """
+    pytest fixture supplying initialized dqn network, translator, and deployment wrapper.
+    """
     state_dim = 3
     action_dim = 5
     hidden_dim = 64
     action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
     
-    # 2. Instantiate networks
     dqn_net = DQNNet(state_dim=state_dim, action_dim=action_dim, hidden_dim=hidden_dim)
     dqn_net.eval()
     
@@ -46,8 +46,14 @@ def test_dqn_consistency():
     wrapper.eval()
     
     translator = DqnActionTranslator(action_map=action_map)
+    return dqn_net, wrapper, translator, action_map
+
+def test_dqn_translation_consistency(dqn_setup):
+    """
+    Asserts that Python DqnActionTranslator outputs match the C++-scaled ONNX wrapper outputs.
+    """
+    dqn_net, wrapper, translator, action_map = dqn_setup
     
-    # 3. Generate random observations
     np.random.seed(42)
     torch.manual_seed(42)
     
@@ -62,12 +68,10 @@ def test_dqn_consistency():
         
     test_tensor = torch.tensor(test_states, dtype=torch.float32)
     
-    # 4. Run predictions
     with torch.no_grad():
         q_values = dqn_net(test_tensor)
         wrapper_outputs = wrapper(test_tensor)
         
-    # 5. Assert consistency
     for i in range(num_samples):
         state = test_states[i]
         curr_rate = state[0]
@@ -81,18 +85,10 @@ def test_dqn_consistency():
         onnx_out = wrapper_outputs[i].tolist()
         cpp_output = cpp_scale(onnx_out)
         
-        # Assert equal values
+        # Assert element-wise equality within tolerance
         for val_py, val_cpp in zip(py_output, cpp_output):
             assert abs(val_py - val_cpp) < 1e-4, (
-                f"Training-Serving Skew detected at sample {i}!\n"
-                f"State: {state}\n"
-                f"Action Map: {action_map}\n"
-                f"Chosen discrete index: {best_action}\n"
-                f"Python output: {py_output}\n"
-                f"ONNX C++ scaled output: {cpp_output}"
+                f"Skew detected at sample {i}! "
+                f"State: {state}, chosen action index: {best_action}. "
+                f"Python: {py_output}, ONNX C++: {cpp_output}"
             )
-            
-    print(f"[SUCCESS] Checked {num_samples} samples. Python and ONNX Wrapper are 100% consistent!")
-
-if __name__ == "__main__":
-    test_dqn_consistency()

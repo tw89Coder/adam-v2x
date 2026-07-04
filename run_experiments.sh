@@ -41,6 +41,7 @@ print_usage() {
     echo -e "  ${C_WARN}--verify-brain${C_RESET}       Audit brain checkpoints on baseline scenarios"
     echo -e "  ${C_WARN}--export-onnx${C_RESET}        Export trained PyTorch model weights to ONNX format"
     echo -e "  ${C_WARN}--plot${C_RESET}               Execute verification and plotting engine scripts"
+    echo -e "  ${C_WARN}--test${C_RESET}               Run python strategy consistency unit tests via pytest"
     echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
     echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
     echo -e ""
@@ -97,6 +98,20 @@ if [ "$1" = "python" ]; then
         --plot)
             # Plot engine is in the tools folder
             SCRIPT="../plot_engine.py"
+            ;;
+        --test|--run-tests)
+            # Unified testing entry point executing consistency checks via pytest
+            PYTHON_EXEC="${ROOT_DIR}/tools/rl_bridge/venv/bin/python3"
+            if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
+            
+            if "$PYTHON_EXEC" -c "import pytest" &>/dev/null; then
+                echo -e "${C_INFO}[*] Running consistency tests via pytest...${C_RESET}"
+                exec "$PYTHON_EXEC" -m pytest "${ROOT_DIR}/tools/rl_bridge/tests/test_consistency.py" "$@"
+            else
+                echo -e "${C_ERROR}[ERROR] pytest is not installed in the virtual environment.${C_RESET}"
+                echo -e "${C_WARN}[SUGGESTION] Please install it using: tools/rl_bridge/venv/bin/pip install pytest${C_RESET}"
+                exit 1
+            fi
             ;;
         *)
             print_usage
