@@ -14,23 +14,29 @@ class NetworkIOHelper:
     Utility class handling IPC wire serialization/deserialization.
     """
     @staticmethod
-    def parse_telemetry(data_str: str):
+    def parse_telemetry(raw_bytes: bytes):
         """
-        Parses incoming telemetry CSV from C++ socket.
-        Format: "avg_max_sum_sq,instant_sampling_rate,anomaly_rate[,true_anomaly_rate]\n"
+        Parses incoming binary telemetry payload from C++ socket.
+        Format: tp_count(I), tn_count(I), fp_count(I), fn_count(I), inspected_count(I), total_sq(Q), total_latency_ticks(Q), current_sampling_rate(f)
+        Total size: 40 bytes.
         """
+        import struct
+        PAYLOAD_FORMAT = '<IIIIIQQf'
         try:
-            tokens = data_str.strip().split(',')
-            if len(tokens) < 3:
+            if len(raw_bytes) < 40:
                 return None
+            unpacked = struct.unpack(PAYLOAD_FORMAT, raw_bytes[:40])
             return {
-                "avg_sq": float(tokens[0]),
-                "avg_budget": float(tokens[1]),           # Keep for backward compatibility with older PPO envs
-                "instant_sampling_rate": float(tokens[1]),  # Direct mapping of the second field
-                "anomaly_rate": float(tokens[2]),
-                "true_anomaly_rate": float(tokens[3]) if len(tokens) >= 4 else 0.0
+                "tp_count": unpacked[0],
+                "tn_count": unpacked[1],
+                "fp_count": unpacked[2],
+                "fn_count": unpacked[3],
+                "inspected_count": unpacked[4],
+                "total_sq": unpacked[5],
+                "total_latency_ticks": unpacked[6],
+                "instant_sampling_rate": unpacked[7]
             }
-        except ValueError:
+        except Exception:
             return None
 
     @staticmethod

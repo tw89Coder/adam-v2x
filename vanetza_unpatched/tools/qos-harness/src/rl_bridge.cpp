@@ -124,7 +124,7 @@ void RLBridge::write_csv_header() {
  * @param is_anomalous True if the packet was dropped.
  */
 
-void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware) {
+void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware, bool inspected, uint64_t latency_ticks) {
     if (csv_file_.is_open()) {
         // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on IO),
         // we store the data in an in-memory buffer and batch-flush it.
@@ -149,16 +149,27 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
         packet_feature_arr.pop_front();
     }
 
-    // Accumulate sliding window statistics for DQN/PPO observations
-    window_packet_count_++;
-    window_sq_sum_ += max_sum_sq;
-    window_budget_sum_ += budget;
-    if (is_anomalous) {
-        window_malware_count_++;
-    }
+    // Classify packet into confusion matrix categories for structural byte dumping
     if (is_malware) {
-        window_real_malware_count_++;
+        if (is_anomalous) {
+            window_tp_count_++;
+        } else {
+            window_fn_count_++; // Malware allowed = Leakage
+        }
+    } else {
+        if (is_anomalous) {
+            window_fp_count_++; // Benign dropped = False Positive
+        } else {
+            window_tn_count_++; // Benign allowed = True Negative
+        }
     }
+
+    if (inspected) {
+        window_inspected_count_++;
+    }
+
+    window_sq_sum_ += max_sum_sq;
+    window_latency_ticks_ += latency_ticks;
 }
 
 /**
@@ -168,28 +179,39 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
  * @param filter The active FSM instance to modify.
  */
 void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& filter) {
-    if (window_packet_count_ < CTRL_WINDOW_SIZE) return;
+    uint32_t total_packets = window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
+    if (total_packets < static_cast<uint32_t>(CTRL_WINDOW_SIZE)) return;
 
-    // Package window statistics
-    WindowTelemetry telemetry{
-        window_sq_sum_ / window_packet_count_,
-        filter.get_sampling_rate(),
-        static_cast<double>(window_malware_count_) / window_packet_count_,
-        static_cast<double>(window_real_malware_count_) / window_packet_count_
-    };
+    // Package binary structure payload
+    WindowTelemetryPayload payload;
+    payload.tp_count = window_tp_count_;
+    payload.tn_count = window_tn_count_;
+    payload.fp_count = window_fp_count_;
+    payload.fn_count = window_fn_count_;
+    payload.inspected_count = window_inspected_count_;
+    payload.total_sq = window_sq_sum_;
+    payload.total_latency_ticks = window_latency_ticks_;
+    payload.current_sampling_rate = static_cast<float>(filter.get_sampling_rate());
 
     if (onnx_enabled_) {
+        // Construct legacy structure locally for local ONNX inference
+        WindowTelemetry telemetry{
+            static_cast<double>(window_sq_sum_) / total_packets,
+            filter.get_sampling_rate(),
+            static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
+            static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets
+        };
+
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
         if (run_onnx_inference(telemetry, next_policy)) {
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
     } else if (socket_enabled_) {
-        // Construct policy structure mapping baseline fallback configurations with 10% base sampling
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
 
-        // Handshake with the optimization engine and overwrite state machine parameters
-        if (handshake_with_agent(telemetry, next_policy)) {
+        // Handshake with the optimization engine using binary struct
+        if (handshake_with_agent(payload, next_policy)) {
             // Apply safety boundaries in C++ if enabled
             if (safety_guards_enabled_) {
                 if (next_policy.sq_threshold > 650) next_policy.sq_threshold = 650;
@@ -197,18 +219,19 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                 if (next_policy.recovery_rate > 0.10) next_policy.recovery_rate = 0.10;
                 if (next_policy.base_sampling_rate < 0.05) next_policy.base_sampling_rate = 0.05;
             }
-            // Apply the received 4D parameter array to regulate filter thresholds and sampling rates
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
     }
 
     // Reset window statistical accumulators
-    window_packet_count_ = 0;
+    window_tp_count_ = 0;
+    window_tn_count_ = 0;
+    window_fp_count_ = 0;
+    window_fn_count_ = 0;
+    window_inspected_count_ = 0;
     window_sq_sum_ = 0;
-    window_budget_sum_ = 0;
-    window_malware_count_ = 0;
-    window_real_malware_count_ = 0;
+    window_latency_ticks_ = 0;
 }
 
 /**
@@ -218,7 +241,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
  * @param out_policy Structured policy buffer to write model responses to.
  * @return true if communication succeeded and parameters were verified, false otherwise.
  */
-bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+bool RLBridge::handshake_with_agent(const WindowTelemetryPayload& payload, FilterPolicy& out_policy) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) return false;
 
@@ -233,12 +256,8 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
         return false;
     }
 
-    // Serialize window statistics using the wire protocol format:
-    // Format: avg_max_sum_sq, instant_sampling_rate, anomaly_rate, true_anomaly_rate
-    char send_buf[256];
-    std::snprintf(send_buf, sizeof(send_buf), "%f,%f,%f,%f\n", telemetry.avg_max_sum_sq, telemetry.instant_sampling_rate,
-                  telemetry.anomaly_rate, telemetry.true_anomaly_rate);
-    send(sock, send_buf, std::strlen(send_buf), 0);
+    // Send binary telemetry payload directly (byte dumping)
+    send(sock, &payload, sizeof(payload), 0);
 
     // Block C++ thread and wait for DRL agent control updates
     char recv_buf[256] = {0};

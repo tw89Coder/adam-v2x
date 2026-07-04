@@ -398,7 +398,8 @@ int main(int argc, char* argv[]) {
             if (enable_trace || rl_train_mode) {
                 // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
-                                                   static_cast<int>(filter_fsm.get_state()), drop_packet, is_malware);
+                                                   static_cast<int>(filter_fsm.get_state()), drop_packet, is_malware,
+                                                   filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
             }
             if (rl_train_mode || enable_onnx) {
                 rl_bridge.check_and_sync_window(i, filter_fsm);

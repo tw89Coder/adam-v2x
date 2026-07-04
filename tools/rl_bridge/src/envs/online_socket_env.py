@@ -126,12 +126,43 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         while True:
             self.client_socket, _ = self.server_socket.accept()
             try:
-                raw_data = self.client_socket.recv(1024).decode('utf-8')
-                metrics = NetworkIOHelper.parse_telemetry(raw_data)
+                # Receive exactly 40 bytes binary structure payload
+                raw_bytes = self.client_socket.recv(40)
+                metrics = NetworkIOHelper.parse_telemetry(raw_bytes)
                 
                 if metrics is None:
                     self.client_socket.close()
                     continue
+                
+                # Extract raw count fields
+                tp = metrics["tp_count"]
+                tn = metrics["tn_count"]
+                fp = metrics["fp_count"]
+                fn = metrics["fn_count"]
+                inspected = metrics["inspected_count"]
+                total_sq = metrics["total_sq"]
+                latency_ticks = metrics["total_latency_ticks"]
+                
+                # Derive packet metrics (division safe checks)
+                total_packets = tp + tn + fp + fn
+                if total_packets == 0:
+                    total_packets = 1
+                
+                total_malware = tp + fn
+                total_benign = fp + tn
+                
+                # Compute and merge academic rates
+                metrics["avg_sq"] = total_sq / total_packets
+                metrics["anomaly_rate"] = (tp + fp) / total_packets
+                metrics["true_anomaly_rate"] = total_malware / total_packets
+                metrics["avg_budget"] = metrics["instant_sampling_rate"]  # legacy backward compatibility key
+                
+                metrics["fpr"] = fp / total_benign if total_benign > 0 else 0.0
+                metrics["fnr"] = fn / total_malware if total_malware > 0 else 0.0
+                metrics["precision"] = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                metrics["recall"] = tp / total_malware if total_malware > 0 else 0.0
+                metrics["leakage_rate"] = fn / total_malware if total_malware > 0 else 0.0
+                metrics["avg_latency_ticks"] = latency_ticks / inspected if inspected > 0 else 0.0
                 
                 # Dynamic state construction based on parsed metrics dictionary
                 state_tensor = self.build_state_tensor(metrics)

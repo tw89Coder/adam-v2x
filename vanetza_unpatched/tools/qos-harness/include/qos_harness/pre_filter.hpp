@@ -46,7 +46,12 @@ public:
     double current_budget;
     int clean_streak = 0;
 
+    bool was_inspected() const { return last_inspected_; }
+    uint64_t get_last_latency_ticks() const { return last_latency_ticks_; }
+
 private:
+    bool last_inspected_ = false;
+    uint64_t last_latency_ticks_ = 0;
     uint32_t rng_state;
 
     const int STREAK_THRESHOLD = 1000;
