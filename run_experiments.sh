@@ -238,6 +238,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Verify mutual exclusivity: ONNX mode (-o/--onnx) demands the FSM filter to be active
+if [ "$RUN_ONNX" = true ] && [ "$RUN_FILTER_ON" = false ]; then
+    echo -e "${C_ERROR}[ERROR] Conflict: ONNX mode (-o/--onnx) and Baseline-Only (-B) are mutually exclusive.${C_RESET}"
+    echo -e "${C_WARN}[NOTICE] ONNX inference requires the pre-filter to be active, but -B disables filtering.${C_RESET}"
+    exit 1
+fi
+
 # If ONNX mode is enabled, verify that the ONNX model file exists before execution
 if [ "$RUN_ONNX" = true ]; then
     if [ ! -f "$ONNX_MODEL_PATH" ]; then
@@ -313,13 +320,14 @@ execute_matrix_sweep() {
             
             # Conditionally execute the unhardened raw baseline telemetry flow node
             if [ "$RUN_FILTER_OFF" = true ]; then
-                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=OFF ($(get_core_info))${C_RESET}"
+                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=OFF | ONNX=OFF ($(get_core_info))${C_RESET}"
                 execute_cmd "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode"
             fi
 
             # Conditionally execute the circuit-breaker state-machine hardened flow node
             if [ "$RUN_FILTER_ON" = true ]; then
-                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  ($(get_core_info))${C_RESET}"
+                local onnx_status="OFF"; if [ "$RUN_ONNX" = true ]; then onnx_status="ON"; fi
+                echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  | ONNX=${onnx_status} ($(get_core_info))${C_RESET}"
                 local sweep_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "-f")
                 if [ "$RUN_ONNX" = true ]; then
                     sweep_args+=("--onnx" "$ONNX_MODEL_PATH")

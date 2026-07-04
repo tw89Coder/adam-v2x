@@ -198,6 +198,12 @@ int main(int argc, char* argv[]) {
             enable_trace = true;
         }
     }
+    
+    // Defensive check: Assert ONNX cannot run without FSM pre-filter enabled
+    if (enable_onnx && !enable_filter) {
+        std::cerr << "[-] Error: ONNX mode (--onnx) and disabled filter (without -f) are mutually exclusive.\n";
+        return 1;
+    }
 
     // Ingest baseline standards-compliant packets
     auto normals = qos_harness::FileManager::loadPacketsFromFolder(NORMAL_FOLDER);
@@ -285,7 +291,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[*] Mode: " << attack_mode << " | Rate: " << pollution_rate
               << "% | Filter: " << (enable_filter ? "ON" : "OFF")
-              << (enable_onnx ? " (ONNX Mode)" : "") << "\n";
+              << " | ONNX: " << (enable_onnx ? "ON" : "OFF") << "\n";
     std::cout << "[*] Starting QoS Measurement...\n";
 
     // Initialize the main mitigation state machine
