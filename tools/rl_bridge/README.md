@@ -29,9 +29,9 @@ graph TD
 ```
 
 ### Core Design Patterns:
-* **Orchestrator Pattern (`src/main.py`)**: Acts as a centralized factory to initialize environments, policies, and learners based on the central YAML configuration.
-* **Adapter Pattern (Action Adapter in `src/agents/v2x_agent.py`)**: Maps variable-dimension neural network outputs (e.g. 2D actions) into fixed 4D physical parameter ranges, filling in static defaults and enforcing safety boundaries.
-* **Strategy Pattern (`src/algorithms/`)**: Defines interchangeable RL learner interfaces (`BaseLearner`), allowing PPO and SAC to be swapped transparently.
+* **Registry Pattern (`src/utils/registry.py`)**: Decouples the launchers (`main.py`, script entries) from specific algorithm classes. Builder callbacks register themselves dynamically via `@register_algorithm(name)` and are lazy-loaded via `importlib` to comply with the Open-Closed Principle (OCP).
+* **Strategy Pattern (`src/envs/translators.py` and `src/envs/rewards.py`)**: Decouples environment logic from optimization objectives and action mapping. Standard environments (`V2XOnlineSocketEnv` and `V2XOfflineDatasetEnv`) receive injected `ActionTranslator` and `RewardStrategy` implementations on construction, allowing PPO (continuous) and DQN (discrete) to run transparently on symmetric loop loops.
+* **Graph-Embedded Adapter (`scripts/export_onnx.py`)**: Wrap discrete models (like DQN) inside deployment wrappers during serialization, embedding argmax, parameter mapping, and safety clamping directly inside the ONNX graph. This keeps the C++ client's binary contract clean and 100% algorithm-agnostic.
 
 ---
 
@@ -116,17 +116,23 @@ Below is a detailed breakdown of the classes and responsibilities within the pac
 
 | Directory/File | Target Class/Module | Primary Responsibility |
 | :--- | :--- | :--- |
-| `src/config.py` | `Global Config Parser` | Parses `ppo_agent.yaml` and exposes system constants and bounds. |
-| `src/main.py` | `main()` Orchestrator | CLI entry point. Sets up training modes and initializes pipelines. |
+| `src/config.py` | `Global Config Parser` | Parses centralized `agent.yaml` and exposes system constants, bounds, and dynamic algorithm checkpoints suffix resolution. |
+| `src/main.py` | `main()` Orchestrator | CLI entry point. Sets up training modes and compiles pipelines dynamically via `get_algorithm_builder`. |
 | `src/envs/base_env.py` | `BaseV2XEnv` | Abstract interface defining standardized `reset()` and `step()` loops. |
-| `src/envs/online_socket_env.py`| `V2XOnlineSocketEnv` | Runs loopback TCP server on port 8080 to receive C++ telemetry and send actions. |
-| `src/envs/offline_dataset_env.py`| `V2XOfflineDatasetEnv` | Simulates packet flows using CSV telemetry files for fast offline training. |
+| `src/envs/online_socket_env.py`| `V2XOnlineSocketEnv` | Runs loopback TCP server on port 8080. Ingests strategy classes for action mapping and reward calculations. |
+| `src/envs/offline_dataset_env.py`| `V2XOfflineDatasetEnv` | Simulates packet flows using CSV telemetry files. Ingests strategy classes for symmetric execution. |
+| `src/envs/translators.py` | `ActionTranslator` | Strategy class mappings: `PpoActionTranslator` (continuous) vs. `DqnActionTranslator` (discrete). |
+| `src/envs/rewards.py` | `RewardStrategy` | Strategy class mappings: `PpoSurrogateReward` (surrogate optimization) vs. `DqnSamplingReward` (delta-based exploration reward). |
 | `src/agents/base_agent.py` | `BaseV2XAgent` | Abstract interface for target agents. |
-| `src/agents/v2x_agent.py` | `V2XAgent` | Manages the policy network and uses the **Action Adapter** to format actions. |
-| `src/models/policy_net.py` | `DefencePolicyNet` | PyTorch network. Dynamically creates hidden layers from config. |
+| `src/agents/v2x_agent.py` | `V2XAgent` | Continuous PPO agent managing target actor network weights. |
+| `src/agents/dqn_agent.py` | `DQNAgent` | Discrete DQN agent running epsilon-greedy exploration. |
+| `src/models/policy_net.py` | `DefencePolicyNet` | PyTorch Actor-Critic network. Dynamically creates shared torso layers. |
+| `src/models/dqn_net.py` | `DQNNet` | PyTorch Q-network mapping input state dimensions to discrete action selections. |
 | `src/algorithms/base_learner.py`| `BaseLearner` | Abstract interface for learning algorithms. |
-| `src/algorithms/ppo_learner.py`| `PPOLearner` | Evaluates loss gradients, applies entropy bonuses, and updates policy weights. |
-| `src/utils/network_io.py` | `NetworkIOHelper` | Handles stateless CSV parsing and string formatting for TCP transmission. |
+| `src/algorithms/ppo_learner.py`| `PPOLearner` | Computes policy/value losses, registers itself under `"ppo"`. |
+| `src/algorithms/dqn_learner.py`| `DQNLearner` | Performs Bellman optimization updates using a pre-allocated `TensorReplayBuffer`, registers itself under `"dqn"`. |
+| `src/utils/registry.py` | `Dynamic Registry` | compliantly handles OCP modular lazy imports and dynamic algorithm mappings. |
+| `src/utils/network_io.py` | `NetworkIOHelper` | Handles 40-byte binary packet serialization and metrics calculations (FPR, FNR, Recall). |
 | `src/utils/data_loader.py` | `TraceLoader` | Blends historical trace CSV files into training matrices. |
 
 ---
@@ -223,63 +229,75 @@ To increase training epochs or adjust the learning rate during offline training 
 ---
 
 ### 5.3 How to Implement and Register a New RL Algorithm (e.g., SAC)
-To implement a custom continuous RL algorithm (such as Soft Actor-Critic), follow this step-by-step cookbook.
+To implement a custom RL algorithm (such as Soft Actor-Critic), follow this step-by-step cookbook.
 
-#### Step 1: Create the learner class
-Create a new file **`src/algorithms/sac_learner.py`** and inherit from `BaseLearner`. Implement the `update` method:
+#### Step 1: Create the learner class & builder function
+Create a new file **`src/algorithms/sac_learner.py`** and inherit from `BaseLearner`. Implement the `update` method, and decorate the pipeline builder function using `@register_algorithm("sac")`.
+
 ```python
 # [File: src/algorithms/sac_learner.py]
 import torch
+from typing import Dict, List, Any, Tuple
 from src.algorithms.base_learner import BaseLearner
+from src.utils.registry import register_algorithm
 
 class SACLearner(BaseLearner):
-    def __init__(self, policy_net, lr=0.0003):
-        super().__init__(policy_net)
-        # Initialize your SAC Q-networks, target networks, and optimizers here
-        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
-        print("  └── [INIT] SAC Learner successfully initialized.")
+    def __init__(self, agent: Any = None, lr: float = 0.0003):
+        self.agent = agent
+        self.lr = lr
         
-    def update(self, trajectory_buffer):
+    def update(self, trajectory_buffer: Dict[str, List[torch.Tensor]]) -> Dict[str, float]:
         """
         Executes Soft Actor-Critic gradient optimization.
-        trajectory_buffer: dict containing lists of torch.Tensors (states, actions, rewards, etc.)
         """
-        # 1. Parse buffer transitions
-        states = torch.stack(trajectory_buffer["states"])
-        actions = torch.stack(trajectory_buffer["actions"])
-        
-        # 2. (Algorithm-Specific Math) Compute Critic Loss & Actor Loss
-        loss = torch.tensor(0.0, requires_grad=True)
-        
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        
-        # 3. Return dictionary of metrics for console printing
+        # (Algorithm-Specific Math) Update Q-networks and policy networks
         return {
             "actor_loss": 0.0,
-            "critic_loss": loss.item()
+            "critic_loss": 0.0,
+            "entropy": 0.0,
+            "total_loss": 0.0
         }
+
+# ── DYNAMIC OCP REGISTRATION ──────────────────────────────────────────────────
+@register_algorithm("sac")
+def build_sac_pipeline(lr: float, port: int, mode: str, raw_data=None) -> Tuple[Any, Any, Any]:
+    """
+    Dynamic SAC pipeline builder. Instantiates its own model, agent, environment,
+    translators, and rewards strategies, leaving scripts untouched.
+    """
+    from src.models.policy_net import DefencePolicyNet
+    from src.agents.v2x_agent import V2XAgent
+    from src.envs.online_socket_env import V2XOnlineSocketEnv
+    from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
+    from src.envs.translators import PpoActionTranslator
+    from src.envs.rewards import PpoSurrogateReward
+    from src.config import RAW_CFG
+    
+    # 1. Strategies setup
+    translator = PpoActionTranslator()
+    reward_strategy = PpoSurrogateReward(
+        sensitivity_threshold=RAW_CFG["reward_shaping"]["anomaly_sensitivity_threshold"],
+        w_active=RAW_CFG["reward_shaping"]["active_attack_weights"],
+        w_nominal=RAW_CFG["reward_shaping"]["nominal_traffic_weights"]
+    )
+    
+    # 2. Network and agent setup
+    model = DefencePolicyNet()
+    agent = V2XAgent(model)
+    
+    # 3. Environment setup
+    if mode == "online":
+        env = V2XOnlineSocketEnv(port=port, action_translator=translator, reward_strategy=reward_strategy)
+    else:
+        env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
+        
+    learner = SACLearner(agent, lr=lr)
+    return env, agent, learner
+# ───────────────────────────────────────────────────────────────────────────────
 ```
 
-#### Step 2: Register the new algorithm in the Orchestrator
-Open **`src/main.py`** and import and register your new learner class in the `main()` method.
-Locate the learner factory code block:
-```python
-# [File: src/main.py]
-# Ingest the configured algorithm choice
-algo_name = config.get("algorithm", "ppo").lower()
-
-if algo_name == "ppo":
-    learner = PPOLearner(policy_net, lr=lr, ppo_clip=ppo_clip)
-elif algo_name == "sac":
-    # ── REGISTER SAC HERE ──────────────────────────────────────────────────
-    from src.algorithms.sac_learner import SACLearner
-    learner = SACLearner(policy_net, lr=lr)
-    # ───────────────────────────────────────────────────────────────────────
-else:
-    raise ValueError(f"Unsupported algorithm: {algo_name}")
-```
+#### Step 2: Lazy Loading Verification
+Because `get_algorithm_builder` uses `importlib` to dynamically import `src.algorithms.{algo_name}_learner`, simply naming your file **`sac_learner.py`** and putting it under `src/algorithms/` enables **zero-touch registration**. You do not need to edit `main.py` or any other scripts.
 
 #### Step 3: Launch training using the algorithm flag
 You can now pass the `-a sac` parameter to select and execute the Soft Actor-Critic algorithm directly:
@@ -290,16 +308,27 @@ You can now pass the `-a sac` parameter to select and execute the Soft Actor-Cri
 # Online interactive training server with SAC
 ./run_experiments.sh python --train-online -a sac
 ```
-*Note: If `-a` is omitted, the framework defaults to `"ppo"` (or whichever value is configured in `config/ppo_agent.yaml`).*
+*Note: If `-a` is omitted, the framework defaults to `"dqn"` (or whichever value is configured in `config/agent.yaml`).*
 
 ---
 
-### 5.4 Production Inference Server Deployment (Noise-Free Eval Mode)
-Once interactive training converges, exploration noise must be deactivated to maximize defensive stability. The production server loads the trained weights, locks the layers into deterministic execution (`model.eval()`), and maps actions directly to their mathematical mean values (`action_mean`) to crush low-density exploit leakage.
+### 5.4 Dynamic Weight Postfix Mapping & Overwrite Prevention
+To prevent multiple algorithms from overriding the same checkpoints, `src/config.py` automatically resolves the save/load path of model checkpoints by appending `_{algorithm}` to the file name dynamically:
+* Running DQN saves to `checkpoints/v2x_online_brain_dqn.pth` and `checkpoints/v2x_offline_rmix_e20_dqn.pth`.
+* Running PPO saves to `checkpoints/v2x_online_brain_ppo.pth` and `checkpoints/v2x_offline_rmix_e20_ppo.pth`.
+
+The ONNX exporter dynamically inspects these checkpoints and exports:
+* PPO model -> `checkpoints/v2x_agent_ppo.onnx`
+* DQN model -> `checkpoints/v2x_agent_dqn.onnx` (using the 4D deployment wrapper)
+
+---
+
+### 5.5 Production Inference Server Deployment (Noise-Free Eval Mode)
+Once interactive training converges, exploration noise must be deactivated to maximize defensive stability. The production server loads the trained weights, locks the layers into deterministic execution (`model.eval()`), and maps actions directly to their mathematical mean values to crush low-density exploit leakage.
 
 ```bash
-# Step 1: Spin up the inference daemon targeting your newly trained 2D model
-./run_experiments.sh python --deploy -m checkpoints/v2x_offline_rmix_e20.pth
+# Step 1: Spin up the inference daemon targeting your newly trained DQN model
+./run_experiments.sh python --deploy -m checkpoints/v2x_online_brain_dqn.pth
 
 # Step 2: In a separate terminal, execute the verification sweep on the C++ side
 ./run_experiments.sh unpatched --train-rl
@@ -318,9 +347,9 @@ Once interactive training converges, exploration noise must be deactivated to ma
 
 **Q2: ONNX Runtime Shape Mismatch when deploying to C++**
 * **Symptom**: `[ERROR] Unexpected action dimensions: X`
-* **Resolution**: The exported ONNX model's output size must match the configured action space. Ensure the C++ `rl_bridge.cpp` decoder block supports your selected output dimension (`action_dim` = 2, 3, or 4). If you change the action dimensions in Python, you must run the export pipeline again:
+* **Resolution**: The C++ ONNX client requires a 4D output signature. If you are using DQN (which natively outputs 5D Q-values), ensure you export the model using the dynamic wrapper by running the export script. The wrapper will compile `argmax` and FSM parameter mapping into the ONNX graph so that the model outputs the correct 4D continuous vector:
   ```bash
-  ./run_experiments.sh python --export-onnx
+  ./run_experiments.sh python --export-onnx -m checkpoints/v2x_online_brain_dqn.pth
   ```
 
 **Q3: Virtual Environment (venv) missing packages or package imports failing**
