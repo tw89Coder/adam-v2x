@@ -24,6 +24,91 @@ if PROJECT_ROOT not in sys.path:
 
 from src.config import RAW_CFG, ONLINE_BRAIN_PATH, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET
 
+# ==============================================================================
+# Model Wrapper Classes for ONNX Export
+# ==============================================================================
+
+class DQNDeploymentWrapper(nn.Module):
+    """
+    Graph-Embedded Wrapper compiling action index lookup and FSM parameters translation
+    directly into PyTorch calculation graph. Allows C++ ONNX engine to see 4D outputs.
+    """
+    def __init__(self, dqn_net, action_map):
+        super().__init__()
+        self.dqn = dqn_net
+        self.register_buffer("action_map_tensor", torch.tensor(action_map, dtype=torch.float32))
+        
+    def forward(self, full_observation):
+        # full_observation shape: (batch_size, 3) where:
+        # - index 0: instant_sampling_rate
+        # - index 1: avg_sq
+        # - index 2: anomaly_rate
+        
+        # 1. Forward Q-values
+        q_values = self.dqn(full_observation)
+        
+        # 2. ArgMax greedy choice in-graph
+        best_action_idx = torch.argmax(q_values, dim=1)
+        
+        # 3. Retrieve rate delta delta from action map buffer
+        delta = self.action_map_tensor[best_action_idx]
+        
+        # 4. Extract current base sampling rate from telemetry index 0
+        current_rate = full_observation[:, 0]
+        
+        # 5. Compute new rate and enforce safety boundaries in-graph
+        new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)
+        
+        # 6. Construct 4D output policy matching C++ expectation scaling
+        batch_size = full_observation.shape[0]
+        device = full_observation.device
+        
+        # recovery_rate: 0.05 / 0.5 = 0.1
+        rec_rate = torch.full((batch_size, 1), 0.1, dtype=torch.float32, device=device)
+        # penalty_multiplier: 50.0 / 100.0 = 0.5
+        penalty = torch.full((batch_size, 1), 0.5, dtype=torch.float32, device=device)
+        # sq_threshold: (600 - 400) / 400 = 0.5
+        sq_thresh = torch.full((batch_size, 1), 0.5, dtype=torch.float32, device=device)
+        # base_sampling_rate: new_rate directly
+        new_rate_col = new_rate.unsqueeze(-1)
+        
+        return torch.cat([rec_rate, penalty, sq_thresh, new_rate_col], dim=-1)
+
+
+class AdaptiveExporterModel(nn.Module):
+    def __init__(self, in_dim, h_dim, out_dim, use_double_shared):
+        super().__init__()
+        if use_double_shared:
+            self.shared_layer = nn.Sequential(
+                nn.Linear(in_dim, h_dim),
+                nn.ReLU(),
+                nn.Linear(h_dim, h_dim),
+                nn.ReLU()
+            )
+        else:
+            self.shared_layer = nn.Sequential(
+                nn.Linear(in_dim, h_dim),
+                nn.ReLU()
+            )
+        self.actor_head = nn.Sequential(
+            nn.Linear(h_dim, out_dim),
+            nn.Sigmoid()
+        )
+        # Dummy heads to satisfy loading strictness structure
+        self.critic_head = nn.Linear(h_dim, 1)
+        self.log_std = nn.Parameter(torch.zeros(out_dim))
+
+
+class ActorOnlyModel(nn.Module):
+    def __init__(self, shared, actor):
+        super().__init__()
+        self.shared = shared
+        self.actor = actor
+
+    def forward(self, x):
+        return self.actor(self.shared(x))
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="V2X DRL Actor Policy ONNX Export Pipeline")
     parser.add_argument("-m", "--model", type=str, default=None, help="Path to input PyTorch checkpoint (.pth)")
@@ -116,52 +201,6 @@ def main():
         dqn_model.eval()
         
         # 4. Wrap base Q-Network inside DQNDeploymentWrapper to align output signature (5 -> 4)
-        class DQNDeploymentWrapper(nn.Module):
-            """
-            Graph-Embedded Wrapper compiling action index lookup and FSM parameters translation
-            directly into PyTorch calculation graph. Allows C++ ONNX engine to see 4D outputs.
-            """
-            def __init__(self, dqn_net, action_map):
-                super().__init__()
-                self.dqn = dqn_net
-                self.register_buffer("action_map_tensor", torch.tensor(action_map, dtype=torch.float32))
-                
-            def forward(self, full_observation):
-                # full_observation shape: (batch_size, 3) where:
-                # - index 0: instant_sampling_rate
-                # - index 1: avg_sq
-                # - index 2: anomaly_rate
-                
-                # 1. Forward Q-values
-                q_values = self.dqn(full_observation)
-                
-                # 2. ArgMax greedy choice in-graph
-                best_action_idx = torch.argmax(q_values, dim=1)
-                
-                # 3. Retrieve rate delta delta from action map buffer
-                delta = self.action_map_tensor[best_action_idx]
-                
-                # 4. Extract current base sampling rate from telemetry index 0
-                current_rate = full_observation[:, 0]
-                
-                # 5. Compute new rate and enforce safety boundaries in-graph
-                new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)
-                
-                # 6. Construct 4D output policy matching C++ expectation scaling
-                batch_size = full_observation.shape[0]
-                device = full_observation.device
-                
-                # recovery_rate: 0.05 / 0.5 = 0.1
-                rec_rate = torch.full((batch_size, 1), 0.1, dtype=torch.float32, device=device)
-                # penalty_multiplier: 50.0 / 100.0 = 0.5
-                penalty = torch.full((batch_size, 1), 0.5, dtype=torch.float32, device=device)
-                # sq_threshold: (600 - 400) / 400 = 0.5
-                sq_thresh = torch.full((batch_size, 1), 0.5, dtype=torch.float32, device=device)
-                # base_sampling_rate: new_rate directly
-                new_rate_col = new_rate.unsqueeze(-1)
-                
-                return torch.cat([rec_rate, penalty, sq_thresh, new_rate_col], dim=-1)
-
         action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
         export_model = DQNDeploymentWrapper(dqn_model, action_map)
         export_model.eval()
@@ -186,29 +225,6 @@ def main():
             workspace_root = os.path.dirname(os.path.dirname(PROJECT_ROOT))
             onnx_output_path = os.path.join(workspace_root, "checkpoints", "v2x_agent_ppo.onnx")
 
-        # 3. Define the Checkpoint-Adaptive Actor-Critic Network Topology
-        class AdaptiveExporterModel(nn.Module):
-            def __init__(self, in_dim, h_dim, out_dim, use_double_shared):
-                super().__init__()
-                if use_double_shared:
-                    self.shared_layer = nn.Sequential(
-                        nn.Linear(in_dim, h_dim),
-                        nn.ReLU(),
-                        nn.Linear(h_dim, h_dim),
-                        nn.ReLU()
-                    )
-                else:
-                    self.shared_layer = nn.Sequential(
-                        nn.Linear(in_dim, h_dim),
-                        nn.ReLU()
-                    )
-                self.actor_head = nn.Sequential(
-                    nn.Linear(h_dim, out_dim),
-                    nn.Sigmoid()
-                )
-                self.critic_head = nn.Linear(h_dim, 1)
-                self.log_std = nn.Parameter(torch.zeros(out_dim))
-
         # 4. Instantiate the matching model structure and load weights
         model = AdaptiveExporterModel(input_dim, hidden_dim, action_dim, has_two_shared_layers)
         try:
@@ -219,15 +235,6 @@ def main():
             sys.exit(1)
 
         # 5. Extract Actor sequence for ONNX export
-        class ActorOnlyModel(nn.Module):
-            def __init__(self, shared, actor):
-                super().__init__()
-                self.shared = shared
-                self.actor = actor
-
-            def forward(self, x):
-                return self.actor(self.shared(x))
-
         export_model = ActorOnlyModel(model.shared_layer, model.actor_head)
         export_model.eval()
     else:
