@@ -120,8 +120,8 @@ def main():
         while True:
             client_socket, _ = server_socket.accept()
             try:
-                raw_data = client_socket.recv(1024).decode('utf-8')
-                metrics = NetworkIOHelper.parse_telemetry(raw_data)
+                raw_bytes = client_socket.recv(40)
+                metrics = NetworkIOHelper.parse_telemetry(raw_bytes)
                 if metrics is None:
                     client_socket.close()
                     continue

@@ -158,25 +158,38 @@ def main():
     parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
     args = parser.parse_args()
 
-    # 1. Initialize PyTorch model (dynamic topology)
-    model = DefencePolicyNet()
-    
-    # 2. Instantiate V2X Agent wrapper (encapsulates inference & Action Adapter)
-    agent = V2XAgent(model)
-    
-    # 3. Dynamic Learner registration (Factory pattern)
+    # 1. Dynamic architecture selection (Factory pattern)
     algo_name = RAW_CFG.get("algorithm", "ppo").lower()
     lr = RAW_CFG["hyperparameters"]["lr_online"] if args.mode == "online" else RAW_CFG["hyperparameters"]["lr_offline"]
     
+    action_translator = None
+    reward_strategy = None
+
     if algo_name == "ppo":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
         learner = PPOLearner(agent, lr=lr)
+    elif algo_name == "dqn":
+        from src.models.dqn_net import DQNNet
+        from src.agents.dqn_agent import DQNAgent
+        from src.envs.translators import DqnActionTranslator
+        from src.envs.rewards import DqnSamplingReward
+        from src.algorithms.dqn_learner import DQNLearner
+        
+        action_translator = DqnActionTranslator()
+        reward_strategy = DqnSamplingReward()
+        model = DQNNet()
+        agent = DQNAgent(model, action_translator=action_translator)
+        learner = DQNLearner(agent, lr=lr)
     elif algo_name == "sac":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
         learner = SACLearner(agent, lr=lr)
         print(f"{C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
     else:
         raise ValueError(f"Unsupported algorithm type: {algo_name}")
 
-    # 4. Instantiate environment wrappers dynamically
+    # 2. Instantiate environment wrappers dynamically with injected strategies
     if args.mode == "online":
         # Load weights if available
         if os.path.exists(ONLINE_BRAIN_PATH):
@@ -186,7 +199,12 @@ def main():
             except Exception as e:
                 print(f"  └── {C_WARN}[INIT] Cannot load online model weights: {e}. Starting fresh...{C_RESET}")
                 
-        env = V2XOnlineSocketEnv(host=args.host, port=args.port)
+        env = V2XOnlineSocketEnv(
+            host=args.host,
+            port=args.port,
+            action_translator=action_translator,
+            reward_strategy=reward_strategy
+        )
         batch_size = RAW_CFG["hyperparameters"]["batch_size"]
         run_online(env, agent, learner, batch_size)
     else:
@@ -200,7 +218,11 @@ def main():
                 
         # Load offline DataFrame telemetry
         raw_data = load_telemetry_data(args.rate)
-        env = V2XOfflineDatasetEnv(raw_data)
+        env = V2XOfflineDatasetEnv(
+            raw_data,
+            action_translator=action_translator,
+            reward_strategy=reward_strategy
+        )
         run_offline(env, agent, learner, args.epochs)
 
 if __name__ == "__main__":

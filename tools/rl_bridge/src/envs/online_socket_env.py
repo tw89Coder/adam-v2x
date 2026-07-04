@@ -23,7 +23,7 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
     """
     Standard Gym-style Environment wrapping TCP co-simulation socket connections.
     """
-    def __init__(self, host: str = None, port: int = None):
+    def __init__(self, host: str = None, port: int = None, action_translator: Any = None, reward_strategy: Any = None):
         cfg = RAW_CFG
         self.host = host or cfg["infrastructure"]["host"]
         self.port = port or cfg["infrastructure"]["port"]
@@ -39,10 +39,17 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         # Options: "avg_sq", "instant_sampling_rate", "anomaly_rate", "true_anomaly_rate", "avg_budget"
         # Edit this list to dynamically change DQN/PPO observation space without modifying method signatures.
         self.active_features = ["instant_sampling_rate", "avg_sq", "anomaly_rate"]
-        
-        # Action map for DQN discrete actions. Translates action index (0-4) to sampling rate change.
-        self.dqn_action_map = [-0.10, -0.05, 0.0, 0.05, 0.10]
         # =================================
+        
+        # Strategy Pattern initialization
+        from src.envs.translators import PpoActionTranslator
+        from src.envs.rewards import PpoSurrogateReward
+        
+        self.action_translator = action_translator or PpoActionTranslator()
+        self.reward_strategy = reward_strategy or PpoSurrogateReward(
+            self.sensitivity_threshold, self.w_active, self.w_nominal
+        )
+        self.action_space = self.action_translator.get_action_space()
         
         # Server Socket initialization
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -74,51 +81,6 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
                 state_values.append(val)  # instant_sampling_rate/anomaly_rate/budget/true_rate are already [0.0, 1.0]
         return torch.tensor(state_values, dtype=torch.float32)
 
-    def translate_action(self, action: Any, current_sampling_rate: float) -> list:
-        """
-        Translates raw agent action into 4D FSM continuous policy array.
-        Supports both PPO continuous action lists and DQN discrete action indices.
-        """
-        # If action is already a 4D continuous policy, return it directly
-        if isinstance(action, (list, tuple)) and len(action) == 4:
-            return list(action)
-            
-        # If action is a discrete DQN index (0-4)
-        action_index = int(action)
-        delta = self.dqn_action_map[action_index]
-        new_rate = max(0.05, min(1.0, current_sampling_rate + delta))
-        
-        # Return 4D policy using default baseline parameters, overriding only the sampling rate
-        return [0.05, 50.0, 600, new_rate]
-
-    def compute_surrogate_reward(self, metrics: dict, action_policy: list) -> float:
-        """
-        Multi-objective MDP formulation balancing computational overhead against FSM safety.
-        """
-        pred_recovery = action_policy[0]
-        pred_penalty = action_policy[1]
-        pred_sq_thresh = action_policy[2]
-        pred_base_sampling = action_policy[3]
-        
-        anomaly_rate = metrics["anomaly_rate"]
-        current_budget = metrics.get("avg_budget", 100.0)
-        
-        if anomaly_rate > self.sensitivity_threshold:
-            # Mitigation Phase: Reward high penalty actions but keep tracking budget depletion risks
-            reward = (
-                (pred_penalty * self.w_active["penalty_scale"]) + 
-                (600.0 - pred_sq_thresh) * self.w_active["sq_thresh_scale"] - 
-                (1.0 - current_budget / 100.0) * self.w_active["budget_violation_scale"]
-            )
-        else:
-            # Nominal Phase: Reward low latency profiles by penalizing unnecessary high sampling rates
-            reward = (
-                (pred_recovery * self.w_nominal["recovery_scale"]) + 
-                (pred_sq_thresh - 600.0) * self.w_nominal["sq_overhead_scale"] -
-                (pred_base_sampling * self.w_nominal["overhead_penalty_scale"])
-            )
-        return float(reward)
-
     def _wait_for_telemetry(self) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """
         Blocks until client connects and sends a telemetry transaction payload.
@@ -133,36 +95,6 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
                 if metrics is None:
                     self.client_socket.close()
                     continue
-                
-                # Extract raw count fields
-                tp = metrics["tp_count"]
-                tn = metrics["tn_count"]
-                fp = metrics["fp_count"]
-                fn = metrics["fn_count"]
-                inspected = metrics["inspected_count"]
-                total_sq = metrics["total_sq"]
-                latency_ticks = metrics["total_latency_ticks"]
-                
-                # Derive packet metrics (division safe checks)
-                total_packets = tp + tn + fp + fn
-                if total_packets == 0:
-                    total_packets = 1
-                
-                total_malware = tp + fn
-                total_benign = fp + tn
-                
-                # Compute and merge academic rates
-                metrics["avg_sq"] = total_sq / total_packets
-                metrics["anomaly_rate"] = (tp + fp) / total_packets
-                metrics["true_anomaly_rate"] = total_malware / total_packets
-                metrics["avg_budget"] = metrics["instant_sampling_rate"]  # legacy backward compatibility key
-                
-                metrics["fpr"] = fp / total_benign if total_benign > 0 else 0.0
-                metrics["fnr"] = fn / total_malware if total_malware > 0 else 0.0
-                metrics["precision"] = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-                metrics["recall"] = tp / total_malware if total_malware > 0 else 0.0
-                metrics["leakage_rate"] = fn / total_malware if total_malware > 0 else 0.0
-                metrics["avg_latency_ticks"] = latency_ticks / inspected if inspected > 0 else 0.0
                 
                 # Dynamic state construction based on parsed metrics dictionary
                 state_tensor = self.build_state_tensor(metrics)
@@ -195,8 +127,8 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         # Retrieve the current sampling rate to calculate relative DQN changes
         current_rate = self.current_metrics.get("instant_sampling_rate", 0.10) if self.current_metrics else 0.10
         
-        # Translate the action to C++ FSM 4D policy parameters
-        action_policy = self.translate_action(action, current_rate)
+        # Translate the action to C++ FSM 4D policy parameters using the strategy
+        action_policy = self.action_translator.translate(action, current_rate)
         
         # Send action response and close socket transaction
         response = NetworkIOHelper.serialize_policy(action_policy)
@@ -211,8 +143,8 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         # Wait for the NEXT telemetry input from C++ client
         next_state, next_metrics = self._wait_for_telemetry()
         
-        # Compute surrogate reward using the unified metrics payload
-        reward = self.compute_surrogate_reward(next_metrics, action_policy)
+        # Compute surrogate reward using the unified metrics payload and the reward strategy
+        reward = self.reward_strategy.compute(next_metrics, action_policy)
         
         # In online V2X continuous serving, there is no terminal 'done' state
         done = False

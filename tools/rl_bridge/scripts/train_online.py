@@ -20,40 +20,58 @@ if PROJECT_ROOT not in sys.path:
 
 from src.config import C_INFO, C_RESET, C_WARN
 from src.models.policy_net import DefencePolicyNet
+from src.models.dqn_net import DQNNet
 from src.agents.v2x_agent import V2XAgent
+from src.agents.dqn_agent import DQNAgent
 from src.envs.online_socket_env import V2XOnlineSocketEnv
+from src.envs.translators import DqnActionTranslator
+from src.envs.rewards import DqnSamplingReward
 from src.algorithms.ppo_learner import PPOLearner
 from src.algorithms.sac_learner import SACLearner
+from src.algorithms.dqn_learner import DQNLearner
 from src.main import run_online
 
 def parse_arguments():
     """
     Sets up options for local loopback TCP port allocation and rollout batch limits.
     """
-    parser = argparse.ArgumentParser(description="Industrial Online PPO Coprocessing Console")
+    parser = argparse.ArgumentParser(description="Industrial Online PPO/DQN Coprocessing Console")
     parser.add_argument("-p", "--port", type=int, default=8080, help="Loopback server port assignment")
     parser.add_argument("-b", "--batch", type=int, default=32, help="Rollout batch optimization threshold")
-    parser.add_argument("-l", "--lr", type=float, default=0.0003, help="Actor-Critic learning speed")
-    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac"], default="ppo", help="RL algorithm to use")
+    parser.add_argument("-l", "--lr", type=float, default=0.0003, help="Actor-Critic / Q-Network learning speed")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="ppo", help="RL algorithm to use")
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
 
     print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
-    print(f"{C_INFO}│         V2X PPO LIVE ONLINE INTERACTIVE TRAINING SERVER      │{C_RESET}")
+    print(f"{C_INFO}│         V2X LIVE ONLINE INTERACTIVE TRAINING SERVER          │{C_RESET}")
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
     print(f"  ├── Co-Sim Paradigm : Real-Time Closed-Loop Socket Optimization")
     print(f"  ├── Hyperparameters : Learning Rate -> [ {args.lr} ] | Batch Size -> [ {args.batch} ] | Algo -> [ {args.algo.upper()} ]")
 
-    # Layer initialization via modular refactored components
-    model = DefencePolicyNet()
-    agent = V2XAgent(model)
-    env = V2XOnlineSocketEnv(port=args.port)
-    
+    # Layer initialization based on chosen algorithm
     if args.algo == "ppo":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
+        env = V2XOnlineSocketEnv(port=args.port)
         learner = PPOLearner(agent, lr=args.lr)
+    elif args.algo == "dqn":
+        translator = DqnActionTranslator()
+        reward_strategy = DqnSamplingReward()
+        model = DQNNet()
+        agent = DQNAgent(model, action_translator=translator)
+        env = V2XOnlineSocketEnv(
+            port=args.port,
+            action_translator=translator,
+            reward_strategy=reward_strategy
+        )
+        learner = DQNLearner(agent, lr=args.lr)
     elif args.algo == "sac":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
+        env = V2XOnlineSocketEnv(port=args.port)
         learner = SACLearner(agent, lr=args.lr)
         print(f"  └── {C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
     else:

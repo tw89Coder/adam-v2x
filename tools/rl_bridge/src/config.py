@@ -22,7 +22,7 @@ C_ERROR = "\033[1;31m"
 # Locate the external YAML file layout relative to project infrastructure
 CONFIG_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(CONFIG_DIR))
-YAML_PATH = os.path.join(CONFIG_DIR, "config", "ppo_agent.yaml")
+YAML_PATH = os.path.join(CONFIG_DIR, "config", "agent.yaml")
 
 # Fallback fail-safe default maps in case YAML file loading encounters issues
 _defaults = {
@@ -58,6 +58,19 @@ _defaults = {
     "safety_boundaries": {
         "enabled": True, "max_sq_threshold": 650, "min_penalty_multiplier": 20.0,
         "max_recovery_rate": 0.10, "min_base_sampling_rate": 0.05
+    },
+    "dqn": {
+        "action_map": [-0.10, -0.05, 0.0, 0.05, 0.10],
+        "capacity": 10000,
+        "eps_start": 1.0,
+        "eps_end": 0.05,
+        "eps_decay": 1000,
+        "tau": 0.005,
+        "hidden_dim": 64,
+        "reward_shaping": {
+            "penalty_scale": 10.0,
+            "overhead_scale": 2.0
+        }
     }
 }
 

@@ -1,0 +1,138 @@
+# ==============================================================================
+# V2X QoS DRL Refactored Configuration Matrix
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Infrastructure Settings: Network Host, Port, and Saved Model Paths
+# ------------------------------------------------------------------------------
+infrastructure:
+  host: "127.0.0.1"                     # Loopback IP address for TCP socket communication
+  port: 8080                            # TCP Port index for closed-loop co-simulation synchronization
+  checkpoint_dir: "checkpoints"         # Local folder path destination for storing checkpoint weights
+  online_brain_path: "checkpoints/v2x_online_brain.pth"   # Serialized network weights output by online training
+  offline_brain_path: "checkpoints/v2x_offline_rmix_e20.pth" # Serialized network weights output by offline training
+
+# ------------------------------------------------------------------------------
+# 2. V2X Bounds & Normalization Constraints (Physical bounds mapping)
+# ------------------------------------------------------------------------------
+v2x_bounds:
+  max_packet_size: 1500.0               # Maximum Ethernet MTU size in bytes (used for normalizing size feature)
+  max_f2_sq: 65025.0                    # Maximum possible F2 sliding-window sketch similarity count (255^2)
+  window_size: 64                       # Number of bytes in the sliding-window F2 sketch window (O(W) cap)
+
+# ------------------------------------------------------------------------------
+# 3. Model Architecture Parameters
+# ------------------------------------------------------------------------------
+models:
+  # Adjust network depth and widths here. The PyTorch builder will dynamically construct the layers.
+  hidden_layers:
+    - 64
+    - 64
+
+# ------------------------------------------------------------------------------
+# 4. Action Space & Custom Variable Parameter Mapping
+# ------------------------------------------------------------------------------
+action_space:
+  # The exact sequence of parameters expected by the C++ wire protocol.
+  # The Python socket transmitter will serialize values in this order.
+  # To add a 5th parameter, simply add it to the bottom of this list.
+  wire_protocol_parameters:
+    - recovery_rate
+    - penalty_multiplier
+    - sq_threshold
+    - base_sampling_rate
+
+  # The subset of parameters from wire_protocol_parameters to be controlled by the RL policy.
+  # The network action output size (action_dim) will dynamically match this list size.
+  # Change these list items to experiment with different parameter control subsets.
+  rl_controlled_actions:
+    - recovery_rate
+    - penalty_multiplier
+
+  # Static default/heuristic values for parameters NOT currently under RL control.
+  static_defaults:
+    sq_threshold: 650.0
+    base_sampling_rate: 0.05
+
+  # Dynamic scaling boundaries mapping network outputs [0.0, 1.0] to simulation parameters.
+  scaling_bounds:
+    recovery_rate:
+      min: 0.0
+      max: 0.5
+    penalty_multiplier:
+      min: 0.0
+      max: 100.0
+    sq_threshold:
+      min: 400.0
+      max: 800.0
+    base_sampling_rate:
+      min: 0.01
+      max: 0.20
+
+# ------------------------------------------------------------------------------
+# 5. RL/PPO Hyperparameters: Dimensions, Learning Rates, Epochs, and Exploration
+# ------------------------------------------------------------------------------
+hyperparameters:
+  input_dim: 3                          # State tensor observation size (1. Norm Size, 2. Norm SQ, 3. Anomaly Rate)
+  lr_online: 0.0003                     # Learning rate (alpha) of Adam optimizer for online updates
+  lr_offline: 0.001                     # Learning rate (alpha) of Adam optimizer for offline updates
+  batch_size: 32                        # Number of samples gathered per update step
+  ppo_epochs_online: 5                  # Inner-loop optimization epochs per online batch update
+  ppo_epochs_offline: 10                # Inner-loop optimization epochs per offline update
+  clip_eps: 0.2                         # Policy ratio clipping threshold (epsilon)
+  gamma: 0.99                           # MDP discount factor for future expected rewards
+
+# ------------------------------------------------------------------------------
+# 6. Multi-Objective Reward Shaping: Governs policy optimization objectives
+# ------------------------------------------------------------------------------
+reward_shaping:
+  # Pollution rate above which the environment transitions from nominal peacetime to active attack phase
+  anomaly_sensitivity_threshold: 0.005  
+  
+  # Active Attack Phase Rewards: Guiding parameter selection when attacks are actively occurring
+  active_attack_weights:
+    penalty_scale: 0.5                  # Reward weight for higher penalty multipliers (speeds up state escalation)
+    sq_thresh_scale: 0.2                # Reward weight for keeping SQ thresholds low (forces early malware blocking)
+    budget_violation_scale: 10.0        # Penalty scale for virtual CPU budget depletion (protects FSM from collapsing)
+  
+  # Nominal Peacetime Phase Rewards: Guiding parameter selection during safe, normal traffic profiles
+  nominal_traffic_weights:
+    recovery_scale: 10.0                # Reward weight for faster budget recovery (quickly returns system to S0 peacetime)
+    sq_overhead_scale: 0.1              # Reward weight for keeping SQ thresholds high (reduces false positives)
+    overhead_penalty_scale: 8.0         # Penalty scale for unnecessary high active inspection rates during peacetime
+
+# ------------------------------------------------------------------------------
+# 7. Heuristic Safety Boundaries: Static guards preventing the RL agent from
+#    going out of safe bounds, which could trigger high FNR or system collapse.
+# ------------------------------------------------------------------------------
+safety_boundaries:
+  enabled: true                         # Set to true to enforce defensive guards on output actions
+  max_sq_threshold: 650                 # Upper limit of SQ threshold to prevent recursive ASN.1 payload leakage (FNR spikes)
+  min_penalty_multiplier: 20.0          # Lower limit of penalty multiplier to guarantee budget drains fast under attack
+  max_recovery_rate: 0.10               # Upper limit of recovery rate to prevent premature budget restoration
+  min_base_sampling_rate: 0.05          # Lower limit of peacetime inspection rate to maintain audit visibility
+
+# ------------------------------------------------------------------------------
+# 8. DQN Algorithm & Architecture Settings (Andy's Custom DQN Parameters)
+# ------------------------------------------------------------------------------
+dqn:
+  # Action map for DQN discrete actions. Translates discrete action index (0-4) to relative sampling rate change.
+  action_map:
+    - -0.10
+    - -0.05
+    - 0.00
+    - 0.05
+    - 0.10
+  
+  # Hyperparameters specific to DQN
+  capacity: 10000                       # Replay buffer maximum capacity
+  eps_start: 1.0                        # Starting exploration probability
+  eps_end: 0.05                         # Minimum exploration probability
+  eps_decay: 1000                       # Epsilon decay speed step divisor
+  tau: 0.005                            # Target network soft update parameter
+  hidden_dim: 64                        # Width of hidden layers in Q-Network
+  
+  # DQN Specific Reward shaping weights
+  reward_shaping:
+    penalty_scale: 10.0                 # Reward penalty weight for leaking malware packets
+    overhead_scale: 2.0                 # Reward penalty weight for computational overhead (inspection rate)

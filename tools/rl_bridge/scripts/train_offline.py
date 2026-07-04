@@ -23,10 +23,13 @@ if PROJECT_ROOT not in sys.path:
 
 from src.config import C_INFO, C_RESET, C_BOLD, C_WARN, C_SUCCESS, CHECKPOINT_DIR
 from src.models.policy_net import DefencePolicyNet
+from src.models.dqn_net import DQNNet
 from src.agents.v2x_agent import V2XAgent
+from src.agents.dqn_agent import DQNAgent
 from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
 from src.algorithms.ppo_learner import PPOLearner
 from src.algorithms.sac_learner import SACLearner
+from src.algorithms.dqn_learner import DQNLearner
 from src.utils.data_loader import load_telemetry_data
 from src.main import run_offline
 
@@ -34,19 +37,19 @@ def parse_arguments():
     """
     Sets up options for sweeps, clipping boundaries, and optimization iterations.
     """
-    parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO Optimization Pipeline")
+    parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO/DQN Optimization Pipeline")
     parser.add_argument("-r", "--rate", type=str, default="mix", help="Target trace training dataset directory filter")
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
-    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic learning parameter ceiling")
+    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter ceiling")
     parser.add_argument("--clip", type=float, default=0.2, help="PPO boundary clipping limits")
-    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac"], default="ppo", help="RL algorithm to use")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="ppo", help="RL algorithm to use")
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
 
     print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
-    print(f"{C_INFO}│          DRL PPO POLICY OPTIMIZATION ENGINE SANDBOX          │{C_RESET}")
+    print(f"{C_INFO}│          DRL POLICY OPTIMIZATION ENGINE SANDBOX              │{C_RESET}")
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
     print(f"  ├── Hardware Context : Pytorch Device -> [ {C_BOLD}CPU{C_RESET} ]")
     print(f"  ├── Target Profile   : Anomaly Density -> [ {C_WARN}{args.rate}{C_RESET} ]")
@@ -55,20 +58,31 @@ def main():
     # Load static CSV simulation historical trajectory dumps
     raw_data = load_telemetry_data(args.rate)
 
-    # Initialize modular standardized components
-    model = DefencePolicyNet()
-    agent = V2XAgent(model)
-    env = V2XOfflineDatasetEnv(raw_data)
-
+    # Initialize modular standardized components based on algorithm
     if args.algo == "ppo":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
+        env = V2XOfflineDatasetEnv(raw_data)
         learner = PPOLearner(agent, lr=args.lr)
+    elif args.algo == "dqn":
+        model = DQNNet()
+        # Note: DqnActionTranslator is not strictly needed for static offline traces,
+        # but DQNAgent maps raw actions correctly.
+        from src.envs.translators import DqnActionTranslator
+        translator = DqnActionTranslator()
+        agent = DQNAgent(model, action_translator=translator)
+        env = V2XOfflineDatasetEnv(raw_data)
+        learner = DQNLearner(agent, lr=args.lr)
     elif args.algo == "sac":
+        model = DefencePolicyNet()
+        agent = V2XAgent(model)
+        env = V2XOfflineDatasetEnv(raw_data)
         learner = SACLearner(agent, lr=args.lr)
         print(f"  └── {C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
     else:
         raise ValueError(f"Unsupported algorithm type: {args.algo}")
 
-    print(f"\n{C_WARN}[*] Compiling policy graphs. Executing Proximal Policy Optimization loops...{C_RESET}\n")
+    print(f"\n{C_WARN}[*] Compiling policy graphs. Executing optimization loops...{C_RESET}\n")
     
     # Launch matrix optimization execution loop
     run_offline(env, agent, learner, args.epochs)
