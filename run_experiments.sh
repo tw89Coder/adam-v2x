@@ -197,9 +197,18 @@ while [[ $# -gt 0 ]]; do
             RUN_ONNX=true
             if [[ -n "$2" && ! "$2" =~ ^- ]]; then
                 ONNX_MODEL_PATH="$2"
+                # If only a filename is provided (no slashes), search in the default checkpoints directory
+                if [[ "$ONNX_MODEL_PATH" != *"/"* ]]; then
+                    ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/${ONNX_MODEL_PATH}"
+                fi
                 shift 2
             else
-                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_agent.onnx"
+                # Dynamically extract default algorithm from agent.yaml
+                ALGO_NAME=$(grep -E '^algorithm:' "${ROOT_DIR}/tools/rl_bridge/config/agent.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'" | tr -d '\r')
+                if [[ -z "$ALGO_NAME" ]]; then
+                    ALGO_NAME="dqn"
+                fi
+                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_agent_${ALGO_NAME}.onnx"
                 shift
             fi
             ;;

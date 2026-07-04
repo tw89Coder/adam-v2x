@@ -26,6 +26,7 @@ YAML_PATH = os.path.join(CONFIG_DIR, "config", "agent.yaml")
 
 # Fallback fail-safe default maps in case YAML file loading encounters issues
 _defaults = {
+    "algorithm": "dqn",
     "infrastructure": {
         "host": "127.0.0.1", "port": 8080, "checkpoint_dir": "checkpoints",
         "online_brain_path": "checkpoints/v2x_online_brain.pth",
@@ -88,8 +89,14 @@ else:
 HOST = cfg["infrastructure"]["host"]
 PORT = cfg["infrastructure"]["port"]
 CHECKPOINT_DIR = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["checkpoint_dir"])
-ONLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["online_brain_path"])
-OFFLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, cfg["infrastructure"]["offline_brain_path"])
+
+# Append algorithm suffix to prevent PPO/DQN checkpoint overwrites
+ALGO_SUFFIX = f"_{cfg.get('algorithm', 'dqn').lower()}"
+online_base, ext = os.path.splitext(cfg["infrastructure"]["online_brain_path"])
+offline_base, ext = os.path.splitext(cfg["infrastructure"]["offline_brain_path"])
+
+ONLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, f"{online_base}{ALGO_SUFFIX}{ext}")
+OFFLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, f"{offline_base}{ALGO_SUFFIX}{ext}")
 
 MAX_PACKET_SIZE = cfg["v2x_bounds"]["max_packet_size"]
 MAX_F2_SQ = cfg["v2x_bounds"]["max_f2_sq"]

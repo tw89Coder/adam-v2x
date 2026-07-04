@@ -42,7 +42,7 @@ def parse_arguments():
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
     parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter ceiling")
     parser.add_argument("--clip", type=float, default=0.2, help="PPO boundary clipping limits")
-    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="ppo", help="RL algorithm to use")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
     return parser.parse_args()
 
 def main():
