@@ -4,6 +4,7 @@
 #include <fstream>
 #include <string>
 #include <deque>
+#include <vector>
 
 #include "qos_harness/pre_filter.hpp"
 
@@ -13,9 +14,12 @@ namespace qos_harness {
 //======chian: Packet Feature Array ================================
 //==================================================================
 /**
- * @brief an entity in array presents the packet feartures 
+ * @brief Representation of packet-level features sent to the RL/DQN agent as observations.
+ * @note DEVELOPER GUIDE: If you want to experiment with different neural network input states
+ *       (e.g., adding or removing features like budget, size, rate), modify this struct.
+ *       Do NOT modify PacketTelemetry which is strictly for offline CSV logging.
  */
-    struct PacketFeature {
+struct PacketFeature {
     float packet_size_norm;
     float max_sum_sq_norm;
     float is_anomalous;
@@ -40,8 +44,37 @@ struct FilterPolicy {
  */
 struct WindowTelemetry {
     double avg_max_sum_sq;
-    double avg_budget;
+    double instant_sampling_rate;
     double anomaly_rate;
+    double true_anomaly_rate; // Ground truth attack intensity (malware packets / total packets) in the window
+};
+
+#pragma pack(push, 1)
+struct WindowTelemetryPayload {
+    uint32_t tp_count;
+    uint32_t tn_count;
+    uint32_t fp_count;
+    uint32_t fn_count;
+    uint32_t inspected_count;
+    uint64_t total_sq;
+    uint64_t total_latency_ticks;
+    float current_sampling_rate;
+};
+#pragma pack(pop)
+
+/**
+ * @brief Telemetry record stored in memory buffers and flushed to the output CSV file on disk.
+ * @note DEVELOPER WARNING: This struct is strictly used for offline diagnostic analysis and 
+ *       generating performance plots (such as budget vs attack intensity). 
+ *       Do NOT remove fields (like 'budget') from this struct, otherwise it will break compilation
+ *       and the Python plotting engine.
+ */
+struct PacketTelemetry {
+    size_t pkt_size;
+    int max_sum_sq;
+    double budget;
+    int state;
+    bool is_anomalous;
 };
 
 
@@ -80,8 +113,16 @@ public:
 
     /**
      * @brief Logs per-packet metrics to the training trace file.
+     * @param pkt_size Length of the raw packet.
+     * @param max_sum_sq The maximum F2 similarity count.
+     * @param budget Virtual CPU budget value of the FSM.
+     * @param state Current FSM state index (0 to 3).
+     * @param is_anomalous True if the packet was flagged as anomalous/dropped.
+     * @param is_malware True if the packet is ground truth malware.
+     * @param inspected True if the packet was selected for inspection.
+     * @param latency_ticks CPU TSC ticks spent on the F2 similarity check.
      */
-    void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous);
+    void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware, bool inspected, uint64_t latency_ticks);
 
     /**
      * @brief Checks window boundaries and synchronizes parameters with the RL controller.
@@ -105,16 +146,25 @@ private:
 
     // Window-level statistical accumulators
     const int CTRL_WINDOW_SIZE = 1000;
-    int window_packet_count_ = 0;
-    double window_sq_sum_ = 0;
-    double window_budget_sum_ = 0;
-    int window_malware_count_ = 0;
-
-    std::deque<PacketFeature> packet_history_;
+    uint32_t window_tp_count_ = 0;
+    uint32_t window_tn_count_ = 0;
+    uint32_t window_fp_count_ = 0;
+    uint32_t window_fn_count_ = 0;
+    uint32_t window_inspected_count_ = 0;
+    uint64_t window_sq_sum_ = 0;
+    uint64_t window_latency_ticks_ = 0;
+    
+    std::deque<PacketFeature> packet_feature_arr;
     std::ofstream csv_file_;
+    std::vector<PacketTelemetry> packet_buffer_;
+
+    /**
+     * @brief Flushes buffered telemetry data to the CSV file on disk.
+     */
+    void flush_telemetry_buffer();
 
     void write_csv_header();
-    bool handshake_with_agent(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
+    bool handshake_with_agent(const WindowTelemetryPayload& payload, FilterPolicy& out_policy);
 };
 
 }  // namespace qos_harness

@@ -37,7 +37,7 @@ std::string ConsolePresenter::label() { return "\033[1;34m"; } // Bold Blue
 void ConsolePresenter::printDiagnosisHeader() {
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s                VANETZA SYSTEM: FLOOD REGION DIAGNOSIS      %s│\n"
+        "│%s                VANETZA SYSTEM: FLOOD REGION DIAGNOSIS        %s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
 }
@@ -47,9 +47,9 @@ void ConsolePresenter::printDiagnosisHeader() {
  */
 void ConsolePresenter::printProfilerHeader() {
     std::printf(
-        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s          VANETZA SYSTEM: MTU AMPLIFICATION PROFILER        %s│\n"
-        "└──────────────────────────────────────────────────────────────┘%s\n\n",
+        "\n%s┌──────────────────────────────────────────────────────────────────────────────┐\n"
+        "│%s                  VANETZA SYSTEM: MTU AMPLIFICATION PROFILER                  %s│\n"
+        "└──────────────────────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
 }
 
@@ -291,7 +291,7 @@ void ConsolePresenter::printInterpretation(long long diff_ab, double pct, long l
 void ConsolePresenter::printDiagnosisEndBox() {
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s  SYSTEM STATE STEADY: Execute --profile-amp for next matrix. %s│\n"
+        "│%s  SYSTEM STATE STEADY: Execute --profile-amp for next matrix.   %s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), safe().c_str(), frame().c_str(), reset().c_str());
 }
@@ -301,12 +301,12 @@ void ConsolePresenter::printDiagnosisEndBox() {
  */
 void ConsolePresenter::printProfilerEndBox(size_t limit, const std::string& csv, const std::string& bin) {
     std::printf(
-        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│ %sTELEMETRY COLLECTION COMPLETE%s                                            │\n"
-        "│ ├── Operation Scope Limit : <= %4zu Bytes (ITS MTU Threshold)      │\n"
-        "│ ├── Target Output Records : %-48s │\n"
-        "│ └── Extracted Binary Maps : %-48s │\n"
-        "└──────────────────────────────────────────────────────────────┘%s\n\n",
+        "\n%s┌──────────────────────────────────────────────────────────────────────────────┐\n"
+        "│ %sTELEMETRY COLLECTION COMPLETE%s                                                │\n"
+        "│ ├── Operation Scope Limit : <= %4zu Bytes (ITS MTU Threshold)                 │\n"
+        "│ ├── Target Output Records : %-49s │\n"
+        "│ └── Extracted Binary Maps : %-49s │\n"
+        "└──────────────────────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), safe().c_str(), frame().c_str(), limit, csv.c_str(), bin.c_str(), reset().c_str());
 }
 

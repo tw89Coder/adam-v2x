@@ -7,14 +7,14 @@ __pycache__/
 .pytest_cache/
 
 # ==============================================================================
-# V2X QoS DRL Bridge Local Telemetry Data Exclusion
+# Local Data, Workspace & Dependency Exclusions
 # ==============================================================================
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
-# IDE Settings
+# IDE settings
 .vscode/
 
 # Local third-party library dependencies (such as ONNX Runtime)
@@ -24,14 +24,24 @@ third_party/
 checkpoints/*.onnx
 tools/rl_bridge/checkpoints/*.onnx
 
-# Exclude all generated CSV telemetry traces to prevent push lag
-outputs/**/*.csv
+# ==============================================================================
+# V2X QoS Experiment Output Exclusions & Whitelist
+# ==============================================================================
+# Ignore all generated outputs by default (raw simulation traces, bin packets, logs)
+outputs/**/*
+
+# Whitelist thesis figures, plots, and tables
+!outputs/plots/
+!outputs/plots/**/*
+!outputs/stats/
+!outputs/stats/**/*
 
 # Whitelist specific CSV files required for thesis plotting (rates 10.0, 5.0, 1.0)
-!outputs/**/training_trace_10.0_mode*.csv
-!outputs/**/training_trace_5.0_mode*.csv
-!outputs/**/training_trace_1.0_mode*.csv
-!outputs/**/fsm_trace_rate_10.0_mode*.csv
-!outputs/**/fsm_trace_rate_5.0_mode*.csv
-!outputs/**/fsm_trace_rate_1.0_mode*.csv
-!outputs/**/amplification_profile.csv
+!outputs/csv_raw/
+!outputs/csv_raw/**/training_trace_10.0_mode*.csv
+!outputs/csv_raw/**/training_trace_5.0_mode*.csv
+!outputs/csv_raw/**/training_trace_1.0_mode*.csv
+!outputs/csv_raw/**/fsm_trace_rate_10.0_mode*.csv
+!outputs/csv_raw/**/fsm_trace_rate_5.0_mode*.csv
+!outputs/csv_raw/**/fsm_trace_rate_1.0_mode*.csv
+!outputs/csv_raw/**/amplification_profile.csv

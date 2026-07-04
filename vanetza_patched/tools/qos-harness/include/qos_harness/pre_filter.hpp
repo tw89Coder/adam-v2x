@@ -29,11 +29,29 @@ public:
         return last_max_sum_sq_;
     }
 
+    double get_sampling_rate() const {
+        if (current_budget <= TAU_2) {
+            return 1.0;
+        } else if (current_budget <= TAU_1) {
+            double range_ratio = (current_budget - TAU_2) / (TAU_1 - TAU_2);
+            return 1.0 - 0.5 * range_ratio;
+        } else if (current_budget < MAX_BUDGET) {
+            double range_ratio = (current_budget - TAU_1) / (MAX_BUDGET - TAU_1);
+            return 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio;
+        }
+        return BASE_SAMPLING_RATE;
+    }
+
     // exposed for debug logging in harness
     double current_budget;
     int clean_streak = 0;
 
+    bool was_inspected() const { return last_inspected_; }
+    uint64_t get_last_latency_ticks() const { return last_latency_ticks_; }
+
 private:
+    bool last_inspected_ = false;
+    uint64_t last_latency_ticks_ = 0;
     uint32_t rng_state;
 
     const int STREAK_THRESHOLD = 1000;
