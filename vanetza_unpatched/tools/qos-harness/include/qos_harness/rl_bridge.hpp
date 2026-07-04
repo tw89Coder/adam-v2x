@@ -14,9 +14,12 @@ namespace qos_harness {
 //======chian: Packet Feature Array ================================
 //==================================================================
 /**
- * @brief an entity in array presents the packet feartures 
+ * @brief Representation of packet-level features sent to the RL/DQN agent as observations.
+ * @note DEVELOPER GUIDE: If you want to experiment with different neural network input states
+ *       (e.g., adding or removing features like budget, size, rate), modify this struct.
+ *       Do NOT modify PacketTelemetry which is strictly for offline CSV logging.
  */
-    struct PacketFeature {
+struct PacketFeature {
     float packet_size_norm;
     float max_sum_sq_norm;
     float is_anomalous;
@@ -45,6 +48,13 @@ struct WindowTelemetry {
     double anomaly_rate;
 };
 
+/**
+ * @brief Telemetry record stored in memory buffers and flushed to the output CSV file on disk.
+ * @note DEVELOPER WARNING: This struct is strictly used for offline diagnostic analysis and 
+ *       generating performance plots (such as budget vs attack intensity). 
+ *       Do NOT remove fields (like 'budget') from this struct, otherwise it will break compilation
+ *       and the Python plotting engine.
+ */
 struct PacketTelemetry {
     size_t pkt_size;
     int max_sum_sq;
