@@ -17,16 +17,18 @@ class NetworkIOHelper:
     def parse_telemetry(data_str: str):
         """
         Parses incoming telemetry CSV from C++ socket.
-        Format: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
+        Format: "avg_max_sum_sq,instant_sampling_rate,anomaly_rate[,true_anomaly_rate]\n"
         """
         try:
             tokens = data_str.strip().split(',')
-            if len(tokens) != 3:
+            if len(tokens) < 3:
                 return None
             return {
                 "avg_sq": float(tokens[0]),
-                "avg_budget": float(tokens[1]),
-                "anomaly_rate": float(tokens[2])
+                "avg_budget": float(tokens[1]),           # Keep for backward compatibility with older PPO envs
+                "instant_sampling_rate": float(tokens[1]),  # Direct mapping of the second field
+                "anomaly_rate": float(tokens[2]),
+                "true_anomaly_rate": float(tokens[3]) if len(tokens) >= 4 else 0.0
             }
         except ValueError:
             return None
