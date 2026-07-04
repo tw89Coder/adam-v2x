@@ -57,6 +57,7 @@ print_usage() {
     echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
     echo -e "  ${COLOR_WARNING}fast${COLOR_RESET}           Execute incremental compilation using naked make only (Default)"
     echo -e "  ${COLOR_WARNING}clean${COLOR_RESET}          Wipe active build directories entirely and re-run full CMake"
+    echo -e "  ${COLOR_WARNING}test${COLOR_RESET}           Compile the harness and run C++ console presenter layout unit tests"
     echo -e "  ${COLOR_WARNING}--reverse${COLOR_RESET}      Used with --sync-harness to force reverse sync (patched -> unpatched)"
     exit 1
 }
@@ -168,15 +169,50 @@ fi
 TARGET=$1
 MODE=${2:-fast}
 
-if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || { [ "$MODE" != "fast" ] && [ "$MODE" != "clean" ]; }; then
+if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || { [ "$MODE" != "fast" ] && [ "$MODE" != "clean" ] && [ "$MODE" != "test" ]; }; then
     print_usage
 fi
 
-if [ "$TARGET" == "all" ]; then
-    compile_workspace "vanetza_unpatched" "$MODE"
-    compile_workspace "vanetza_patched" "$MODE"
+if [ "$MODE" == "test" ]; then
+    # Strictly run the C++ unit test binary without compiling first (Separation of Concerns)
+    if [ "$TARGET" == "all" ]; then
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_unpatched...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_unpatched/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_unpatched/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_unpatched test binary missing. Run './manage_build.sh unpatched' first.${COLOR_RESET}"
+            exit 1
+        fi
+        
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_patched...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_patched/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_patched/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_patched test binary missing. Run './manage_build.sh patched' first.${COLOR_RESET}"
+            exit 1
+        fi
+    else
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_${TARGET}...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_${TARGET} test binary missing. Run './manage_build.sh ${TARGET}' first.${COLOR_RESET}"
+            exit 1
+        fi
+    fi
 else
-    compile_workspace "vanetza_${TARGET}" "$MODE"
+    if [ "$TARGET" == "all" ]; then
+        compile_workspace "vanetza_unpatched" "$MODE"
+        compile_workspace "vanetza_patched" "$MODE"
+    else
+        compile_workspace "vanetza_${TARGET}" "$MODE"
+    fi
 fi
 
 log_primary "======================================================================"

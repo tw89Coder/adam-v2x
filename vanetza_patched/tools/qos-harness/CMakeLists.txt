@@ -37,3 +37,13 @@ if(EXISTS "${ONNXRT_ROOT}")
         INSTALL_RPATH "${ONNXRT_ROOT}/lib"
     )
 endif()
+
+# Add qos-harness-test executable for fast GUI box alignment testing
+add_executable(qos-harness-test
+    tests/test_presenter.cpp
+    src/console_presenter.cpp
+)
+
+target_include_directories(qos-harness-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)

@@ -1,12 +1,12 @@
 Scenario,Env,Mode,Rate,Mean_ms,Median_ms,P99_ms,P99.9_ms,Max_ms,FPR_%,FNR_%
-Baseline Optimal,unpatched,N/A,0.0,0.0202,0.0187,0.0487,0.1719,2.909,N/A,N/A
+Baseline Optimal,unpatched,N/A,0.0,0.0169,0.0162,0.034,0.1294,2.8384,N/A,N/A
 Unpatched Native | M0 | 1.0%,unpatched,mode0,1.0,0.0193,0.0167,0.158,0.2259,3.2416,N/A,N/A
 Unpatched Filtered | M0 | 1.0%,unpatched,mode0,1.0,0.0202,0.0188,0.0469,0.1701,4.0659,0.0,0.0
 Patched Native | M0 | 1.0%,patched,mode0,1.0,0.0177,0.0165,0.0412,0.1464,4.0489,N/A,N/A
 Patched Filtered | M0 | 1.0%,patched,mode0,1.0,0.0189,0.0177,0.0393,0.1627,2.273,0.0,0.0801
-Unpatched Native | M0 | 5.0%,unpatched,mode0,5.0,0.0264,0.0167,0.1921,0.3168,2.5983,N/A,N/A
+Unpatched Native | M0 | 5.0%,unpatched,mode0,5.0,0.0252,0.0165,0.1848,0.296,1.6934,N/A,N/A
 Unpatched Filtered | M0 | 5.0%,unpatched,mode0,5.0,0.0199,0.0187,0.0434,0.1652,2.4439,0.0,0.0
-Patched Native | M0 | 5.0%,patched,mode0,5.0,0.0163,0.0155,0.0332,0.1333,1.746,N/A,N/A
+Patched Native | M0 | 5.0%,patched,mode0,5.0,0.0163,0.0154,0.0328,0.1411,2.2552,N/A,N/A
 Patched Filtered | M0 | 5.0%,patched,mode0,5.0,0.0189,0.0181,0.0381,0.1524,2.4403,0.0,0.0
 Unpatched Native | M0 | 10.0%,unpatched,mode0,10.0,0.0348,0.0169,0.2034,0.3514,2.5453,N/A,N/A
 Unpatched Filtered | M0 | 10.0%,unpatched,mode0,10.0,0.0196,0.0186,0.0416,0.1663,3.7422,0.0,0.0
