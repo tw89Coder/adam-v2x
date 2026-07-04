@@ -172,3 +172,35 @@ class DQNLearner(BaseLearner):
             "loss": loss.item(),
             "mean_q": state_action_values.mean().item()
         }
+
+
+# ==============================================================================
+# Pipeline Registration
+# ==============================================================================
+from src.utils.registry import register_algorithm
+
+@register_algorithm("dqn")
+def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None):
+    """
+    Dynamic DQN RL pipeline builder callback.
+    """
+    from src.models.dqn_net import DQNNet
+    from src.agents.dqn_agent import DQNAgent
+    from src.envs.online_socket_env import V2XOnlineSocketEnv
+    from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
+    from src.envs.translators import DqnActionTranslator
+    from src.envs.rewards import DqnSamplingReward
+    
+    translator = DqnActionTranslator()
+    reward_strategy = DqnSamplingReward()
+    
+    model = DQNNet()
+    agent = DQNAgent(model, action_translator=translator)
+    
+    if mode == "online":
+        env = V2XOnlineSocketEnv(port=port, action_translator=translator, reward_strategy=reward_strategy)
+    else:
+        env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
+        
+    learner = DQNLearner(agent, lr=lr)
+    return env, agent, learner

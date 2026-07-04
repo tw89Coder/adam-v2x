@@ -51,31 +51,11 @@ def main():
     print(f"  ├── Co-Sim Paradigm : Real-Time Closed-Loop Socket Optimization")
     print(f"  ├── Hyperparameters : Learning Rate -> [ {args.lr} ] | Batch Size -> [ {args.batch} ] | Algo -> [ {args.algo.upper()} ]")
 
-    # Layer initialization based on chosen algorithm
-    if args.algo == "ppo":
-        model = DefencePolicyNet()
-        agent = V2XAgent(model)
-        env = V2XOnlineSocketEnv(port=args.port)
-        learner = PPOLearner(agent, lr=args.lr)
-    elif args.algo == "dqn":
-        translator = DqnActionTranslator()
-        reward_strategy = DqnSamplingReward()
-        model = DQNNet()
-        agent = DQNAgent(model, action_translator=translator)
-        env = V2XOnlineSocketEnv(
-            port=args.port,
-            action_translator=translator,
-            reward_strategy=reward_strategy
-        )
-        learner = DQNLearner(agent, lr=args.lr)
-    elif args.algo == "sac":
-        model = DefencePolicyNet()
-        agent = V2XAgent(model)
-        env = V2XOnlineSocketEnv(port=args.port)
-        learner = SACLearner(agent, lr=args.lr)
-        print(f"  └── {C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
-    else:
-        raise ValueError(f"Unsupported algorithm type: {args.algo}")
+    # Dynamically build the co-simulation training pipeline via registry factory
+    from src.utils.registry import get_algorithm_builder
+    
+    builder = get_algorithm_builder(args.algo)
+    env, agent, learner = builder(lr=args.lr, port=args.port, mode="online")
         
     # Run the online serving co-simulation loop
     run_online(env, agent, learner, batch_size=args.batch)

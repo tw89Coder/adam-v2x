@@ -56,3 +56,47 @@ class SACLearner(BaseLearner):
             "entropy": 0.0,
             "total_loss": 0.0
         }
+
+
+# ==============================================================================
+# Pipeline Registration
+# ==============================================================================
+from src.utils.registry import register_algorithm
+
+@register_algorithm("sac")
+def build_sac_pipeline(lr: float, port: int, mode: str, raw_data=None):
+    """
+    Dynamic SAC RL pipeline builder callback.
+    """
+    from src.models.policy_net import DefencePolicyNet
+    from src.agents.v2x_agent import V2XAgent
+    from src.envs.online_socket_env import V2XOnlineSocketEnv
+    from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
+    from src.envs.translators import PpoActionTranslator
+    from src.envs.rewards import PpoSurrogateReward
+    from src.algorithms.sac_learner import SACLearner
+    from src.config import RAW_CFG
+    
+    cfg = RAW_CFG
+    r_cfg = cfg["reward_shaping"]
+    sensitivity = r_cfg["anomaly_sensitivity_threshold"]
+    w_active = r_cfg["active_attack_weights"]
+    w_nominal = r_cfg["nominal_traffic_weights"]
+    
+    translator = PpoActionTranslator()
+    reward_strategy = PpoSurrogateReward(
+        sensitivity_threshold=sensitivity,
+        w_active=w_active,
+        w_nominal=w_nominal
+    )
+    
+    model = DefencePolicyNet()
+    agent = V2XAgent(model)
+    
+    if mode == "online":
+        env = V2XOnlineSocketEnv(port=port, action_translator=translator, reward_strategy=reward_strategy)
+    else:
+        env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
+        
+    learner = SACLearner(agent, lr=lr)
+    return env, agent, learner

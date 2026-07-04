@@ -58,29 +58,11 @@ def main():
     # Load static CSV simulation historical trajectory dumps
     raw_data = load_telemetry_data(args.rate)
 
-    # Initialize modular standardized components based on algorithm
-    if args.algo == "ppo":
-        model = DefencePolicyNet()
-        agent = V2XAgent(model)
-        env = V2XOfflineDatasetEnv(raw_data)
-        learner = PPOLearner(agent, lr=args.lr)
-    elif args.algo == "dqn":
-        model = DQNNet()
-        # Note: DqnActionTranslator is not strictly needed for static offline traces,
-        # but DQNAgent maps raw actions correctly.
-        from src.envs.translators import DqnActionTranslator
-        translator = DqnActionTranslator()
-        agent = DQNAgent(model, action_translator=translator)
-        env = V2XOfflineDatasetEnv(raw_data)
-        learner = DQNLearner(agent, lr=args.lr)
-    elif args.algo == "sac":
-        model = DefencePolicyNet()
-        agent = V2XAgent(model)
-        env = V2XOfflineDatasetEnv(raw_data)
-        learner = SACLearner(agent, lr=args.lr)
-        print(f"  └── {C_WARN}[WARNING] Running SAC skeleton template. Neural model weights won't optimize.{C_RESET}")
-    else:
-        raise ValueError(f"Unsupported algorithm type: {args.algo}")
+    # Dynamically build the offline dataset pipeline via registry factory
+    from src.utils.registry import get_algorithm_builder
+    
+    builder = get_algorithm_builder(args.algo)
+    env, agent, learner = builder(lr=args.lr, port=None, mode="offline", raw_data=raw_data)
 
     print(f"\n{C_WARN}[*] Compiling policy graphs. Executing optimization loops...{C_RESET}\n")
     
