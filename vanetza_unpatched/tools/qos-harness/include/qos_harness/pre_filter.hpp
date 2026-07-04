@@ -29,6 +29,19 @@ public:
         return last_max_sum_sq_;
     }
 
+    double get_sampling_rate() const {
+        if (current_budget <= TAU_2) {
+            return 1.0;
+        } else if (current_budget <= TAU_1) {
+            double range_ratio = (current_budget - TAU_2) / (TAU_1 - TAU_2);
+            return 1.0 - 0.5 * range_ratio;
+        } else if (current_budget < MAX_BUDGET) {
+            double range_ratio = (current_budget - TAU_1) / (MAX_BUDGET - TAU_1);
+            return 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio;
+        }
+        return BASE_SAMPLING_RATE;
+    }
+
     // exposed for debug logging in harness
     double current_budget;
     int clean_streak = 0;

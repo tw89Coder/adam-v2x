@@ -44,8 +44,9 @@ struct FilterPolicy {
  */
 struct WindowTelemetry {
     double avg_max_sum_sq;
-    double avg_budget;
+    double instant_sampling_rate;
     double anomaly_rate;
+    double true_anomaly_rate; // Ground truth attack intensity (malware packets / total packets) in the window
 };
 
 /**
@@ -99,8 +100,14 @@ public:
 
     /**
      * @brief Logs per-packet metrics to the training trace file.
+     * @param pkt_size Length of the raw packet.
+     * @param max_sum_sq The maximum F2 similarity count.
+     * @param budget Virtual CPU budget value of the FSM.
+     * @param state Current FSM state index (0 to 3).
+     * @param is_anomalous True if the packet was flagged as anomalous/dropped.
+     * @param is_malware True if the packet is ground truth malware.
      */
-    void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous);
+    void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware);
 
     /**
      * @brief Checks window boundaries and synchronizes parameters with the RL controller.
@@ -128,6 +135,7 @@ private:
     double window_sq_sum_ = 0;
     double window_budget_sum_ = 0;
     int window_malware_count_ = 0;
+    int window_real_malware_count_ = 0; // New: ground truth malware count in current window
     
     std::deque<PacketFeature> packet_feature_arr;
     std::ofstream csv_file_;

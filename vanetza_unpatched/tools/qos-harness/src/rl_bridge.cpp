@@ -124,7 +124,7 @@ void RLBridge::write_csv_header() {
  * @param is_anomalous True if the packet was dropped.
  */
 
-void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous) {
+void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware) {
     if (csv_file_.is_open()) {
         // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on IO),
         // we store the data in an in-memory buffer and batch-flush it.
@@ -147,12 +147,18 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
 
     if (packet_feature_arr.size() > OBS_HISTORY_LEN) {
         packet_feature_arr.pop_front();
-
-    
     }
 
-
-
+    // Accumulate sliding window statistics for DQN/PPO observations
+    window_packet_count_++;
+    window_sq_sum_ += max_sum_sq;
+    window_budget_sum_ += budget;
+    if (is_anomalous) {
+        window_malware_count_++;
+    }
+    if (is_malware) {
+        window_real_malware_count_++;
+    }
 }
 
 /**
@@ -165,8 +171,12 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     if (window_packet_count_ < CTRL_WINDOW_SIZE) return;
 
     // Package window statistics
-    WindowTelemetry telemetry{window_sq_sum_ / window_packet_count_, window_budget_sum_ / window_packet_count_,
-                              static_cast<double>(window_malware_count_) / window_packet_count_};
+    WindowTelemetry telemetry{
+        window_sq_sum_ / window_packet_count_,
+        filter.get_sampling_rate(),
+        static_cast<double>(window_malware_count_) / window_packet_count_,
+        static_cast<double>(window_real_malware_count_) / window_packet_count_
+    };
 
     if (onnx_enabled_) {
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
@@ -198,6 +208,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     window_sq_sum_ = 0;
     window_budget_sum_ = 0;
     window_malware_count_ = 0;
+    window_real_malware_count_ = 0;
 }
 
 /**
@@ -222,10 +233,11 @@ bool RLBridge::handshake_with_agent(const WindowTelemetry& telemetry, FilterPoli
         return false;
     }
 
-    // Serialize window statistics using the wire protocol format
+    // Serialize window statistics using the wire protocol format:
+    // Format: avg_max_sum_sq, instant_sampling_rate, anomaly_rate, true_anomaly_rate
     char send_buf[256];
-    std::snprintf(send_buf, sizeof(send_buf), "%f,%f,%f\n", telemetry.avg_max_sum_sq, telemetry.avg_budget,
-                  telemetry.anomaly_rate);
+    std::snprintf(send_buf, sizeof(send_buf), "%f,%f,%f,%f\n", telemetry.avg_max_sum_sq, telemetry.instant_sampling_rate,
+                  telemetry.anomaly_rate, telemetry.true_anomaly_rate);
     send(sock, send_buf, std::strlen(send_buf), 0);
 
     // Block C++ thread and wait for DRL agent control updates
@@ -349,17 +361,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             out_policy.penalty_multiplier = float_output[1] * 100.0;
             out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
             
-            // Derive active sampling rate heuristically from current budget (stateless feedback loop)
-            double current_budget = telemetry.avg_budget;
-            if (current_budget < 0.01) current_budget = 0.01;
-            
-            double k = 0.01; // Scale factor matching safe heuristics
-            double calculated_rate = (1.0 / current_budget) * k;
-            
-            if (calculated_rate < 0.0) calculated_rate = 0.0;
-            if (calculated_rate > 1.0) calculated_rate = 1.0;
-            
-            out_policy.base_sampling_rate = calculated_rate;
+            // For 3D models, directly apply the current instant sampling rate
+            out_policy.base_sampling_rate = telemetry.instant_sampling_rate;
         } 
         else if (action_dim == 2) {
             // 2D Model Output: [recovery_rate, penalty_multiplier]
