@@ -1,10 +1,15 @@
-# Characterizing and Mitigating MTU-constrained Parser Workload Amplification in ASN.1-based V2X Stacks
+# Mitigating ASN.1 Parser Workload Amplification in V2X Stacks: A DRL-Driven Adaptive Approach
 
-This repository contains the evaluation framework, measurement harness, and dataset core for analyzing and mitigating Abstract Syntax Notation One (ASN.1) structural recursion vulnerabilities (CWE-674) under strict Maximum Transmission Unit (MTU) barriers in Vehicle-to-Everything (V2X) protocol deployments.
+This repository contains the evaluation framework, measurement harness, and dataset core for mitigating Abstract Syntax Notation One (ASN.1) structural recursion vulnerabilities (CWE-674) under strict Maximum Transmission Unit (MTU) barriers in Vehicle-to-Everything (V2X) protocol deployments using a Deep Reinforcement Learning (DRL)-driven adaptive approach.
 
 ### Open-Source Compliance and Attribution
 
 The V2X protocol simulation and packet processing core in this project is built upon **[Vanetza](https://github.com/riebl/vanetza)**, an open-source implementation of the ETSI C-ITS protocol suite developed by Raphael Riebl and contributors. 
+
+To ensure evaluation rigor and reproducibility, this repository covers the following specific Vanetza git revisions:
+*   **Vulnerable Baseline**: commit `3a18193`
+*   **Official Recursion-Limit Patch**: commit `2daa68f`
+*   **Latest Evaluated Patched Baseline (Our Hybrid Proposal)**: commit `575fe31`
 
 The original Vanetza codebase and the modifications contained in this repository are subject to the **GNU Lesser General Public License (LGPL) v3.0** (with GPL v3.0) as located in the [LICENSE](./LICENSE) file.
 
