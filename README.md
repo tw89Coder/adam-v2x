@@ -248,7 +248,12 @@ This pipeline handles real-time synchronization between the C++ network filter s
 bash run_experiments.sh python --train-online -a dqn
 
 # Step 2: Open a separate terminal and trigger the C++ co-simulation harness (Terminal 2)
+# By default, this runs training sequentially across default modes (0, 1, 2)
 bash run_experiments.sh unpatched --train-rl
+
+# To train on a specific mode sequence (e.g. Mode 0 only, or the Mode 3 grand mix scenario)
+bash run_experiments.sh unpatched --train-rl -m 0
+bash run_experiments.sh unpatched --train-rl -m 3
 ```
 
 ### 5.3 Production Inference Server Deployment (Noise-Free Eval Mode)
