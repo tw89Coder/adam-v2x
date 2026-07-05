@@ -51,10 +51,10 @@ The `docker-compose.yml` mounts the following host directories:
 
 ```mermaid
 graph LR
-    H[Host Directory] -->|Mounted via docker-compose| C[Container Directory]
-    H_Src[Workspace Source] -->|/V2X/home/yhl/term-project/CSE625_QoS| C_Src[/workspace]
-    H_Checkpoints[checkpoints/] -->|checkpoints/| C_Checkpoints[/workspace/checkpoints]
-    H_Outputs[outputs/] -->|outputs/| C_Outputs[/workspace/outputs]
+    H["Host Directory"] -->|Mounted via docker-compose| C["Container Directory"]
+    H_Src["Workspace Source"] -->|"/V2X/home/yhl/term-project/CSE625_QoS"| C_Src["/workspace"]
+    H_Checkpoints["checkpoints/"] -->|"checkpoints/"| C_Checkpoints["/workspace/checkpoints"]
+    H_Outputs["outputs/"] -->|"outputs/"| C_Outputs["/workspace/outputs"]
 ```
 
 This volume layout guarantees that any trained weights (`.pth` / `.onnx`) or evaluation statistics CSVs and plots generated inside the container are automatically written back to your host filesystem.

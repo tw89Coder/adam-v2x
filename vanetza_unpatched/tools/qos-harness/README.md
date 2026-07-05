@@ -19,9 +19,9 @@ sequenceDiagram
     Note over CPP: Computes telemetry counts & ticks
     Note over CPP: Packs metrics directly into 40-byte memory block
     CPP->>PY: Send raw 40-byte packet via TCP Socket
-    Note over PY: struct.unpack('<IIIIIQQf') (Instant deserialization)
-    Note over PY: Runs neural policy inference (DQN / PPO)
-    PY->>CPP: Return comma-separated actions (e.g. "0.05,50.0,600,0.85\n")
+    Note over PY: Unpacked instantly via struct.unpack
+    Note over PY: Runs neural policy inference (DQN or PPO)
+    PY->>CPP: Return comma-separated actions (e.g., 0.05, 50.0, 600, 0.85)
     Note over CPP: Fast tokenization & updates AdaptiveFilterFSM
 ```
 
