@@ -1,6 +1,6 @@
-# Mitigating ASN.1 Parser Workload Amplification in V2X Stacks: A DRL-Driven Adaptive Approach
+# ADAM: Mitigating ASN.1 Parser Workload Amplification in V2X Stacks: A DRL-Driven Adaptive Approach
 
-This repository contains the evaluation framework, measurement harness, and dataset core for mitigating Abstract Syntax Notation One (ASN.1) structural recursion vulnerabilities (CWE-674) under strict Maximum Transmission Unit (MTU) barriers in Vehicle-to-Everything (V2X) protocol deployments using a Deep Reinforcement Learning (DRL)-driven adaptive approach.
+ADAM (Adaptive DRL-driven Amplification Mitigation) is an open-source evaluation framework for analyzing and mitigating parser workload amplification caused by ASN.1 structural recursion vulnerabilities (CWE-674) in V2X protocol stacks. ADAM targets parser workload amplification caused by maliciously crafted ASN.1 structures while providing a reproducible evaluation environment for V2X protocol stacks. The framework includes a configurable workload generator, measurement harness, and adaptive DRL-based mitigation pipeline for systematic security evaluation.
 
 ### Open-Source Compliance and Attribution
 
