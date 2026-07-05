@@ -286,19 +286,34 @@ execute_rl_training() {
 
     # Ensure isolation directory structures exist before firing synchronization lines
     mkdir -p "${ROOT_DIR}/outputs/rl_env"
+    # Sequentially iterate through configuration sweeps to feed interactive socket state-spaces
+    # for rate in "${POLLUTION_RATES[@]}"; do
+    #     echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory at rate: ${rate}%...${C_RESET}"
+    #     local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" 3 "--rl")
+    #     if [ "$DISABLE_SAFETY" = true ]; then
+    #         train_args+=("--disable-safety")
+    #     fi
+    #     execute_cmd "$exec_bin" "${train_args[@]}"
+    #     echo "----------------------------------------------------------------------"
+    # done
 
     echo -e "${C_WARN}[NOTICE] Initializing Collaborative DRL Core Infrastructure Server Connection...${C_RESET}"
-    echo -e "${C_INFO}[STAGE] Task Lock Active: Target=${tgt} | Mode=3 (Grand Mix Scenario) | Automation Flags=--rl ($(get_core_info))${C_RESET}"
+    echo -e "${C_INFO}[STAGE] Task Lock Active: Target=${tgt} | Modes=${TARGET_MODES[*]} | Automation Flags=--rl ($(get_core_info))${C_RESET}"
 
-    # Sequentially iterate through configuration sweeps to feed interactive socket state-spaces
-    for rate in "${POLLUTION_RATES[@]}"; do
-        echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory at rate: ${rate}%...${C_RESET}"
-        local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" 3 "--rl")
-        if [ "$DISABLE_SAFETY" = true ]; then
-            train_args+=("--disable-safety")
-        fi
-        execute_cmd "$exec_bin" "${train_args[@]}"
-        echo "----------------------------------------------------------------------"
+    # Sequentially iterate through mode/rate sweeps to feed interactive socket state-spaces
+    for mode in "${TARGET_MODES[@]}"; do
+        for rate in "${POLLUTION_RATES[@]}"; do
+            echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory: mode=${mode}, rate=${rate}%...${C_RESET}"
+
+            local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "--rl")
+
+            if [ "$DISABLE_SAFETY" = true ]; then
+                train_args+=("--disable-safety")
+            fi
+
+            execute_cmd "$exec_bin" "${train_args[@]}"
+            echo "----------------------------------------------------------------------"
+        done
     done
 }
 
