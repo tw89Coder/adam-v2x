@@ -1,0 +1,738 @@
+Environment for 'omnetpp-6.1' in directory '/home/ken4506/simulation/omnetpp-6.1' is ready.
+(base) ken4506@netprod1:/shared/CSE625_QoS$ conda activate vanetza
+(vanetza) ken4506@netprod1:/shared/CSE625_QoS$ ash run_experiments.sh python --train-online -a dqn
+Command 'ash' not found, but can be installed with:
+sudo apt install ash
+(vanetza) ken4506@netprod1:/shared/CSE625_QoS$ bash run_experiments.sh python --train-online -a dqn
+┌──────────────────────────────────────────────────────────────┐
+│         V2X LIVE ONLINE INTERACTIVE TRAINING SERVER          │
+└──────────────────────────────────────────────────────────────┘
+  ├── Co-Sim Paradigm : Real-Time Closed-Loop Socket Optimization
+  ├── Hyperparameters : Learning Rate -> [ 0.0003 ] | Batch Size -> [ 32 ] | Algo -> [ DQN ]
+  └── Socket Active : Listening on 127.0.0.1:8080
+
+[*] Refactored Online DRL Serving Active. Waiting for co-simulation connections...
+
+[UPDATE #001] Mean Reward:  -2.00 | Q Loss: +3.61716 | Mean Q: -0.01092 | Target Q: -1.91181 | Replay: 32
+[UPDATE #002] Mean Reward:  -2.00 | Q Loss: +3.58960 | Mean Q: -0.01847 | Target Q: -1.91185 | Replay: 64
+[UPDATE #003] Mean Reward:  -2.00 | Q Loss: +3.58240 | Mean Q: -0.02054 | Target Q: -1.91194 | Replay: 96
+[UPDATE #004] Mean Reward:  -2.00 | Q Loss: +3.58011 | Mean Q: -0.02093 | Target Q: -1.91205 | Replay: 128
+[UPDATE #005] Mean Reward:  -2.00 | Q Loss: +3.54320 | Mean Q: -0.03130 | Target Q: -1.91221 | Replay: 160
+[UPDATE #006] Mean Reward:  -2.00 | Q Loss: +3.56917 | Mean Q: -0.02424 | Target Q: -1.91246 | Replay: 192
+[UPDATE #007] Mean Reward:  -2.00 | Q Loss: +3.55283 | Mean Q: -0.02896 | Target Q: -1.91276 | Replay: 224
+[UPDATE #008] Mean Reward:  -2.00 | Q Loss: +3.49303 | Mean Q: -0.04597 | Target Q: -1.91318 | Replay: 256
+[UPDATE #009] Mean Reward:  -2.00 | Q Loss: +3.45965 | Mean Q: -0.05513 | Target Q: -1.91366 | Replay: 288
+[UPDATE #010] Mean Reward:  -2.00 | Q Loss: +3.47281 | Mean Q: -0.05226 | Target Q: -1.91427 | Replay: 320
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #011] Mean Reward:  -2.00 | Q Loss: +3.40316 | Mean Q: -0.07173 | Target Q: -1.91491 | Replay: 352
+[UPDATE #012] Mean Reward:  -2.00 | Q Loss: +3.39990 | Mean Q: -0.07318 | Target Q: -1.91575 | Replay: 384
+[UPDATE #013] Mean Reward:  -2.00 | Q Loss: +3.44602 | Mean Q: -0.06111 | Target Q: -1.91665 | Replay: 416
+[UPDATE #014] Mean Reward:  -2.00 | Q Loss: +3.37076 | Mean Q: -0.08284 | Target Q: -1.91769 | Replay: 448
+[UPDATE #015] Mean Reward:  -2.00 | Q Loss: +3.34228 | Mean Q: -0.09178 | Target Q: -1.91884 | Replay: 480
+[UPDATE #016] Mean Reward:  -2.00 | Q Loss: +3.35874 | Mean Q: -0.08840 | Target Q: -1.92000 | Replay: 512
+[UPDATE #017] Mean Reward:  -2.00 | Q Loss: +3.33392 | Mean Q: -0.09625 | Target Q: -1.92132 | Replay: 544
+[UPDATE #018] Mean Reward:  -2.00 | Q Loss: +3.26792 | Mean Q: -0.11614 | Target Q: -1.92288 | Replay: 576
+[UPDATE #019] Mean Reward:  -2.00 | Q Loss: +3.28979 | Mean Q: -0.11092 | Target Q: -1.92427 | Replay: 608
+[UPDATE #020] Mean Reward:  -2.00 | Q Loss: +3.27988 | Mean Q: -0.11553 | Target Q: -1.92608 | Replay: 640
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #021] Mean Reward:  -2.00 | Q Loss: +3.16641 | Mean Q: -0.14936 | Target Q: -1.92786 | Replay: 672
+[UPDATE #022] Mean Reward:  -2.00 | Q Loss: +3.17258 | Mean Q: -0.14930 | Target Q: -1.92973 | Replay: 704
+[UPDATE #023] Mean Reward:  -2.00 | Q Loss: +3.23104 | Mean Q: -0.13444 | Target Q: -1.93173 | Replay: 736
+[UPDATE #024] Mean Reward:  -2.00 | Q Loss: +3.18923 | Mean Q: -0.14834 | Target Q: -1.93373 | Replay: 768
+[UPDATE #025] Mean Reward:  -2.00 | Q Loss: +3.13384 | Mean Q: -0.16599 | Target Q: -1.93589 | Replay: 800
+[UPDATE #026] Mean Reward:  -2.00 | Q Loss: +3.12407 | Mean Q: -0.17098 | Target Q: -1.93811 | Replay: 832
+[UPDATE #027] Mean Reward:  -2.00 | Q Loss: +3.12773 | Mean Q: -0.17209 | Target Q: -1.94035 | Replay: 864
+[UPDATE #028] Mean Reward:  -2.00 | Q Loss: +3.09348 | Mean Q: -0.18423 | Target Q: -1.94270 | Replay: 896
+[UPDATE #029] Mean Reward:  -2.00 | Q Loss: +3.04481 | Mean Q: -0.20064 | Target Q: -1.94505 | Replay: 928
+[UPDATE #030] Mean Reward:  -2.00 | Q Loss: +3.01977 | Mean Q: -0.21004 | Target Q: -1.94739 | Replay: 960
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #031] Mean Reward:  -2.00 | Q Loss: +2.99076 | Mean Q: -0.22093 | Target Q: -1.94983 | Replay: 992
+[UPDATE #032] Mean Reward:  -2.00 | Q Loss: +2.95250 | Mean Q: -0.23452 | Target Q: -1.95229 | Replay: 1024
+[UPDATE #033] Mean Reward:  -2.00 | Q Loss: +2.92186 | Mean Q: -0.24593 | Target Q: -1.95478 | Replay: 1056
+[UPDATE #034] Mean Reward:  -2.00 | Q Loss: +2.93484 | Mean Q: -0.24446 | Target Q: -1.95730 | Replay: 1088
+[UPDATE #035] Mean Reward:  -2.00 | Q Loss: +2.89828 | Mean Q: -0.25776 | Target Q: -1.95981 | Replay: 1120
+[UPDATE #036] Mean Reward:  -2.00 | Q Loss: +2.85820 | Mean Q: -0.27222 | Target Q: -1.96242 | Replay: 1152
+[UPDATE #037] Mean Reward:  -2.00 | Q Loss: +2.85459 | Mean Q: -0.27575 | Target Q: -1.96499 | Replay: 1184
+[UPDATE #038] Mean Reward:  -2.00 | Q Loss: +2.79804 | Mean Q: -0.29530 | Target Q: -1.96760 | Replay: 1216
+[UPDATE #039] Mean Reward:  -2.00 | Q Loss: +2.80038 | Mean Q: -0.29716 | Target Q: -1.97024 | Replay: 1248
+[UPDATE #040] Mean Reward:  -2.00 | Q Loss: +2.73581 | Mean Q: -0.31936 | Target Q: -1.97291 | Replay: 1280
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #041] Mean Reward:  -2.00 | Q Loss: +2.73787 | Mean Q: -0.32137 | Target Q: -1.97564 | Replay: 1312
+[UPDATE #042] Mean Reward:  -2.00 | Q Loss: +2.70125 | Mean Q: -0.33523 | Target Q: -1.97839 | Replay: 1344
+[UPDATE #043] Mean Reward:  -2.00 | Q Loss: +2.63951 | Mean Q: -0.35711 | Target Q: -1.98112 | Replay: 1376
+[UPDATE #044] Mean Reward:  -2.00 | Q Loss: +2.64219 | Mean Q: -0.35866 | Target Q: -1.98396 | Replay: 1408
+[UPDATE #045] Mean Reward:  -2.00 | Q Loss: +2.53854 | Mean Q: -0.39409 | Target Q: -1.98672 | Replay: 1440
+[UPDATE #046] Mean Reward:  -2.00 | Q Loss: +2.54339 | Mean Q: -0.39533 | Target Q: -1.98954 | Replay: 1472
+[UPDATE #047] Mean Reward:  -2.00 | Q Loss: +2.50172 | Mean Q: -0.41131 | Target Q: -1.99235 | Replay: 1504
+[UPDATE #048] Mean Reward:  -2.00 | Q Loss: +2.47967 | Mean Q: -0.42116 | Target Q: -1.99528 | Replay: 1536
+[UPDATE #049] Mean Reward:  -2.00 | Q Loss: +2.45049 | Mean Q: -0.43330 | Target Q: -1.99813 | Replay: 1568
+[UPDATE #050] Mean Reward:  -2.00 | Q Loss: +2.41794 | Mean Q: -0.44687 | Target Q: -2.00109 | Replay: 1600
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #051] Mean Reward:  -2.00 | Q Loss: +2.38675 | Mean Q: -0.45985 | Target Q: -2.00405 | Replay: 1632
+[UPDATE #052] Mean Reward:  -2.00 | Q Loss: +2.30712 | Mean Q: -0.48890 | Target Q: -2.00707 | Replay: 1664
+[UPDATE #053] Mean Reward:  -2.00 | Q Loss: +2.26666 | Mean Q: -0.50558 | Target Q: -2.01016 | Replay: 1696
+[UPDATE #054] Mean Reward:  -2.00 | Q Loss: +2.25752 | Mean Q: -0.51161 | Target Q: -2.01329 | Replay: 1728
+[UPDATE #055] Mean Reward:  -2.00 | Q Loss: +2.19947 | Mean Q: -0.53464 | Target Q: -2.01649 | Replay: 1760
+[UPDATE #056] Mean Reward:  -2.00 | Q Loss: +2.18556 | Mean Q: -0.54200 | Target Q: -2.01972 | Replay: 1792
+[UPDATE #057] Mean Reward:  -2.00 | Q Loss: +2.17016 | Mean Q: -0.55080 | Target Q: -2.02304 | Replay: 1824
+[UPDATE #058] Mean Reward:  -2.00 | Q Loss: +2.04811 | Mean Q: -0.59664 | Target Q: -2.02642 | Replay: 1856
+[UPDATE #059] Mean Reward:  -2.00 | Q Loss: +2.04192 | Mean Q: -0.60202 | Target Q: -2.02987 | Replay: 1888
+[UPDATE #060] Mean Reward:  -2.00 | Q Loss: +1.97003 | Mean Q: -0.63158 | Target Q: -2.03340 | Replay: 1920
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #061] Mean Reward:  -2.00 | Q Loss: +1.98078 | Mean Q: -0.63085 | Target Q: -2.03701 | Replay: 1952
+[UPDATE #062] Mean Reward:  -2.00 | Q Loss: +1.90987 | Mean Q: -0.65968 | Target Q: -2.04071 | Replay: 1984
+[UPDATE #063] Mean Reward:  -2.00 | Q Loss: +1.88022 | Mean Q: -0.67431 | Target Q: -2.04447 | Replay: 2016
+[UPDATE #064] Mean Reward:  -2.00 | Q Loss: +1.83931 | Mean Q: -0.69335 | Target Q: -2.04836 | Replay: 2048
+[UPDATE #065] Mean Reward:  -2.00 | Q Loss: +1.76523 | Mean Q: -0.72501 | Target Q: -2.05229 | Replay: 2080
+[UPDATE #066] Mean Reward:  -2.00 | Q Loss: +1.73239 | Mean Q: -0.74141 | Target Q: -2.05633 | Replay: 2112
+[UPDATE #067] Mean Reward:  -2.00 | Q Loss: +1.72256 | Mean Q: -0.74905 | Target Q: -2.06047 | Replay: 2144
+[UPDATE #068] Mean Reward:  -2.00 | Q Loss: +1.59732 | Mean Q: -0.80214 | Target Q: -2.06467 | Replay: 2176
+[UPDATE #069] Mean Reward:  -2.00 | Q Loss: +1.61436 | Mean Q: -0.79938 | Target Q: -2.06897 | Replay: 2208
+[UPDATE #070] Mean Reward:  -2.00 | Q Loss: +1.50862 | Mean Q: -0.84681 | Target Q: -2.07339 | Replay: 2240
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #071] Mean Reward:  -2.00 | Q Loss: +1.50235 | Mean Q: -0.85366 | Target Q: -2.07790 | Replay: 2272
+[UPDATE #072] Mean Reward:  -2.00 | Q Loss: +1.44971 | Mean Q: -0.87996 | Target Q: -2.08256 | Replay: 2304
+[UPDATE #073] Mean Reward:  -2.00 | Q Loss: +1.39722 | Mean Q: -0.90665 | Target Q: -2.08721 | Replay: 2336
+[UPDATE #074] Mean Reward:  -2.00 | Q Loss: +1.34552 | Mean Q: -0.93332 | Target Q: -2.09187 | Replay: 2368
+[UPDATE #075] Mean Reward:  -2.00 | Q Loss: +1.30960 | Mean Q: -0.95414 | Target Q: -2.09706 | Replay: 2400
+[UPDATE #076] Mean Reward:  -2.00 | Q Loss: +1.26618 | Mean Q: -0.97805 | Target Q: -2.10194 | Replay: 2432
+[UPDATE #077] Mean Reward:  -2.00 | Q Loss: +1.21005 | Mean Q: -1.00866 | Target Q: -2.10713 | Replay: 2464
+[UPDATE #078] Mean Reward:  -2.00 | Q Loss: +1.19696 | Mean Q: -1.01938 | Target Q: -2.11243 | Replay: 2496
+[UPDATE #079] Mean Reward:  -2.00 | Q Loss: +1.14441 | Mean Q: -1.04948 | Target Q: -2.11773 | Replay: 2528
+[UPDATE #080] Mean Reward:  -2.00 | Q Loss: +1.12182 | Mean Q: -1.06517 | Target Q: -2.12335 | Replay: 2560
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #081] Mean Reward:  -2.00 | Q Loss: +1.04188 | Mean Q: -1.10957 | Target Q: -2.12881 | Replay: 2592
+[UPDATE #082] Mean Reward:  -2.00 | Q Loss: +1.02508 | Mean Q: -1.12342 | Target Q: -2.13462 | Replay: 2624
+[UPDATE #083] Mean Reward:  -2.00 | Q Loss: +0.97047 | Mean Q: -1.15646 | Target Q: -2.14047 | Replay: 2656
+[UPDATE #084] Mean Reward:  -2.00 | Q Loss: +0.92268 | Mean Q: -1.18768 | Target Q: -2.14659 | Replay: 2688
+[UPDATE #085] Mean Reward:  -2.00 | Q Loss: +0.88983 | Mean Q: -1.21039 | Target Q: -2.15235 | Replay: 2720
+[UPDATE #086] Mean Reward:  -2.00 | Q Loss: +0.86134 | Mean Q: -1.23123 | Target Q: -2.15838 | Replay: 2752
+[UPDATE #087] Mean Reward:  -2.00 | Q Loss: +0.81379 | Mean Q: -1.26383 | Target Q: -2.16496 | Replay: 2784
+[UPDATE #088] Mean Reward:  -2.00 | Q Loss: +0.77483 | Mean Q: -1.29195 | Target Q: -2.17122 | Replay: 2816
+[UPDATE #089] Mean Reward:  -2.00 | Q Loss: +0.72131 | Mean Q: -1.32929 | Target Q: -2.17784 | Replay: 2848
+[UPDATE #090] Mean Reward:  -2.00 | Q Loss: +0.68726 | Mean Q: -1.35638 | Target Q: -2.18425 | Replay: 2880
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #091] Mean Reward:  -2.00 | Q Loss: +0.63948 | Mean Q: -1.39298 | Target Q: -2.19156 | Replay: 2912
+[UPDATE #092] Mean Reward:  -2.00 | Q Loss: +0.59667 | Mean Q: -1.42690 | Target Q: -2.19806 | Replay: 2944
+[UPDATE #093] Mean Reward:  -2.00 | Q Loss: +0.58273 | Mean Q: -1.44239 | Target Q: -2.20482 | Replay: 2976
+[UPDATE #094] Mean Reward:  -2.00 | Q Loss: +0.55303 | Mean Q: -1.46935 | Target Q: -2.21208 | Replay: 3008
+[UPDATE #095] Mean Reward:  -2.00 | Q Loss: +0.51174 | Mean Q: -1.50438 | Target Q: -2.21900 | Replay: 3040
+[UPDATE #096] Mean Reward:  -2.00 | Q Loss: +0.50019 | Mean Q: -1.51974 | Target Q: -2.22636 | Replay: 3072
+[UPDATE #097] Mean Reward:  -2.00 | Q Loss: +0.45615 | Mean Q: -1.55906 | Target Q: -2.23364 | Replay: 3104
+[UPDATE #098] Mean Reward:  -2.00 | Q Loss: +0.42827 | Mean Q: -1.58757 | Target Q: -2.24158 | Replay: 3136
+[UPDATE #099] Mean Reward:  -2.00 | Q Loss: +0.40021 | Mean Q: -1.61714 | Target Q: -2.24903 | Replay: 3168
+[UPDATE #100] Mean Reward:  -2.00 | Q Loss: +0.36416 | Mean Q: -1.65415 | Target Q: -2.25687 | Replay: 3200
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #101] Mean Reward:  -2.00 | Q Loss: +0.34451 | Mean Q: -1.67792 | Target Q: -2.26446 | Replay: 3232
+[UPDATE #102] Mean Reward:  -2.21 | Q Loss: +1.94957 | Mean Q: -1.71104 | Target Q: -2.48111 | Replay: 3264
+[UPDATE #103] Mean Reward:  -2.00 | Q Loss: +0.29690 | Mean Q: -1.73550 | Target Q: -2.28029 | Replay: 3296
+[UPDATE #104] Mean Reward:  -2.00 | Q Loss: +0.26515 | Mean Q: -1.77432 | Target Q: -2.28881 | Replay: 3328
+[UPDATE #105] Mean Reward:  -2.00 | Q Loss: +0.25001 | Mean Q: -1.79668 | Target Q: -2.29635 | Replay: 3360
+[UPDATE #106] Mean Reward:  -2.00 | Q Loss: +0.23114 | Mean Q: -1.82503 | Target Q: -2.30532 | Replay: 3392
+[UPDATE #107] Mean Reward:  -2.00 | Q Loss: +0.20884 | Mean Q: -1.85707 | Target Q: -2.31335 | Replay: 3424
+[UPDATE #108] Mean Reward:  -2.00 | Q Loss: +0.17837 | Mean Q: -1.90150 | Target Q: -2.32285 | Replay: 3456
+[UPDATE #109] Mean Reward:  -2.00 | Q Loss: +0.17649 | Mean Q: -1.91175 | Target Q: -2.33078 | Replay: 3488
+[UPDATE #110] Mean Reward:  -2.00 | Q Loss: +0.16524 | Mean Q: -1.93432 | Target Q: -2.33963 | Replay: 3520
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #111] Mean Reward:  -2.00 | Q Loss: +0.14755 | Mean Q: -1.96556 | Target Q: -2.34855 | Replay: 3552
+[UPDATE #112] Mean Reward:  -2.00 | Q Loss: +0.13282 | Mean Q: -1.99419 | Target Q: -2.35689 | Replay: 3584
+[UPDATE #113] Mean Reward:  -2.00 | Q Loss: +0.11532 | Mean Q: -2.02924 | Target Q: -2.36714 | Replay: 3616
+[UPDATE #114] Mean Reward:  -2.00 | Q Loss: +0.11318 | Mean Q: -2.04187 | Target Q: -2.37576 | Replay: 3648
+[UPDATE #115] Mean Reward:  -2.00 | Q Loss: +0.09915 | Mean Q: -2.07338 | Target Q: -2.38549 | Replay: 3680
+[UPDATE #116] Mean Reward:  -2.00 | Q Loss: +0.08911 | Mean Q: -2.09904 | Target Q: -2.39433 | Replay: 3712
+[UPDATE #117] Mean Reward:  -2.00 | Q Loss: +0.09130 | Mean Q: -2.10509 | Target Q: -2.40454 | Replay: 3744
+[UPDATE #118] Mean Reward:  -2.00 | Q Loss: +0.08374 | Mean Q: -2.12674 | Target Q: -2.41385 | Replay: 3776
+[UPDATE #119] Mean Reward:  -2.00 | Q Loss: +0.06714 | Mean Q: -2.16914 | Target Q: -2.42308 | Replay: 3808
+[UPDATE #120] Mean Reward:  -2.00 | Q Loss: +0.06326 | Mean Q: -2.18610 | Target Q: -2.43269 | Replay: 3840
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #121] Mean Reward:  -2.00 | Q Loss: +0.06122 | Mean Q: -2.20152 | Target Q: -2.44250 | Replay: 3872
+[UPDATE #122] Mean Reward:  -2.00 | Q Loss: +0.06204 | Mean Q: -2.20720 | Target Q: -2.45282 | Replay: 3904
+[UPDATE #123] Mean Reward:  -2.00 | Q Loss: +0.05462 | Mean Q: -2.23421 | Target Q: -2.46379 | Replay: 3936
+[UPDATE #124] Mean Reward:  -2.00 | Q Loss: +0.04776 | Mean Q: -2.25920 | Target Q: -2.47297 | Replay: 3968
+[UPDATE #125] Mean Reward:  -2.00 | Q Loss: +0.05174 | Mean Q: -2.25960 | Target Q: -2.48262 | Replay: 4000
+[UPDATE #126] Mean Reward:  -2.00 | Q Loss: +0.04420 | Mean Q: -2.28813 | Target Q: -2.49244 | Replay: 4032
+[UPDATE #127] Mean Reward:  -2.00 | Q Loss: +0.03965 | Mean Q: -2.31219 | Target Q: -2.50386 | Replay: 4064
+[UPDATE #128] Mean Reward:  -2.00 | Q Loss: +0.03866 | Mean Q: -2.32159 | Target Q: -2.51414 | Replay: 4096
+[UPDATE #129] Mean Reward:  -2.00 | Q Loss: +0.03482 | Mean Q: -2.34312 | Target Q: -2.52461 | Replay: 4128
+[UPDATE #130] Mean Reward:  -2.16 | Q Loss: +0.88719 | Mean Q: -2.35546 | Target Q: -2.69109 | Replay: 4160
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #131] Mean Reward:  -2.00 | Q Loss: +0.02805 | Mean Q: -2.38585 | Target Q: -2.54517 | Replay: 4192
+[UPDATE #132] Mean Reward:  -2.00 | Q Loss: +0.03093 | Mean Q: -2.38498 | Target Q: -2.55559 | Replay: 4224
+[UPDATE #133] Mean Reward:  -2.00 | Q Loss: +0.02641 | Mean Q: -2.41216 | Target Q: -2.56805 | Replay: 4256
+[UPDATE #134] Mean Reward:  -2.00 | Q Loss: +0.02626 | Mean Q: -2.42232 | Target Q: -2.57775 | Replay: 4288
+[UPDATE #135] Mean Reward:  -2.00 | Q Loss: +0.02229 | Mean Q: -2.44628 | Target Q: -2.58927 | Replay: 4320
+[UPDATE #136] Mean Reward:  -2.00 | Q Loss: +0.02097 | Mean Q: -2.46145 | Target Q: -2.60054 | Replay: 4352
+[UPDATE #137] Mean Reward:  -2.00 | Q Loss: +0.02282 | Mean Q: -2.46310 | Target Q: -2.61158 | Replay: 4384
+[UPDATE #138] Mean Reward:  -2.00 | Q Loss: +0.02253 | Mean Q: -2.47448 | Target Q: -2.62190 | Replay: 4416
+[UPDATE #139] Mean Reward:  -2.00 | Q Loss: +0.02112 | Mean Q: -2.49240 | Target Q: -2.63383 | Replay: 4448
+[UPDATE #140] Mean Reward:  -2.00 | Q Loss: +0.02023 | Mean Q: -2.50719 | Target Q: -2.64450 | Replay: 4480
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #141] Mean Reward:  -2.00 | Q Loss: +0.01986 | Mean Q: -2.52137 | Target Q: -2.65552 | Replay: 4512
+[UPDATE #142] Mean Reward:  -2.00 | Q Loss: +0.01972 | Mean Q: -2.53362 | Target Q: -2.66781 | Replay: 4544
+[UPDATE #143] Mean Reward:  -2.00 | Q Loss: +0.01658 | Mean Q: -2.55637 | Target Q: -2.67786 | Replay: 4576
+[UPDATE #144] Mean Reward:  -2.00 | Q Loss: +0.01972 | Mean Q: -2.55473 | Target Q: -2.68954 | Replay: 4608
+[UPDATE #145] Mean Reward:  -2.00 | Q Loss: +0.01796 | Mean Q: -2.57290 | Target Q: -2.70177 | Replay: 4640
+[UPDATE #146] Mean Reward:  -2.00 | Q Loss: +0.01600 | Mean Q: -2.59318 | Target Q: -2.71347 | Replay: 4672
+[UPDATE #147] Mean Reward:  -2.00 | Q Loss: +0.01698 | Mean Q: -2.59977 | Target Q: -2.72447 | Replay: 4704
+[UPDATE #148] Mean Reward:  -2.00 | Q Loss: +0.01702 | Mean Q: -2.61099 | Target Q: -2.73656 | Replay: 4736
+[UPDATE #149] Mean Reward:  -2.00 | Q Loss: +0.01635 | Mean Q: -2.62630 | Target Q: -2.74808 | Replay: 4768
+[UPDATE #150] Mean Reward:  -2.31 | Q Loss: +3.10696 | Mean Q: -2.64272 | Target Q: -3.06599 | Replay: 4800
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #151] Mean Reward:  -2.00 | Q Loss: +0.01339 | Mean Q: -2.66477 | Target Q: -2.77307 | Replay: 4832
+[UPDATE #152] Mean Reward:  -2.06 | Q Loss: +0.16430 | Mean Q: -2.67527 | Target Q: -2.84759 | Replay: 4864
+[UPDATE #153] Mean Reward:  -2.00 | Q Loss: +0.01082 | Mean Q: -2.69650 | Target Q: -2.79634 | Replay: 4896
+[UPDATE #154] Mean Reward:  -2.00 | Q Loss: +0.01185 | Mean Q: -2.70531 | Target Q: -2.80797 | Replay: 4928
+[UPDATE #155] Mean Reward:  -2.00 | Q Loss: +0.01165 | Mean Q: -2.71680 | Target Q: -2.81951 | Replay: 4960
+[UPDATE #156] Mean Reward:  -2.00 | Q Loss: +0.00906 | Mean Q: -2.74658 | Target Q: -2.83333 | Replay: 4992
+[UPDATE #157] Mean Reward:  -2.00 | Q Loss: +0.01136 | Mean Q: -2.74418 | Target Q: -2.84251 | Replay: 5024
+[UPDATE #158] Mean Reward:  -2.00 | Q Loss: +0.00912 | Mean Q: -2.77362 | Target Q: -2.85674 | Replay: 5056
+[UPDATE #159] Mean Reward:  -2.00 | Q Loss: +0.00859 | Mean Q: -2.78869 | Target Q: -2.86898 | Replay: 5088
+[UPDATE #160] Mean Reward:  -2.29 | Q Loss: +3.01277 | Mean Q: -2.76659 | Target Q: -3.17099 | Replay: 5120
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #161] Mean Reward:  -2.16 | Q Loss: +0.83188 | Mean Q: -2.81426 | Target Q: -3.05114 | Replay: 5152
+[UPDATE #162] Mean Reward:  -2.00 | Q Loss: +0.00896 | Mean Q: -2.81795 | Target Q: -2.90611 | Replay: 5184
+[UPDATE #163] Mean Reward:  -2.00 | Q Loss: +0.00968 | Mean Q: -2.82433 | Target Q: -2.91745 | Replay: 5216
+[UPDATE #164] Mean Reward:  -2.00 | Q Loss: +0.00932 | Mean Q: -2.84023 | Target Q: -2.93122 | Replay: 5248
+[UPDATE #165] Mean Reward:  -2.00 | Q Loss: +0.00854 | Mean Q: -2.85415 | Target Q: -2.94326 | Replay: 5280
+[UPDATE #166] Mean Reward:  -2.28 | Q Loss: +3.21802 | Mean Q: -2.87153 | Target Q: -3.23390 | Replay: 5312
+[UPDATE #167] Mean Reward:  -2.00 | Q Loss: +0.01101 | Mean Q: -2.88547 | Target Q: -2.96744 | Replay: 5344
+[UPDATE #168] Mean Reward:  -2.00 | Q Loss: +0.00519 | Mean Q: -2.91246 | Target Q: -2.98027 | Replay: 5376
+[UPDATE #169] Mean Reward:  -2.00 | Q Loss: +0.00476 | Mean Q: -2.93081 | Target Q: -2.99403 | Replay: 5408
+[UPDATE #170] Mean Reward:  -1.99 | Q Loss: +0.00485 | Mean Q: -2.93828 | Target Q: -2.99631 | Replay: 5440
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #171] Mean Reward:  -2.00 | Q Loss: +0.00493 | Mean Q: -2.95487 | Target Q: -3.02016 | Replay: 5472
+[UPDATE #172] Mean Reward:  -2.00 | Q Loss: +0.00476 | Mean Q: -2.96531 | Target Q: -3.03162 | Replay: 5504
+[UPDATE #173] Mean Reward:  -2.16 | Q Loss: +0.80884 | Mean Q: -2.98721 | Target Q: -3.20486 | Replay: 5536
+[UPDATE #174] Mean Reward:  -2.61 | Q Loss: +6.05313 | Mean Q: -2.98707 | Target Q: -3.66994 | Replay: 5568
+[UPDATE #175] Mean Reward:  -2.00 | Q Loss: +0.00415 | Mean Q: -3.01333 | Target Q: -3.07314 | Replay: 5600
+[UPDATE #176] Mean Reward:  -2.00 | Q Loss: +0.00411 | Mean Q: -3.03193 | Target Q: -3.08810 | Replay: 5632
+[UPDATE #177] Mean Reward:  -1.98 | Q Loss: +0.01345 | Mean Q: -3.04040 | Target Q: -3.08021 | Replay: 5664
+[UPDATE #178] Mean Reward:  -2.00 | Q Loss: +0.00295 | Mean Q: -3.07300 | Target Q: -3.11446 | Replay: 5696
+[UPDATE #179] Mean Reward:  -2.16 | Q Loss: +0.82631 | Mean Q: -3.07426 | Target Q: -3.28192 | Replay: 5728
+[UPDATE #180] Mean Reward:  -2.00 | Q Loss: +0.00647 | Mean Q: -3.08762 | Target Q: -3.14073 | Replay: 5760
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #181] Mean Reward:  -2.00 | Q Loss: +0.00651 | Mean Q: -3.09264 | Target Q: -3.15465 | Replay: 5792
+[UPDATE #182] Mean Reward:  -2.31 | Q Loss: +3.16885 | Mean Q: -3.10330 | Target Q: -3.47612 | Replay: 5824
+[UPDATE #183] Mean Reward:  -2.31 | Q Loss: +3.14120 | Mean Q: -3.12142 | Target Q: -3.49008 | Replay: 5856
+[UPDATE #184] Mean Reward:  -1.99 | Q Loss: +0.00444 | Mean Q: -3.15905 | Target Q: -3.18931 | Replay: 5888
+[UPDATE #185] Mean Reward:  -2.00 | Q Loss: +0.00336 | Mean Q: -3.16722 | Target Q: -3.21232 | Replay: 5920
+[UPDATE #186] Mean Reward:  -2.00 | Q Loss: +0.00208 | Mean Q: -3.19667 | Target Q: -3.22057 | Replay: 5952
+[UPDATE #187] Mean Reward:  -2.31 | Q Loss: +3.14438 | Mean Q: -3.20910 | Target Q: -3.54972 | Replay: 5984
+[UPDATE #188] Mean Reward:  -2.00 | Q Loss: +0.00196 | Mean Q: -3.22146 | Target Q: -3.25238 | Replay: 6016
+[UPDATE #189] Mean Reward:  -2.30 | Q Loss: +3.06967 | Mean Q: -3.22380 | Target Q: -3.56119 | Replay: 6048
+[UPDATE #190] Mean Reward:  -2.08 | Q Loss: +0.19420 | Mean Q: -3.27926 | Target Q: -3.35723 | Replay: 6080
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #191] Mean Reward:  -2.10 | Q Loss: +0.39077 | Mean Q: -3.28289 | Target Q: -3.38725 | Replay: 6112
+[UPDATE #192] Mean Reward:  -2.00 | Q Loss: +0.00196 | Mean Q: -3.30615 | Target Q: -3.30969 | Replay: 6144
+[UPDATE #193] Mean Reward:  -1.99 | Q Loss: +0.00849 | Mean Q: -3.29389 | Target Q: -3.31408 | Replay: 6176
+[UPDATE #194] Mean Reward:  -2.27 | Q Loss: +2.96417 | Mean Q: -3.29741 | Target Q: -3.59313 | Replay: 6208
+[UPDATE #195] Mean Reward:  -2.00 | Q Loss: +0.00420 | Mean Q: -3.34682 | Target Q: -3.35165 | Replay: 6240
+[UPDATE #196] Mean Reward:  -2.00 | Q Loss: +0.00233 | Mean Q: -3.34688 | Target Q: -3.36370 | Replay: 6272
+[UPDATE #197] Mean Reward:  -1.96 | Q Loss: +0.06042 | Mean Q: -3.37691 | Target Q: -3.32775 | Replay: 6304
+[UPDATE #198] Mean Reward:  -2.31 | Q Loss: +3.16192 | Mean Q: -3.36228 | Target Q: -3.70360 | Replay: 6336
+[UPDATE #199] Mean Reward:  -2.08 | Q Loss: +0.19055 | Mean Q: -3.39544 | Target Q: -3.48536 | Replay: 6368
+[UPDATE #200] Mean Reward:  -2.00 | Q Loss: +0.00279 | Mean Q: -3.39989 | Target Q: -3.41645 | Replay: 6400
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #201] Mean Reward:  -2.00 | Q Loss: +0.01311 | Mean Q: -3.39842 | Target Q: -3.43382 | Replay: 6432
+[UPDATE #202] Mean Reward:  -2.00 | Q Loss: +0.00204 | Mean Q: -3.43574 | Target Q: -3.44627 | Replay: 6464
+[UPDATE #203] Mean Reward:  -1.96 | Q Loss: +0.03000 | Mean Q: -3.45209 | Target Q: -3.41578 | Replay: 6496
+[UPDATE #204] Mean Reward:  -2.00 | Q Loss: +0.00200 | Mean Q: -3.45395 | Target Q: -3.47496 | Replay: 6528
+[UPDATE #205] Mean Reward:  -1.98 | Q Loss: +0.02944 | Mean Q: -3.44351 | Target Q: -3.45815 | Replay: 6560
+[UPDATE #206] Mean Reward:  -1.99 | Q Loss: +0.00224 | Mean Q: -3.47604 | Target Q: -3.49015 | Replay: 6592
+[UPDATE #207] Mean Reward:  -2.16 | Q Loss: +0.93498 | Mean Q: -3.46954 | Target Q: -3.67607 | Replay: 6624
+[UPDATE #208] Mean Reward:  -1.99 | Q Loss: +0.00288 | Mean Q: -3.50351 | Target Q: -3.52370 | Replay: 6656
+[UPDATE #209] Mean Reward:  -2.00 | Q Loss: +0.00255 | Mean Q: -3.51714 | Target Q: -3.55214 | Replay: 6688
+[UPDATE #210] Mean Reward:  -2.00 | Q Loss: +0.00255 | Mean Q: -3.52784 | Target Q: -3.56650 | Replay: 6720
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #211] Mean Reward:  -1.97 | Q Loss: +0.01794 | Mean Q: -3.54134 | Target Q: -3.54384 | Replay: 6752
+[UPDATE #212] Mean Reward:  -2.00 | Q Loss: +0.00292 | Mean Q: -3.55450 | Target Q: -3.58504 | Replay: 6784
+[UPDATE #213] Mean Reward:  -2.00 | Q Loss: +0.00267 | Mean Q: -3.57382 | Target Q: -3.59912 | Replay: 6816
+[UPDATE #214] Mean Reward:  -1.96 | Q Loss: +0.05436 | Mean Q: -3.58328 | Target Q: -3.56801 | Replay: 6848
+[UPDATE #215] Mean Reward:  -1.97 | Q Loss: +0.02194 | Mean Q: -3.58742 | Target Q: -3.60009 | Replay: 6880
+[UPDATE #216] Mean Reward:  -2.07 | Q Loss: +0.20950 | Mean Q: -3.60084 | Target Q: -3.71796 | Replay: 6912
+[UPDATE #217] Mean Reward:  -1.98 | Q Loss: +0.02886 | Mean Q: -3.61862 | Target Q: -3.63150 | Replay: 6944
+[UPDATE #218] Mean Reward:  -2.15 | Q Loss: +0.80427 | Mean Q: -3.65388 | Target Q: -3.83067 | Replay: 6976
+[UPDATE #219] Mean Reward:  -1.97 | Q Loss: +0.01939 | Mean Q: -3.60229 | Target Q: -3.65691 | Replay: 7008
+[UPDATE #220] Mean Reward:  -1.99 | Q Loss: +0.00469 | Mean Q: -3.66594 | Target Q: -3.69279 | Replay: 7040
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #221] Mean Reward:  -2.25 | Q Loss: +2.48249 | Mean Q: -3.66501 | Target Q: -3.94660 | Replay: 7072
+[UPDATE #222] Mean Reward:  -2.07 | Q Loss: +0.18784 | Mean Q: -3.73375 | Target Q: -3.80788 | Replay: 7104
+[UPDATE #223] Mean Reward:  -1.97 | Q Loss: +0.01075 | Mean Q: -3.73064 | Target Q: -3.70262 | Replay: 7136
+[UPDATE #224] Mean Reward:  -2.46 | Q Loss: +3.85114 | Mean Q: -3.73645 | Target Q: -4.21966 | Replay: 7168
+[UPDATE #225] Mean Reward:  -2.03 | Q Loss: +0.86317 | Mean Q: -3.69268 | Target Q: -3.76218 | Replay: 7200
+[UPDATE #226] Mean Reward:  -1.94 | Q Loss: +0.04030 | Mean Q: -3.76977 | Target Q: -3.71288 | Replay: 7232
+[UPDATE #227] Mean Reward:  -2.59 | Q Loss: +6.21156 | Mean Q: -3.82246 | Target Q: -4.38854 | Replay: 7264
+[UPDATE #228] Mean Reward:  -2.13 | Q Loss: +3.12549 | Mean Q: -3.70673 | Target Q: -3.88822 | Replay: 7296
+[UPDATE #229] Mean Reward:  -1.81 | Q Loss: +0.10885 | Mean Q: -3.72805 | Target Q: -3.58605 | Replay: 7328
+[UPDATE #230] Mean Reward:  -1.82 | Q Loss: +0.10256 | Mean Q: -3.75702 | Target Q: -3.61586 | Replay: 7360
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #231] Mean Reward:  -2.29 | Q Loss: +2.55775 | Mean Q: -3.87732 | Target Q: -4.14314 | Replay: 7392
+[UPDATE #232] Mean Reward:  -1.88 | Q Loss: +0.06185 | Mean Q: -3.86666 | Target Q: -3.72738 | Replay: 7424
+[UPDATE #233] Mean Reward:  -1.83 | Q Loss: +0.08976 | Mean Q: -3.79388 | Target Q: -3.66827 | Replay: 7456
+[UPDATE #234] Mean Reward:  -1.97 | Q Loss: +0.05036 | Mean Q: -3.95689 | Target Q: -3.87317 | Replay: 7488
+[UPDATE #235] Mean Reward:  -1.99 | Q Loss: +0.01003 | Mean Q: -3.96728 | Target Q: -3.92394 | Replay: 7520
+[UPDATE #236] Mean Reward:  -2.00 | Q Loss: +0.02015 | Mean Q: -3.95472 | Target Q: -3.94500 | Replay: 7552
+[UPDATE #237] Mean Reward:  -1.92 | Q Loss: +0.59715 | Mean Q: -3.75171 | Target Q: -3.80998 | Replay: 7584
+[UPDATE #238] Mean Reward:  -2.15 | Q Loss: +2.58858 | Mean Q: -3.83624 | Target Q: -4.07069 | Replay: 7616
+[UPDATE #239] Mean Reward:  -1.81 | Q Loss: +0.07956 | Mean Q: -3.80069 | Target Q: -3.73306 | Replay: 7648
+[UPDATE #240] Mean Reward:  -1.88 | Q Loss: +0.05853 | Mean Q: -3.86701 | Target Q: -3.84345 | Replay: 7680
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #241] Mean Reward:  -1.79 | Q Loss: +0.06582 | Mean Q: -3.80685 | Target Q: -3.73793 | Replay: 7712
+[UPDATE #242] Mean Reward:  -2.12 | Q Loss: +3.18739 | Mean Q: -3.82024 | Target Q: -4.08116 | Replay: 7744
+[UPDATE #243] Mean Reward:  -2.25 | Q Loss: +4.08404 | Mean Q: -3.80931 | Target Q: -4.21065 | Replay: 7776
+[UPDATE #244] Mean Reward:  -1.93 | Q Loss: +0.03004 | Mean Q: -3.95054 | Target Q: -3.96529 | Replay: 7808
+[UPDATE #245] Mean Reward:  -1.94 | Q Loss: +0.02615 | Mean Q: -3.96357 | Target Q: -3.98918 | Replay: 7840
+[UPDATE #246] Mean Reward:  -2.36 | Q Loss: +6.67718 | Mean Q: -3.67879 | Target Q: -4.30449 | Replay: 7872
+[UPDATE #247] Mean Reward:  -1.81 | Q Loss: +0.06230 | Mean Q: -3.90721 | Target Q: -3.85061 | Replay: 7904
+[UPDATE #248] Mean Reward:  -1.77 | Q Loss: +0.06792 | Mean Q: -3.89271 | Target Q: -3.81050 | Replay: 7936
+[UPDATE #249] Mean Reward:  -1.88 | Q Loss: +0.03751 | Mean Q: -4.00911 | Target Q: -3.97529 | Replay: 7968
+[UPDATE #250] Mean Reward:  -1.86 | Q Loss: +0.04002 | Mean Q: -4.02831 | Target Q: -3.96580 | Replay: 8000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #251] Mean Reward:  -1.67 | Q Loss: +0.15212 | Mean Q: -3.84302 | Target Q: -3.69423 | Replay: 8032
+[UPDATE #252] Mean Reward:  -1.82 | Q Loss: +0.04786 | Mean Q: -3.96545 | Target Q: -3.93136 | Replay: 8064
+[UPDATE #253] Mean Reward:  -1.68 | Q Loss: +0.10287 | Mean Q: -3.84042 | Target Q: -3.74065 | Replay: 8096
+[UPDATE #254] Mean Reward:  -1.86 | Q Loss: +0.02955 | Mean Q: -4.03675 | Target Q: -4.01836 | Replay: 8128
+[UPDATE #255] Mean Reward:  -1.93 | Q Loss: +0.44607 | Mean Q: -3.97368 | Target Q: -4.08225 | Replay: 8160
+[UPDATE #256] Mean Reward:  -2.06 | Q Loss: +3.03392 | Mean Q: -3.93069 | Target Q: -4.18790 | Replay: 8192
+[UPDATE #257] Mean Reward:  -1.41 | Q Loss: +0.10034 | Mean Q: -3.53384 | Target Q: -3.39774 | Replay: 8224
+[UPDATE #258] Mean Reward:  -1.82 | Q Loss: +0.02769 | Mean Q: -4.02570 | Target Q: -4.01905 | Replay: 8256
+[UPDATE #259] Mean Reward:  -1.87 | Q Loss: +0.03545 | Mean Q: -4.11355 | Target Q: -4.11042 | Replay: 8288
+[UPDATE #260] Mean Reward:  -1.92 | Q Loss: +0.01209 | Mean Q: -4.17907 | Target Q: -4.19328 | Replay: 8320
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #261] Mean Reward:  -1.64 | Q Loss: +0.07823 | Mean Q: -3.85031 | Target Q: -3.80454 | Replay: 8352
+[UPDATE #262] Mean Reward:  -1.77 | Q Loss: +0.02734 | Mean Q: -4.01084 | Target Q: -3.99069 | Replay: 8384
+[UPDATE #263] Mean Reward:  -1.72 | Q Loss: +0.03362 | Mean Q: -3.99030 | Target Q: -3.94179 | Replay: 8416
+[UPDATE #264] Mean Reward:  -1.80 | Q Loss: +0.07516 | Mean Q: -4.10059 | Target Q: -4.07420 | Replay: 8448
+[UPDATE #265] Mean Reward:  -1.89 | Q Loss: +3.16824 | Mean Q: -3.78912 | Target Q: -4.07295 | Replay: 8480
+[UPDATE #266] Mean Reward:  -2.08 | Q Loss: +0.84076 | Mean Q: -4.26710 | Target Q: -4.44471 | Replay: 8512
+[UPDATE #267] Mean Reward:  -1.93 | Q Loss: +0.48122 | Mean Q: -4.13113 | Target Q: -4.25296 | Replay: 8544
+[UPDATE #268] Mean Reward:  -1.51 | Q Loss: +0.05602 | Mean Q: -3.71243 | Target Q: -3.68757 | Replay: 8576
+[UPDATE #269] Mean Reward:  -1.76 | Q Loss: +0.01317 | Mean Q: -4.10242 | Target Q: -4.08731 | Replay: 8608
+[UPDATE #270] Mean Reward:  -1.63 | Q Loss: +0.04470 | Mean Q: -3.96881 | Target Q: -3.90797 | Replay: 8640
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #271] Mean Reward:  -1.76 | Q Loss: +0.03598 | Mean Q: -4.16436 | Target Q: -4.10372 | Replay: 8672
+[UPDATE #272] Mean Reward:  -1.82 | Q Loss: +0.02857 | Mean Q: -4.24384 | Target Q: -4.21962 | Replay: 8704
+[UPDATE #273] Mean Reward:  -1.78 | Q Loss: +0.02210 | Mean Q: -4.22133 | Target Q: -4.17346 | Replay: 8736
+[UPDATE #274] Mean Reward:  -1.73 | Q Loss: +0.06402 | Mean Q: -4.17821 | Target Q: -4.09955 | Replay: 8768
+[UPDATE #275] Mean Reward:  -2.19 | Q Loss: +3.09891 | Mean Q: -4.35253 | Target Q: -4.66309 | Replay: 8800
+[UPDATE #276] Mean Reward:  -2.15 | Q Loss: +3.95074 | Mean Q: -4.07050 | Target Q: -4.52771 | Replay: 8832
+[UPDATE #277] Mean Reward:  -1.66 | Q Loss: +0.07562 | Mean Q: -4.14427 | Target Q: -4.03686 | Replay: 8864
+[UPDATE #278] Mean Reward:  -1.66 | Q Loss: +0.01193 | Mean Q: -4.09975 | Target Q: -4.04496 | Replay: 8896
+[UPDATE #279] Mean Reward:  -1.76 | Q Loss: +0.01056 | Mean Q: -4.26742 | Target Q: -4.21436 | Replay: 8928
+[UPDATE #280] Mean Reward:  -1.76 | Q Loss: +0.00703 | Mean Q: -4.25854 | Target Q: -4.23969 | Replay: 8960
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #281] Mean Reward:  -1.74 | Q Loss: +0.95670 | Mean Q: -3.99035 | Target Q: -4.11589 | Replay: 8992
+[UPDATE #282] Mean Reward:  -1.52 | Q Loss: +0.00834 | Mean Q: -3.91917 | Target Q: -3.88377 | Replay: 9024
+[UPDATE #283] Mean Reward:  -2.02 | Q Loss: +0.83166 | Mean Q: -4.49995 | Target Q: -4.59682 | Replay: 9056
+[UPDATE #284] Mean Reward:  -1.70 | Q Loss: +0.01202 | Mean Q: -4.25141 | Target Q: -4.20233 | Replay: 9088
+[UPDATE #285] Mean Reward:  -1.64 | Q Loss: +0.05351 | Mean Q: -4.21091 | Target Q: -4.10737 | Replay: 9120
+[UPDATE #286] Mean Reward:  -1.81 | Q Loss: +0.04910 | Mean Q: -4.48779 | Target Q: -4.40453 | Replay: 9152
+[UPDATE #287] Mean Reward:  -1.80 | Q Loss: +1.00082 | Mean Q: -4.06382 | Target Q: -4.24938 | Replay: 9184
+[UPDATE #288] Mean Reward:  -1.83 | Q Loss: +0.00816 | Mean Q: -4.52132 | Target Q: -4.47642 | Replay: 9216
+[UPDATE #289] Mean Reward:  -1.48 | Q Loss: +1.01033 | Mean Q: -3.67655 | Target Q: -3.79672 | Replay: 9248
+[UPDATE #290] Mean Reward:  -1.86 | Q Loss: +0.03466 | Mean Q: -4.61858 | Target Q: -4.55339 | Replay: 9280
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #291] Mean Reward:  -1.74 | Q Loss: +0.05936 | Mean Q: -4.45367 | Target Q: -4.35715 | Replay: 9312
+[UPDATE #292] Mean Reward:  -1.74 | Q Loss: +0.80682 | Mean Q: -4.13523 | Target Q: -4.26224 | Replay: 9344
+[UPDATE #293] Mean Reward:  -1.70 | Q Loss: +0.03361 | Mean Q: -4.36917 | Target Q: -4.31201 | Replay: 9376
+[UPDATE #294] Mean Reward:  -1.82 | Q Loss: +0.01251 | Mean Q: -4.52590 | Target Q: -4.53494 | Replay: 9408
+[UPDATE #295] Mean Reward:  -1.81 | Q Loss: +0.00431 | Mean Q: -4.53761 | Target Q: -4.53669 | Replay: 9440
+[UPDATE #296] Mean Reward:  -1.54 | Q Loss: +0.01401 | Mean Q: -4.06934 | Target Q: -4.07676 | Replay: 9472
+[UPDATE #297] Mean Reward:  -1.61 | Q Loss: +0.03073 | Mean Q: -4.25117 | Target Q: -4.22622 | Replay: 9504
+[UPDATE #298] Mean Reward:  -1.84 | Q Loss: +0.83759 | Mean Q: -4.35364 | Target Q: -4.52836 | Replay: 9536
+[UPDATE #299] Mean Reward:  -1.93 | Q Loss: +0.88731 | Mean Q: -4.48718 | Target Q: -4.68569 | Replay: 9568
+[UPDATE #300] Mean Reward:  -1.74 | Q Loss: +0.01370 | Mean Q: -4.50363 | Target Q: -4.49925 | Replay: 9600
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #301] Mean Reward:  -1.33 | Q Loss: +0.00619 | Mean Q: -3.79851 | Target Q: -3.78352 | Replay: 9632
+[UPDATE #302] Mean Reward:  -1.58 | Q Loss: +0.00788 | Mean Q: -4.23576 | Target Q: -4.22810 | Replay: 9664
+[UPDATE #303] Mean Reward:  -1.76 | Q Loss: +0.00401 | Mean Q: -4.53194 | Target Q: -4.55994 | Replay: 9696
+[UPDATE #304] Mean Reward:  -1.67 | Q Loss: +0.00755 | Mean Q: -4.41622 | Target Q: -4.42256 | Replay: 9728
+[UPDATE #305] Mean Reward:  -1.46 | Q Loss: +0.02658 | Mean Q: -4.11000 | Target Q: -4.06495 | Replay: 9760
+[UPDATE #306] Mean Reward:  -1.82 | Q Loss: +0.00286 | Mean Q: -4.68828 | Target Q: -4.70459 | Replay: 9792
+[UPDATE #307] Mean Reward:  -1.77 | Q Loss: +0.61350 | Mean Q: -4.40607 | Target Q: -4.54781 | Replay: 9824
+[UPDATE #308] Mean Reward:  -1.76 | Q Loss: +0.00809 | Mean Q: -4.59784 | Target Q: -4.62982 | Replay: 9856
+[UPDATE #309] Mean Reward:  -1.35 | Q Loss: +0.04065 | Mean Q: -3.91265 | Target Q: -3.89732 | Replay: 9888
+[UPDATE #310] Mean Reward:  -2.04 | Q Loss: +2.92219 | Mean Q: -4.60658 | Target Q: -4.91948 | Replay: 9920
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #311] Mean Reward:  -1.76 | Q Loss: +0.00484 | Mean Q: -4.63306 | Target Q: -4.67373 | Replay: 9952
+[UPDATE #312] Mean Reward:  -1.70 | Q Loss: +0.00735 | Mean Q: -4.53427 | Target Q: -4.58014 | Replay: 9984
+[UPDATE #313] Mean Reward:  -1.37 | Q Loss: +0.00752 | Mean Q: -3.98102 | Target Q: -3.99295 | Replay: 10000
+[UPDATE #314] Mean Reward:  -1.58 | Q Loss: +0.00494 | Mean Q: -4.37533 | Target Q: -4.39852 | Replay: 10000
+[UPDATE #315] Mean Reward:  -1.92 | Q Loss: +3.10271 | Mean Q: -4.42654 | Target Q: -4.76844 | Replay: 10000
+[UPDATE #316] Mean Reward:  -1.79 | Q Loss: +2.96115 | Mean Q: -4.24069 | Target Q: -4.53871 | Replay: 10000
+[UPDATE #317] Mean Reward:  -1.58 | Q Loss: +0.00259 | Mean Q: -4.43047 | Target Q: -4.43059 | Replay: 10000
+[UPDATE #318] Mean Reward:  -1.73 | Q Loss: +0.05175 | Mean Q: -4.77398 | Target Q: -4.72161 | Replay: 10000
+[UPDATE #319] Mean Reward:  -1.47 | Q Loss: +0.02901 | Mean Q: -4.30741 | Target Q: -4.23588 | Replay: 10000
+[UPDATE #320] Mean Reward:  -1.50 | Q Loss: +0.01364 | Mean Q: -4.38459 | Target Q: -4.31758 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #321] Mean Reward:  -1.81 | Q Loss: +2.87267 | Mean Q: -4.38414 | Target Q: -4.63468 | Replay: 10000
+[UPDATE #322] Mean Reward:  -1.47 | Q Loss: +0.14186 | Mean Q: -4.42182 | Target Q: -4.29474 | Replay: 10000
+[UPDATE #323] Mean Reward:  -1.77 | Q Loss: +0.79902 | Mean Q: -4.65290 | Target Q: -4.73317 | Replay: 10000
+[UPDATE #324] Mean Reward:  -1.52 | Q Loss: +0.02232 | Mean Q: -4.44171 | Target Q: -4.41424 | Replay: 10000
+[UPDATE #325] Mean Reward:  -1.97 | Q Loss: +0.78960 | Mean Q: -5.01402 | Target Q: -5.13743 | Replay: 10000
+[UPDATE #326] Mean Reward:  -1.58 | Q Loss: +0.02696 | Mean Q: -4.56664 | Target Q: -4.55181 | Replay: 10000
+[UPDATE #327] Mean Reward:  -1.65 | Q Loss: +0.15280 | Mean Q: -4.83168 | Target Q: -4.70522 | Replay: 10000
+[UPDATE #328] Mean Reward:  -1.69 | Q Loss: +0.02047 | Mean Q: -4.83868 | Target Q: -4.78309 | Replay: 10000
+[UPDATE #329] Mean Reward:  -1.01 | Q Loss: +0.01781 | Mean Q: -3.54169 | Target Q: -3.48354 | Replay: 10000
+[UPDATE #330] Mean Reward:  -1.37 | Q Loss: +0.19876 | Mean Q: -4.07756 | Target Q: -4.11338 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #331] Mean Reward:  -1.51 | Q Loss: +0.08900 | Mean Q: -4.55671 | Target Q: -4.47411 | Replay: 10000
+[UPDATE #332] Mean Reward:  -1.76 | Q Loss: +2.90570 | Mean Q: -4.42364 | Target Q: -4.67795 | Replay: 10000
+[UPDATE #333] Mean Reward:  -1.41 | Q Loss: +0.03392 | Mean Q: -4.35776 | Target Q: -4.30932 | Replay: 10000
+[UPDATE #334] Mean Reward:  -1.40 | Q Loss: +0.01094 | Mean Q: -4.36221 | Target Q: -4.29384 | Replay: 10000
+[UPDATE #335] Mean Reward:  -1.41 | Q Loss: +0.02699 | Mean Q: -4.42621 | Target Q: -4.32439 | Replay: 10000
+[UPDATE #336] Mean Reward:  -1.65 | Q Loss: +2.89752 | Mean Q: -4.28822 | Target Q: -4.50756 | Replay: 10000
+[UPDATE #337] Mean Reward:  -1.46 | Q Loss: +0.02436 | Mean Q: -4.50009 | Target Q: -4.45708 | Replay: 10000
+[UPDATE #338] Mean Reward:  -1.46 | Q Loss: +0.01765 | Mean Q: -4.52460 | Target Q: -4.45751 | Replay: 10000
+[UPDATE #339] Mean Reward:  -1.76 | Q Loss: +1.34179 | Mean Q: -4.69231 | Target Q: -4.85801 | Replay: 10000
+[UPDATE #340] Mean Reward:  -1.75 | Q Loss: +2.26824 | Mean Q: -4.56139 | Target Q: -4.76513 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #341] Mean Reward:  -1.53 | Q Loss: +1.86196 | Mean Q: -4.37169 | Target Q: -4.51286 | Replay: 10000
+[UPDATE #342] Mean Reward:  -1.64 | Q Loss: +3.11231 | Mean Q: -4.42960 | Target Q: -4.56653 | Replay: 10000
+[UPDATE #343] Mean Reward:  -1.77 | Q Loss: +3.02481 | Mean Q: -4.59189 | Target Q: -4.84258 | Replay: 10000
+[UPDATE #344] Mean Reward:  -1.64 | Q Loss: +0.00913 | Mean Q: -4.93465 | Target Q: -4.91600 | Replay: 10000
+[UPDATE #345] Mean Reward:  -1.37 | Q Loss: +0.01829 | Mean Q: -4.38615 | Target Q: -4.36747 | Replay: 10000
+[UPDATE #346] Mean Reward:  -1.50 | Q Loss: +0.09995 | Mean Q: -4.76420 | Target Q: -4.65288 | Replay: 10000
+[UPDATE #347] Mean Reward:  -1.82 | Q Loss: +3.61135 | Mean Q: -4.45116 | Target Q: -4.87167 | Replay: 10000
+[UPDATE #348] Mean Reward:  -1.29 | Q Loss: +0.01926 | Mean Q: -4.27933 | Target Q: -4.23836 | Replay: 10000
+[UPDATE #349] Mean Reward:  -1.41 | Q Loss: +0.02698 | Mean Q: -4.54499 | Target Q: -4.48328 | Replay: 10000
+[UPDATE #350] Mean Reward:  -1.52 | Q Loss: +0.00663 | Mean Q: -4.78088 | Target Q: -4.74417 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #351] Mean Reward:  -1.73 | Q Loss: +3.14369 | Mean Q: -4.39701 | Target Q: -4.76295 | Replay: 10000
+[UPDATE #352] Mean Reward:  -1.47 | Q Loss: +0.02081 | Mean Q: -4.72570 | Target Q: -4.66200 | Replay: 10000
+[UPDATE #353] Mean Reward:  -1.77 | Q Loss: +2.91834 | Mean Q: -4.70756 | Target Q: -4.95332 | Replay: 10000
+[UPDATE #354] Mean Reward:  -1.32 | Q Loss: +0.08195 | Mean Q: -4.46103 | Target Q: -4.36753 | Replay: 10000
+[UPDATE #355] Mean Reward:  -1.43 | Q Loss: +0.12202 | Mean Q: -4.74219 | Target Q: -4.60623 | Replay: 10000
+[UPDATE #356] Mean Reward:  -1.36 | Q Loss: +0.03006 | Mean Q: -4.54503 | Target Q: -4.47067 | Replay: 10000
+[UPDATE #357] Mean Reward:  -1.14 | Q Loss: +0.08379 | Mean Q: -4.04234 | Target Q: -4.00455 | Replay: 10000
+[UPDATE #358] Mean Reward:  -1.28 | Q Loss: +0.01361 | Mean Q: -4.40073 | Target Q: -4.32638 | Replay: 10000
+[UPDATE #359] Mean Reward:  -1.59 | Q Loss: +3.13302 | Mean Q: -4.43636 | Target Q: -4.65502 | Replay: 10000
+[UPDATE #360] Mean Reward:  -1.39 | Q Loss: +0.02110 | Mean Q: -4.67093 | Target Q: -4.58223 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #361] Mean Reward:  -1.83 | Q Loss: +3.16546 | Mean Q: -4.93017 | Target Q: -5.18033 | Replay: 10000
+[UPDATE #362] Mean Reward:  -1.52 | Q Loss: +0.03730 | Mean Q: -4.97385 | Target Q: -4.89920 | Replay: 10000
+[UPDATE #363] Mean Reward:  -1.44 | Q Loss: +2.88688 | Mean Q: -4.13960 | Target Q: -4.36438 | Replay: 10000
+[UPDATE #364] Mean Reward:  -1.24 | Q Loss: +0.01106 | Mean Q: -4.38289 | Target Q: -4.30923 | Replay: 10000
+[UPDATE #365] Mean Reward:  -1.29 | Q Loss: +0.09078 | Mean Q: -4.56073 | Target Q: -4.43744 | Replay: 10000
+[UPDATE #366] Mean Reward:  -1.21 | Q Loss: +0.17317 | Mean Q: -4.34138 | Target Q: -4.26336 | Replay: 10000
+[UPDATE #367] Mean Reward:  -1.34 | Q Loss: +0.41513 | Mean Q: -4.49692 | Target Q: -4.56600 | Replay: 10000
+[UPDATE #368] Mean Reward:  -1.36 | Q Loss: +0.03141 | Mean Q: -4.66986 | Target Q: -4.61007 | Replay: 10000
+[UPDATE #369] Mean Reward:  -1.65 | Q Loss: +3.20783 | Mean Q: -4.62492 | Target Q: -4.87826 | Replay: 10000
+[UPDATE #370] Mean Reward:  -1.44 | Q Loss: +0.09310 | Mean Q: -4.88420 | Target Q: -4.82935 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #371] Mean Reward:  -1.52 | Q Loss: +0.01931 | Mean Q: -4.97942 | Target Q: -5.01050 | Replay: 10000
+[UPDATE #372] Mean Reward:  -1.17 | Q Loss: +0.00251 | Mean Q: -4.20261 | Target Q: -4.22904 | Replay: 10000
+[UPDATE #373] Mean Reward:  -1.17 | Q Loss: +0.03028 | Mean Q: -4.23811 | Target Q: -4.23636 | Replay: 10000
+[UPDATE #374] Mean Reward:  -1.34 | Q Loss: +0.00440 | Mean Q: -4.62414 | Target Q: -4.62913 | Replay: 10000
+[UPDATE #375] Mean Reward:  -0.97 | Q Loss: +0.06174 | Mean Q: -3.81614 | Target Q: -3.80699 | Replay: 10000
+[UPDATE #376] Mean Reward:  -1.31 | Q Loss: +0.06855 | Mean Q: -4.59246 | Target Q: -4.58755 | Replay: 10000
+[UPDATE #377] Mean Reward:  -1.50 | Q Loss: +0.81638 | Mean Q: -4.62594 | Target Q: -4.82963 | Replay: 10000
+[UPDATE #378] Mean Reward:  -1.98 | Q Loss: +4.32817 | Mean Q: -4.98113 | Target Q: -5.54491 | Replay: 10000
+[UPDATE #379] Mean Reward:  -1.27 | Q Loss: +0.01997 | Mean Q: -4.56332 | Target Q: -4.54517 | Replay: 10000
+[UPDATE #380] Mean Reward:  -1.22 | Q Loss: +2.77323 | Mean Q: -3.71999 | Target Q: -4.00920 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #381] Mean Reward:  -1.05 | Q Loss: +0.03203 | Mean Q: -4.08797 | Target Q: -4.04855 | Replay: 10000
+[UPDATE #382] Mean Reward:  -1.22 | Q Loss: +0.00507 | Mean Q: -4.49646 | Target Q: -4.45197 | Replay: 10000
+[UPDATE #383] Mean Reward:  -1.84 | Q Loss: +3.10491 | Mean Q: -5.24997 | Target Q: -5.50229 | Replay: 10000
+[UPDATE #384] Mean Reward:  -1.22 | Q Loss: +0.14713 | Mean Q: -4.40875 | Target Q: -4.39724 | Replay: 10000
+[UPDATE #385] Mean Reward:  -1.27 | Q Loss: +0.28420 | Mean Q: -4.54775 | Target Q: -4.51301 | Replay: 10000
+[UPDATE #386] Mean Reward:  -1.64 | Q Loss: +0.00653 | Mean Q: -5.56550 | Target Q: -5.50112 | Replay: 10000
+[UPDATE #387] Mean Reward:  -1.90 | Q Loss: +6.21160 | Mean Q: -4.72523 | Target Q: -5.26513 | Replay: 10000
+[UPDATE #388] Mean Reward:  -1.50 | Q Loss: +0.80714 | Mean Q: -4.93803 | Target Q: -4.97489 | Replay: 10000
+[UPDATE #389] Mean Reward:  -1.17 | Q Loss: +0.08370 | Mean Q: -4.56213 | Target Q: -4.40847 | Replay: 10000
+[UPDATE #390] Mean Reward:  -1.36 | Q Loss: +0.04748 | Mean Q: -5.04430 | Target Q: -4.89743 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #391] Mean Reward:  -1.50 | Q Loss: +0.84210 | Mean Q: -5.00388 | Target Q: -4.99694 | Replay: 10000
+[UPDATE #392] Mean Reward:  -1.10 | Q Loss: +0.12119 | Mean Q: -4.41052 | Target Q: -4.27056 | Replay: 10000
+[UPDATE #393] Mean Reward:  -1.51 | Q Loss: +0.01732 | Mean Q: -5.35083 | Target Q: -5.29190 | Replay: 10000
+[UPDATE #394] Mean Reward:  -1.23 | Q Loss: +0.00749 | Mean Q: -4.61133 | Target Q: -4.60150 | Replay: 10000
+[UPDATE #395] Mean Reward:  -0.72 | Q Loss: +0.03954 | Mean Q: -3.42891 | Target Q: -3.36167 | Replay: 10000
+[UPDATE #396] Mean Reward:  -1.41 | Q Loss: +0.00516 | Mean Q: -5.05515 | Target Q: -5.06045 | Replay: 10000
+[UPDATE #397] Mean Reward:  -0.92 | Q Loss: +0.01152 | Mean Q: -3.89523 | Target Q: -3.88185 | Replay: 10000
+[UPDATE #398] Mean Reward:  -1.17 | Q Loss: +0.06823 | Mean Q: -4.55446 | Target Q: -4.49434 | Replay: 10000
+[UPDATE #399] Mean Reward:  -1.55 | Q Loss: +2.53656 | Mean Q: -4.72186 | Target Q: -4.99410 | Replay: 10000
+[UPDATE #400] Mean Reward:  -1.02 | Q Loss: +0.01095 | Mean Q: -4.18077 | Target Q: -4.14269 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #401] Mean Reward:  -1.60 | Q Loss: +1.72227 | Mean Q: -4.87043 | Target Q: -5.13690 | Replay: 10000
+[UPDATE #402] Mean Reward:  -1.01 | Q Loss: +0.46175 | Mean Q: -4.37485 | Target Q: -4.16389 | Replay: 10000
+[UPDATE #403] Mean Reward:  -1.17 | Q Loss: +0.48405 | Mean Q: -4.30214 | Target Q: -4.38808 | Replay: 10000
+[UPDATE #404] Mean Reward:  -1.48 | Q Loss: +2.98071 | Mean Q: -4.60594 | Target Q: -4.86531 | Replay: 10000
+[UPDATE #405] Mean Reward:  -1.09 | Q Loss: +0.00956 | Mean Q: -4.41948 | Target Q: -4.37490 | Replay: 10000
+[UPDATE #406] Mean Reward:  -1.09 | Q Loss: +0.05718 | Mean Q: -4.42137 | Target Q: -4.38481 | Replay: 10000
+[UPDATE #407] Mean Reward:  -1.21 | Q Loss: +0.21378 | Mean Q: -4.64229 | Target Q: -4.61552 | Replay: 10000
+[UPDATE #408] Mean Reward:  -1.31 | Q Loss: +0.01080 | Mean Q: -4.97473 | Target Q: -4.96329 | Replay: 10000
+[UPDATE #409] Mean Reward:  -1.42 | Q Loss: +0.80009 | Mean Q: -4.88173 | Target Q: -5.02666 | Replay: 10000
+[UPDATE #410] Mean Reward:  -1.02 | Q Loss: +0.05932 | Mean Q: -4.31676 | Target Q: -4.24475 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #411] Mean Reward:  -0.87 | Q Loss: +0.00628 | Mean Q: -3.88377 | Target Q: -3.86704 | Replay: 10000
+[UPDATE #412] Mean Reward:  -1.72 | Q Loss: +6.29736 | Mean Q: -4.42106 | Target Q: -5.07658 | Replay: 10000
+[UPDATE #413] Mean Reward:  -1.23 | Q Loss: +1.10152 | Mean Q: -4.39170 | Target Q: -4.56085 | Replay: 10000
+[UPDATE #414] Mean Reward:  -1.31 | Q Loss: +0.02956 | Mean Q: -5.06498 | Target Q: -5.05533 | Replay: 10000
+[UPDATE #415] Mean Reward:  -0.82 | Q Loss: +0.08029 | Mean Q: -3.78940 | Target Q: -3.76100 | Replay: 10000
+[UPDATE #416] Mean Reward:  -1.11 | Q Loss: +0.00453 | Mean Q: -4.53064 | Target Q: -4.52896 | Replay: 10000
+[UPDATE #417] Mean Reward:  -1.21 | Q Loss: +0.08467 | Mean Q: -4.88913 | Target Q: -4.80824 | Replay: 10000
+[UPDATE #418] Mean Reward:  -1.36 | Q Loss: +3.12701 | Mean Q: -4.40099 | Target Q: -4.70521 | Replay: 10000
+[UPDATE #419] Mean Reward:  -0.95 | Q Loss: +0.21946 | Mean Q: -3.95056 | Target Q: -4.01808 | Replay: 10000
+[UPDATE #420] Mean Reward:  -0.94 | Q Loss: +0.12145 | Mean Q: -4.09286 | Target Q: -4.10524 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #421] Mean Reward:  -1.15 | Q Loss: +0.12775 | Mean Q: -4.81102 | Target Q: -4.68502 | Replay: 10000
+[UPDATE #422] Mean Reward:  -1.35 | Q Loss: +2.93451 | Mean Q: -4.52137 | Target Q: -4.71144 | Replay: 10000
+[UPDATE #423] Mean Reward:  -0.98 | Q Loss: +0.02651 | Mean Q: -4.26000 | Target Q: -4.25376 | Replay: 10000
+[UPDATE #424] Mean Reward:  -0.81 | Q Loss: +0.05414 | Mean Q: -3.84113 | Target Q: -3.80456 | Replay: 10000
+[UPDATE #425] Mean Reward:  -1.77 | Q Loss: +6.25042 | Mean Q: -4.84274 | Target Q: -5.34373 | Replay: 10000
+[UPDATE #426] Mean Reward:  -0.79 | Q Loss: +0.12423 | Mean Q: -3.94380 | Target Q: -3.76296 | Replay: 10000
+[UPDATE #427] Mean Reward:  -1.79 | Q Loss: +3.23154 | Mean Q: -5.64164 | Target Q: -5.85829 | Replay: 10000
+[UPDATE #428] Mean Reward:  -1.27 | Q Loss: +0.77508 | Mean Q: -4.81075 | Target Q: -4.79890 | Replay: 10000
+[UPDATE #429] Mean Reward:  -1.07 | Q Loss: +0.04903 | Mean Q: -4.74043 | Target Q: -4.54256 | Replay: 10000
+[UPDATE #430] Mean Reward:  -1.14 | Q Loss: +0.03675 | Mean Q: -4.94026 | Target Q: -4.76634 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #431] Mean Reward:  -1.36 | Q Loss: +0.81265 | Mean Q: -5.16585 | Target Q: -5.11438 | Replay: 10000
+[UPDATE #432] Mean Reward:  -1.43 | Q Loss: +0.82898 | Mean Q: -5.40402 | Target Q: -5.38525 | Replay: 10000
+[UPDATE #433] Mean Reward:  -1.50 | Q Loss: +2.98356 | Mean Q: -4.84359 | Target Q: -5.11266 | Replay: 10000
+[UPDATE #434] Mean Reward:  -1.36 | Q Loss: +2.89257 | Mean Q: -4.68052 | Target Q: -4.86855 | Replay: 10000
+[UPDATE #435] Mean Reward:  -0.98 | Q Loss: +0.03415 | Mean Q: -4.48611 | Target Q: -4.37361 | Replay: 10000
+[UPDATE #436] Mean Reward:  -1.10 | Q Loss: +0.06790 | Mean Q: -4.86711 | Target Q: -4.71897 | Replay: 10000
+[UPDATE #437] Mean Reward:  -1.33 | Q Loss: +2.45647 | Mean Q: -4.86968 | Target Q: -5.10292 | Replay: 10000
+[UPDATE #438] Mean Reward:  -1.22 | Q Loss: +0.12238 | Mean Q: -5.27279 | Target Q: -5.08360 | Replay: 10000
+[UPDATE #439] Mean Reward:  -1.15 | Q Loss: +0.65041 | Mean Q: -4.82917 | Target Q: -4.89625 | Replay: 10000
+[UPDATE #440] Mean Reward:  -1.48 | Q Loss: +3.15006 | Mean Q: -5.01280 | Target Q: -5.24841 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #441] Mean Reward:  -1.23 | Q Loss: +2.81177 | Mean Q: -4.34454 | Target Q: -4.55046 | Replay: 10000
+[UPDATE #442] Mean Reward:  -0.81 | Q Loss: +0.13320 | Mean Q: -4.02618 | Target Q: -3.94413 | Replay: 10000
+[UPDATE #443] Mean Reward:  -1.31 | Q Loss: +1.68788 | Mean Q: -4.80831 | Target Q: -5.09357 | Replay: 10000
+[UPDATE #444] Mean Reward:  -1.39 | Q Loss: +3.77882 | Mean Q: -4.46234 | Target Q: -4.84179 | Replay: 10000
+[UPDATE #445] Mean Reward:  -1.37 | Q Loss: +0.02493 | Mean Q: -5.65105 | Target Q: -5.56938 | Replay: 10000
+[UPDATE #446] Mean Reward:  -1.25 | Q Loss: +0.03367 | Mean Q: -5.36198 | Target Q: -5.25978 | Replay: 10000
+[UPDATE #447] Mean Reward:  -0.87 | Q Loss: +0.08984 | Mean Q: -4.27908 | Target Q: -4.16048 | Replay: 10000
+[UPDATE #448] Mean Reward:  -1.71 | Q Loss: +6.34694 | Mean Q: -4.91671 | Target Q: -5.43252 | Replay: 10000
+[UPDATE #449] Mean Reward:  -1.45 | Q Loss: +3.30254 | Mean Q: -4.79516 | Target Q: -5.10832 | Replay: 10000
+[UPDATE #450] Mean Reward:  -0.84 | Q Loss: +0.13148 | Mean Q: -4.28781 | Target Q: -4.10965 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #451] Mean Reward:  -1.22 | Q Loss: +3.73985 | Mean Q: -4.19732 | Target Q: -4.42930 | Replay: 10000
+[UPDATE #452] Mean Reward:  -1.11 | Q Loss: +1.50979 | Mean Q: -4.51710 | Target Q: -4.58865 | Replay: 10000
+[UPDATE #453] Mean Reward:  -0.78 | Q Loss: +0.18681 | Mean Q: -4.27261 | Target Q: -3.96666 | Replay: 10000
+[UPDATE #454] Mean Reward:  -1.51 | Q Loss: +3.60697 | Mean Q: -5.60353 | Target Q: -5.76966 | Replay: 10000
+[UPDATE #455] Mean Reward:  -1.46 | Q Loss: +2.90076 | Mean Q: -4.99643 | Target Q: -5.25626 | Replay: 10000
+[UPDATE #456] Mean Reward:  -1.33 | Q Loss: +3.03905 | Mean Q: -4.91391 | Target Q: -5.00159 | Replay: 10000
+[UPDATE #457] Mean Reward:  -1.17 | Q Loss: +2.83914 | Mean Q: -4.42318 | Target Q: -4.52919 | Replay: 10000
+[UPDATE #458] Mean Reward:  -1.03 | Q Loss: +3.04430 | Mean Q: -4.04421 | Target Q: -4.13347 | Replay: 10000
+[UPDATE #459] Mean Reward:  -0.76 | Q Loss: +0.04720 | Mean Q: -4.09527 | Target Q: -3.92352 | Replay: 10000
+[UPDATE #460] Mean Reward:  -0.95 | Q Loss: +0.07238 | Mean Q: -4.66735 | Target Q: -4.51207 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #461] Mean Reward:  -1.21 | Q Loss: +0.14397 | Mean Q: -5.46503 | Target Q: -5.31785 | Replay: 10000
+[UPDATE #462] Mean Reward:  -0.89 | Q Loss: +0.08199 | Mean Q: -4.48606 | Target Q: -4.33423 | Replay: 10000
+[UPDATE #463] Mean Reward:  -0.83 | Q Loss: +0.35730 | Mean Q: -4.40693 | Target Q: -4.19690 | Replay: 10000
+[UPDATE #464] Mean Reward:  -1.28 | Q Loss: +0.02148 | Mean Q: -5.53741 | Target Q: -5.53585 | Replay: 10000
+[UPDATE #465] Mean Reward:  -1.11 | Q Loss: +0.07903 | Mean Q: -4.99780 | Target Q: -5.03718 | Replay: 10000
+[UPDATE #466] Mean Reward:  -1.06 | Q Loss: +0.02485 | Mean Q: -4.90193 | Target Q: -4.91438 | Replay: 10000
+[UPDATE #467] Mean Reward:  -1.19 | Q Loss: +0.90571 | Mean Q: -4.79814 | Target Q: -4.97216 | Replay: 10000
+[UPDATE #468] Mean Reward:  -0.94 | Q Loss: +0.08633 | Mean Q: -4.59569 | Target Q: -4.55473 | Replay: 10000
+[UPDATE #469] Mean Reward:  -1.10 | Q Loss: +0.13640 | Mean Q: -5.04302 | Target Q: -5.04506 | Replay: 10000
+[UPDATE #470] Mean Reward:  -1.12 | Q Loss: +3.24381 | Mean Q: -4.05221 | Target Q: -4.47570 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #471] Mean Reward:  -1.17 | Q Loss: +0.00991 | Mean Q: -5.18067 | Target Q: -5.27327 | Replay: 10000
+[UPDATE #472] Mean Reward:  -1.01 | Q Loss: +0.01364 | Mean Q: -4.75997 | Target Q: -4.82268 | Replay: 10000
+[UPDATE #473] Mean Reward:  -1.24 | Q Loss: +0.25356 | Mean Q: -5.20609 | Target Q: -5.33642 | Replay: 10000
+[UPDATE #474] Mean Reward:  -0.90 | Q Loss: +0.05621 | Mean Q: -4.44266 | Target Q: -4.48962 | Replay: 10000
+[UPDATE #475] Mean Reward:  -0.90 | Q Loss: +0.06272 | Mean Q: -4.43668 | Target Q: -4.46422 | Replay: 10000
+[UPDATE #476] Mean Reward:  -1.10 | Q Loss: +0.04414 | Mean Q: -5.17469 | Target Q: -5.12836 | Replay: 10000
+[UPDATE #477] Mean Reward:  -1.03 | Q Loss: +0.09541 | Mean Q: -4.92889 | Target Q: -4.91089 | Replay: 10000
+[UPDATE #478] Mean Reward:  -0.99 | Q Loss: +0.01129 | Mean Q: -4.77490 | Target Q: -4.77736 | Replay: 10000
+[UPDATE #479] Mean Reward:  -0.79 | Q Loss: +0.01529 | Mean Q: -4.24069 | Target Q: -4.17082 | Replay: 10000
+[UPDATE #480] Mean Reward:  -0.81 | Q Loss: +0.17875 | Mean Q: -4.34210 | Target Q: -4.23332 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #481] Mean Reward:  -1.04 | Q Loss: +0.70772 | Mean Q: -4.74591 | Target Q: -4.76286 | Replay: 10000
+[UPDATE #482] Mean Reward:  -0.98 | Q Loss: +0.11375 | Mean Q: -4.93674 | Target Q: -4.79121 | Replay: 10000
+[UPDATE #483] Mean Reward:  -1.49 | Q Loss: +3.89762 | Mean Q: -4.97718 | Target Q: -5.39513 | Replay: 10000
+[UPDATE #484] Mean Reward:  -1.16 | Q Loss: +1.09888 | Mean Q: -4.72523 | Target Q: -4.89184 | Replay: 10000
+[UPDATE #485] Mean Reward:  -0.78 | Q Loss: +0.06182 | Mean Q: -4.27862 | Target Q: -4.17462 | Replay: 10000
+[UPDATE #486] Mean Reward:  -1.03 | Q Loss: +0.17341 | Mean Q: -5.09472 | Target Q: -5.01812 | Replay: 10000
+[UPDATE #487] Mean Reward:  -1.27 | Q Loss: +0.07303 | Mean Q: -5.87722 | Target Q: -5.77327 | Replay: 10000
+[UPDATE #488] Mean Reward:  -1.16 | Q Loss: +0.01358 | Mean Q: -5.46535 | Target Q: -5.41800 | Replay: 10000
+[UPDATE #489] Mean Reward:  -0.80 | Q Loss: +0.13984 | Mean Q: -4.08006 | Target Q: -4.12111 | Replay: 10000
+[UPDATE #490] Mean Reward:  -0.99 | Q Loss: +0.00349 | Mean Q: -4.86188 | Target Q: -4.88664 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #491] Mean Reward:  -0.80 | Q Loss: +0.05242 | Mean Q: -4.32222 | Target Q: -4.27987 | Replay: 10000
+[UPDATE #492] Mean Reward:  -0.99 | Q Loss: +0.00733 | Mean Q: -4.85943 | Target Q: -4.89963 | Replay: 10000
+[UPDATE #493] Mean Reward:  -1.03 | Q Loss: +0.02089 | Mean Q: -5.04877 | Target Q: -5.05749 | Replay: 10000
+[UPDATE #494] Mean Reward:  -0.83 | Q Loss: +0.01340 | Mean Q: -4.34111 | Target Q: -4.40678 | Replay: 10000
+[UPDATE #495] Mean Reward:  -0.63 | Q Loss: +0.07726 | Mean Q: -3.75587 | Target Q: -3.76262 | Replay: 10000
+[UPDATE #496] Mean Reward:  -1.20 | Q Loss: +4.35448 | Mean Q: -4.48223 | Target Q: -4.94505 | Replay: 10000
+[UPDATE #497] Mean Reward:  -1.09 | Q Loss: +0.04268 | Mean Q: -5.24049 | Target Q: -5.30427 | Replay: 10000
+[UPDATE #498] Mean Reward:  -1.25 | Q Loss: +3.23184 | Mean Q: -4.77201 | Target Q: -5.10634 | Replay: 10000
+[UPDATE #499] Mean Reward:  -1.11 | Q Loss: +0.00389 | Mean Q: -5.32165 | Target Q: -5.35041 | Replay: 10000
+[UPDATE #500] Mean Reward:  -1.32 | Q Loss: +2.96984 | Mean Q: -5.12273 | Target Q: -5.34564 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #501] Mean Reward:  -1.15 | Q Loss: +0.99754 | Mean Q: -4.97423 | Target Q: -5.13098 | Replay: 10000
+[UPDATE #502] Mean Reward:  -0.60 | Q Loss: +0.07561 | Mean Q: -3.82081 | Target Q: -3.70283 | Replay: 10000
+[UPDATE #503] Mean Reward:  -0.79 | Q Loss: +0.01157 | Mean Q: -4.39750 | Target Q: -4.33212 | Replay: 10000
+[UPDATE #504] Mean Reward:  -0.75 | Q Loss: +0.01404 | Mean Q: -4.29549 | Target Q: -4.21211 | Replay: 10000
+[UPDATE #505] Mean Reward:  -0.97 | Q Loss: +0.05888 | Mean Q: -5.03360 | Target Q: -4.96473 | Replay: 10000
+[UPDATE #506] Mean Reward:  -0.97 | Q Loss: +0.06006 | Mean Q: -4.92971 | Target Q: -4.98013 | Replay: 10000
+[UPDATE #507] Mean Reward:  -1.03 | Q Loss: +0.01727 | Mean Q: -5.17880 | Target Q: -5.17781 | Replay: 10000
+[UPDATE #508] Mean Reward:  -1.06 | Q Loss: +0.01038 | Mean Q: -5.25414 | Target Q: -5.27865 | Replay: 10000
+[UPDATE #509] Mean Reward:  -0.90 | Q Loss: +0.11958 | Mean Q: -4.77878 | Target Q: -4.76026 | Replay: 10000
+[UPDATE #510] Mean Reward:  -0.53 | Q Loss: +0.04636 | Mean Q: -3.53023 | Target Q: -3.51413 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #511] Mean Reward:  -0.86 | Q Loss: +0.02208 | Mean Q: -4.60634 | Target Q: -4.64323 | Replay: 10000
+[UPDATE #512] Mean Reward:  -0.86 | Q Loss: +0.10440 | Mean Q: -4.66131 | Target Q: -4.63202 | Replay: 10000
+[UPDATE #513] Mean Reward:  -0.91 | Q Loss: +3.05792 | Mean Q: -3.73072 | Target Q: -4.07920 | Replay: 10000
+[UPDATE #514] Mean Reward:  -1.03 | Q Loss: +0.10876 | Mean Q: -5.29131 | Target Q: -5.24354 | Replay: 10000
+[UPDATE #515] Mean Reward:  -0.96 | Q Loss: +0.01472 | Mean Q: -4.98470 | Target Q: -5.03205 | Replay: 10000
+[UPDATE #516] Mean Reward:  -0.81 | Q Loss: +0.16759 | Mean Q: -4.47097 | Target Q: -4.49945 | Replay: 10000
+[UPDATE #517] Mean Reward:  -0.75 | Q Loss: +0.41116 | Mean Q: -4.51792 | Target Q: -4.28736 | Replay: 10000
+[UPDATE #518] Mean Reward:  -0.49 | Q Loss: +0.03497 | Mean Q: -3.47408 | Target Q: -3.41269 | Replay: 10000
+[UPDATE #519] Mean Reward:  -0.62 | Q Loss: +0.07370 | Mean Q: -3.94835 | Target Q: -3.85718 | Replay: 10000
+[UPDATE #520] Mean Reward:  -0.79 | Q Loss: +0.02173 | Mean Q: -4.49942 | Target Q: -4.47623 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #521] Mean Reward:  -0.67 | Q Loss: +0.02122 | Mean Q: -4.08342 | Target Q: -4.03897 | Replay: 10000
+[UPDATE #522] Mean Reward:  -0.51 | Q Loss: +0.02256 | Mean Q: -3.55184 | Target Q: -3.49406 | Replay: 10000
+[UPDATE #523] Mean Reward:  -0.81 | Q Loss: +0.05239 | Mean Q: -4.61558 | Target Q: -4.57608 | Replay: 10000
+[UPDATE #524] Mean Reward:  -0.81 | Q Loss: +0.02557 | Mean Q: -4.51934 | Target Q: -4.53763 | Replay: 10000
+[UPDATE #525] Mean Reward:  -0.98 | Q Loss: +0.13680 | Mean Q: -5.13773 | Target Q: -5.18824 | Replay: 10000
+[UPDATE #526] Mean Reward:  -0.53 | Q Loss: +0.05426 | Mean Q: -3.57962 | Target Q: -3.56905 | Replay: 10000
+[UPDATE #527] Mean Reward:  -1.14 | Q Loss: +2.77994 | Mean Q: -5.15079 | Target Q: -5.54154 | Replay: 10000
+[UPDATE #528] Mean Reward:  -0.62 | Q Loss: +0.02671 | Mean Q: -3.89008 | Target Q: -3.91344 | Replay: 10000
+[UPDATE #529] Mean Reward:  -0.63 | Q Loss: +1.16728 | Mean Q: -3.77519 | Target Q: -3.94358 | Replay: 10000
+[UPDATE #530] Mean Reward:  -0.97 | Q Loss: +1.50571 | Mean Q: -5.03278 | Target Q: -5.17902 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #531] Mean Reward:  -0.98 | Q Loss: +0.01925 | Mean Q: -5.22063 | Target Q: -5.22043 | Replay: 10000
+[UPDATE #532] Mean Reward:  -0.93 | Q Loss: +0.05220 | Mean Q: -5.09851 | Target Q: -5.04099 | Replay: 10000
+[UPDATE #533] Mean Reward:  -0.76 | Q Loss: +0.04295 | Mean Q: -4.48339 | Target Q: -4.41858 | Replay: 10000
+[UPDATE #534] Mean Reward:  -0.90 | Q Loss: +0.03227 | Mean Q: -5.00893 | Target Q: -4.96788 | Replay: 10000
+[UPDATE #535] Mean Reward:  -0.70 | Q Loss: +0.03869 | Mean Q: -4.31775 | Target Q: -4.23842 | Replay: 10000
+[UPDATE #536] Mean Reward:  -1.07 | Q Loss: +3.16025 | Mean Q: -4.50734 | Target Q: -4.74753 | Replay: 10000
+[UPDATE #537] Mean Reward:  -0.70 | Q Loss: +0.05132 | Mean Q: -4.29858 | Target Q: -4.23169 | Replay: 10000
+[UPDATE #538] Mean Reward:  -0.51 | Q Loss: +0.03706 | Mean Q: -3.60477 | Target Q: -3.54925 | Replay: 10000
+[UPDATE #539] Mean Reward:  -1.11 | Q Loss: +0.03049 | Mean Q: -5.77953 | Target Q: -5.76561 | Replay: 10000
+[UPDATE #540] Mean Reward:  -0.87 | Q Loss: +0.01460 | Mean Q: -4.88928 | Target Q: -4.88000 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #541] Mean Reward:  -0.86 | Q Loss: +0.02112 | Mean Q: -4.88664 | Target Q: -4.83677 | Replay: 10000
+[UPDATE #542] Mean Reward:  -0.86 | Q Loss: +0.16114 | Mean Q: -5.09458 | Target Q: -4.90239 | Replay: 10000
+[UPDATE #543] Mean Reward:  -0.96 | Q Loss: +0.08122 | Mean Q: -5.36594 | Target Q: -5.26353 | Replay: 10000
+[UPDATE #544] Mean Reward:  -0.69 | Q Loss: +0.05095 | Mean Q: -4.33172 | Target Q: -4.24475 | Replay: 10000
+[UPDATE #545] Mean Reward:  -0.79 | Q Loss: +0.08644 | Mean Q: -4.72718 | Target Q: -4.61716 | Replay: 10000
+[UPDATE #546] Mean Reward:  -1.18 | Q Loss: +3.06830 | Mean Q: -5.01464 | Target Q: -5.26607 | Replay: 10000
+[UPDATE #547] Mean Reward:  -0.98 | Q Loss: +0.01428 | Mean Q: -5.35475 | Target Q: -5.33765 | Replay: 10000
+[UPDATE #548] Mean Reward:  -0.82 | Q Loss: +0.05244 | Mean Q: -4.84300 | Target Q: -4.78368 | Replay: 10000
+[UPDATE #549] Mean Reward:  -0.84 | Q Loss: +0.11000 | Mean Q: -5.02576 | Target Q: -4.90904 | Replay: 10000
+[UPDATE #550] Mean Reward:  -0.87 | Q Loss: +0.01085 | Mean Q: -4.94816 | Target Q: -4.95476 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #551] Mean Reward:  -1.05 | Q Loss: +0.01551 | Mean Q: -5.61999 | Target Q: -5.64003 | Replay: 10000
+[UPDATE #552] Mean Reward:  -0.96 | Q Loss: +0.10010 | Mean Q: -5.39171 | Target Q: -5.30836 | Replay: 10000
+[UPDATE #553] Mean Reward:  -1.11 | Q Loss: +2.90767 | Mean Q: -4.70309 | Target Q: -5.03231 | Replay: 10000
+[UPDATE #554] Mean Reward:  -0.83 | Q Loss: +0.05688 | Mean Q: -4.90395 | Target Q: -4.85233 | Replay: 10000
+[UPDATE #555] Mean Reward:  -0.85 | Q Loss: +0.34730 | Mean Q: -5.06169 | Target Q: -4.96255 | Replay: 10000
+[UPDATE #556] Mean Reward:  -1.03 | Q Loss: +0.02723 | Mean Q: -5.58666 | Target Q: -5.63479 | Replay: 10000
+[UPDATE #557] Mean Reward:  -1.26 | Q Loss: +0.13854 | Mean Q: -6.57763 | Target Q: -6.51969 | Replay: 10000
+[UPDATE #558] Mean Reward:  -0.98 | Q Loss: +0.80245 | Mean Q: -5.24652 | Target Q: -5.43239 | Replay: 10000
+[UPDATE #559] Mean Reward:  -0.73 | Q Loss: +0.04260 | Mean Q: -4.52435 | Target Q: -4.49700 | Replay: 10000
+[UPDATE #560] Mean Reward:  -0.93 | Q Loss: +0.07674 | Mean Q: -5.27060 | Target Q: -5.25500 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #561] Mean Reward:  -1.23 | Q Loss: +0.01236 | Mean Q: -6.36036 | Target Q: -6.40663 | Replay: 10000
+[UPDATE #562] Mean Reward:  -0.99 | Q Loss: +0.03999 | Mean Q: -5.54512 | Target Q: -5.54875 | Replay: 10000
+[UPDATE #563] Mean Reward:  -0.82 | Q Loss: +0.09296 | Mean Q: -4.94871 | Target Q: -4.90784 | Replay: 10000
+[UPDATE #564] Mean Reward:  -1.05 | Q Loss: +0.00963 | Mean Q: -5.69730 | Target Q: -5.75375 | Replay: 10000
+[UPDATE #565] Mean Reward:  -0.81 | Q Loss: +0.07838 | Mean Q: -4.89503 | Target Q: -4.84159 | Replay: 10000
+[UPDATE #566] Mean Reward:  -0.67 | Q Loss: +0.17589 | Mean Q: -4.38376 | Target Q: -4.31492 | Replay: 10000
+[UPDATE #567] Mean Reward:  -1.21 | Q Loss: +4.10362 | Mean Q: -5.05380 | Target Q: -5.51101 | Replay: 10000
+[UPDATE #568] Mean Reward:  -1.65 | Q Loss: +0.84606 | Mean Q: -7.48462 | Target Q: -7.66713 | Replay: 10000
+[UPDATE #569] Mean Reward:  -0.79 | Q Loss: +0.13215 | Mean Q: -4.93205 | Target Q: -4.77972 | Replay: 10000
+[UPDATE #570] Mean Reward:  -1.13 | Q Loss: +0.02043 | Mean Q: -6.16805 | Target Q: -6.12488 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #571] Mean Reward:  -0.87 | Q Loss: +0.03144 | Mean Q: -5.20673 | Target Q: -5.14142 | Replay: 10000
+[UPDATE #572] Mean Reward:  -0.99 | Q Loss: +0.04836 | Mean Q: -5.60487 | Target Q: -5.57275 | Replay: 10000
+[UPDATE #573] Mean Reward:  -1.16 | Q Loss: +1.28324 | Mean Q: -6.10179 | Target Q: -6.27931 | Replay: 10000
+[UPDATE #574] Mean Reward:  -1.04 | Q Loss: +3.41646 | Mean Q: -5.27496 | Target Q: -5.51824 | Replay: 10000
+[UPDATE #575] Mean Reward:  -1.17 | Q Loss: +0.02663 | Mean Q: -6.35461 | Target Q: -6.30794 | Replay: 10000
+[UPDATE #576] Mean Reward:  -1.30 | Q Loss: +0.03852 | Mean Q: -6.91929 | Target Q: -6.86313 | Replay: 10000
+[UPDATE #577] Mean Reward:  -0.83 | Q Loss: +0.01868 | Mean Q: -5.06994 | Target Q: -5.00966 | Replay: 10000
+[UPDATE #578] Mean Reward:  -0.93 | Q Loss: +0.07230 | Mean Q: -5.47967 | Target Q: -5.41371 | Replay: 10000
+[UPDATE #579] Mean Reward:  -1.17 | Q Loss: +7.65842 | Mean Q: -5.07346 | Target Q: -5.69488 | Replay: 10000
+[UPDATE #580] Mean Reward:  -1.35 | Q Loss: +3.20654 | Mean Q: -5.86780 | Target Q: -6.16414 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #581] Mean Reward:  -0.99 | Q Loss: +0.04825 | Mean Q: -5.65029 | Target Q: -5.66115 | Replay: 10000
+[UPDATE #582] Mean Reward:  -1.04 | Q Loss: +0.12191 | Mean Q: -6.00506 | Target Q: -5.86725 | Replay: 10000
+[UPDATE #583] Mean Reward:  -1.26 | Q Loss: +0.04157 | Mean Q: -6.81171 | Target Q: -6.75618 | Replay: 10000
+[UPDATE #584] Mean Reward:  -0.96 | Q Loss: +0.01309 | Mean Q: -5.60833 | Target Q: -5.56153 | Replay: 10000
+[UPDATE #585] Mean Reward:  -1.05 | Q Loss: +0.05022 | Mean Q: -6.04244 | Target Q: -5.97210 | Replay: 10000
+[UPDATE #586] Mean Reward:  -1.07 | Q Loss: +0.11224 | Mean Q: -6.15356 | Target Q: -6.03659 | Replay: 10000
+[UPDATE #587] Mean Reward:  -0.95 | Q Loss: +0.06889 | Mean Q: -5.69173 | Target Q: -5.58286 | Replay: 10000
+[UPDATE #588] Mean Reward:  -1.05 | Q Loss: +0.05938 | Mean Q: -5.99246 | Target Q: -5.97073 | Replay: 10000
+[UPDATE #589] Mean Reward:  -0.97 | Q Loss: +0.05847 | Mean Q: -5.69335 | Target Q: -5.67402 | Replay: 10000
+[UPDATE #590] Mean Reward:  -1.04 | Q Loss: +0.01226 | Mean Q: -5.89645 | Target Q: -5.95589 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #591] Mean Reward:  -1.05 | Q Loss: +0.04065 | Mean Q: -5.98777 | Target Q: -5.98814 | Replay: 10000
+[UPDATE #592] Mean Reward:  -0.54 | Q Loss: +0.07645 | Mean Q: -4.05233 | Target Q: -3.97751 | Replay: 10000
+[UPDATE #593] Mean Reward:  -0.99 | Q Loss: +0.11149 | Mean Q: -5.76846 | Target Q: -5.75885 | Replay: 10000
+[UPDATE #594] Mean Reward:  -1.12 | Q Loss: +0.03033 | Mean Q: -6.28781 | Target Q: -6.30779 | Replay: 10000
+[UPDATE #595] Mean Reward:  -1.11 | Q Loss: +0.07458 | Mean Q: -6.26302 | Target Q: -6.27043 | Replay: 10000
+[UPDATE #596] Mean Reward:  -0.75 | Q Loss: +0.01023 | Mean Q: -4.76622 | Target Q: -4.81858 | Replay: 10000
+[UPDATE #597] Mean Reward:  -1.32 | Q Loss: +0.03441 | Mean Q: -7.12610 | Target Q: -7.17196 | Replay: 10000
+[UPDATE #598] Mean Reward:  -1.80 | Q Loss: +6.27122 | Mean Q: -6.53311 | Target Q: -7.18675 | Replay: 10000
+[UPDATE #599] Mean Reward:  -1.13 | Q Loss: +0.01931 | Mean Q: -6.41062 | Target Q: -6.41105 | Replay: 10000
+[UPDATE #600] Mean Reward:  -1.02 | Q Loss: +0.05985 | Mean Q: -6.01841 | Target Q: -5.98867 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #601] Mean Reward:  -1.21 | Q Loss: +3.08735 | Mean Q: -5.55387 | Target Q: -5.79518 | Replay: 10000
+[UPDATE #602] Mean Reward:  -1.40 | Q Loss: +0.01125 | Mean Q: -7.53948 | Target Q: -7.53799 | Replay: 10000
+[UPDATE #603] Mean Reward:  -1.09 | Q Loss: +3.24884 | Mean Q: -5.08207 | Target Q: -5.29474 | Replay: 10000
+[UPDATE #604] Mean Reward:  -0.64 | Q Loss: +0.17429 | Mean Q: -4.67600 | Target Q: -4.41846 | Replay: 10000
+[UPDATE #605] Mean Reward:  -0.68 | Q Loss: +0.04299 | Mean Q: -4.72943 | Target Q: -4.58492 | Replay: 10000
+[UPDATE #606] Mean Reward:  -0.97 | Q Loss: +0.07053 | Mean Q: -5.88159 | Target Q: -5.79840 | Replay: 10000
+[UPDATE #607] Mean Reward:  -1.39 | Q Loss: +3.06981 | Mean Q: -6.35721 | Target Q: -6.57337 | Replay: 10000
+[UPDATE #608] Mean Reward:  -0.76 | Q Loss: +0.07993 | Mean Q: -5.06854 | Target Q: -4.95486 | Replay: 10000
+[UPDATE #609] Mean Reward:  -1.15 | Q Loss: +3.06999 | Mean Q: -5.38622 | Target Q: -5.59921 | Replay: 10000
+[UPDATE #610] Mean Reward:  -0.86 | Q Loss: +0.02995 | Mean Q: -5.44524 | Target Q: -5.35427 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #611] Mean Reward:  -0.91 | Q Loss: +0.15951 | Mean Q: -5.43923 | Target Q: -5.41013 | Replay: 10000
+[UPDATE #612] Mean Reward:  -0.88 | Q Loss: +5.59825 | Mean Q: -4.62594 | Target Q: -4.92426 | Replay: 10000
+[UPDATE #613] Mean Reward:  -1.16 | Q Loss: +0.07422 | Mean Q: -6.73180 | Target Q: -6.66610 | Replay: 10000
+[UPDATE #614] Mean Reward:  -1.45 | Q Loss: +3.27693 | Mean Q: -6.74286 | Target Q: -6.89172 | Replay: 10000
+[UPDATE #615] Mean Reward:  -1.07 | Q Loss: +5.65130 | Mean Q: -5.39666 | Target Q: -5.75130 | Replay: 10000
+[UPDATE #616] Mean Reward:  -1.04 | Q Loss: +0.06468 | Mean Q: -6.20640 | Target Q: -6.18810 | Replay: 10000
+[UPDATE #617] Mean Reward:  -1.26 | Q Loss: +3.06368 | Mean Q: -5.85888 | Target Q: -6.10054 | Replay: 10000
+[UPDATE #618] Mean Reward:  -0.93 | Q Loss: +0.07722 | Mean Q: -5.90816 | Target Q: -5.75329 | Replay: 10000
+[UPDATE #619] Mean Reward:  -0.79 | Q Loss: +0.12762 | Mean Q: -5.33416 | Target Q: -5.13891 | Replay: 10000
+[UPDATE #620] Mean Reward:  -1.05 | Q Loss: +0.11192 | Mean Q: -6.44719 | Target Q: -6.31117 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #621] Mean Reward:  -1.66 | Q Loss: +6.08485 | Mean Q: -6.29120 | Target Q: -6.86264 | Replay: 10000
+[UPDATE #622] Mean Reward:  -1.22 | Q Loss: +0.04431 | Mean Q: -7.01466 | Target Q: -7.01635 | Replay: 10000
+[UPDATE #623] Mean Reward:  -0.89 | Q Loss: +0.07334 | Mean Q: -5.66958 | Target Q: -5.61262 | Replay: 10000
+[UPDATE #624] Mean Reward:  -1.09 | Q Loss: +0.03885 | Mean Q: -6.52960 | Target Q: -6.45757 | Replay: 10000
+[UPDATE #625] Mean Reward:  -1.47 | Q Loss: +6.06234 | Mean Q: -5.53907 | Target Q: -6.07533 | Replay: 10000
+[UPDATE #626] Mean Reward:  -0.91 | Q Loss: +0.09915 | Mean Q: -5.82778 | Target Q: -5.71815 | Replay: 10000
+[UPDATE #627] Mean Reward:  -1.64 | Q Loss: +2.91879 | Mean Q: -7.56583 | Target Q: -7.84695 | Replay: 10000
+[UPDATE #628] Mean Reward:  -1.46 | Q Loss: +3.11362 | Mean Q: -7.02088 | Target Q: -7.09703 | Replay: 10000
+[UPDATE #629] Mean Reward:  -1.40 | Q Loss: +0.04429 | Mean Q: -8.04228 | Target Q: -7.88457 | Replay: 10000
+[UPDATE #630] Mean Reward:  -1.15 | Q Loss: +0.21320 | Mean Q: -7.01553 | Target Q: -6.81977 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #631] Mean Reward:  -1.09 | Q Loss: +0.13895 | Mean Q: -6.83272 | Target Q: -6.55781 | Replay: 10000
+[UPDATE #632] Mean Reward:  -1.24 | Q Loss: +0.23079 | Mean Q: -7.06835 | Target Q: -6.94122 | Replay: 10000
+[UPDATE #633] Mean Reward:  -1.63 | Q Loss: +6.76989 | Mean Q: -7.09737 | Target Q: -7.51144 | Replay: 10000
+[UPDATE #634] Mean Reward:  -1.42 | Q Loss: +3.01643 | Mean Q: -6.84049 | Target Q: -6.98470 | Replay: 10000
+[UPDATE #635] Mean Reward:  -1.17 | Q Loss: +0.15594 | Mean Q: -7.20121 | Target Q: -6.96827 | Replay: 10000
+[UPDATE #636] Mean Reward:  -1.19 | Q Loss: +0.08706 | Mean Q: -7.22951 | Target Q: -7.06775 | Replay: 10000
+[UPDATE #637] Mean Reward:  -1.17 | Q Loss: +0.11183 | Mean Q: -7.11891 | Target Q: -6.96574 | Replay: 10000
+[UPDATE #638] Mean Reward:  -1.27 | Q Loss: +0.09082 | Mean Q: -7.42251 | Target Q: -7.40244 | Replay: 10000
+[UPDATE #639] Mean Reward:  -1.48 | Q Loss: +3.20488 | Mean Q: -7.01903 | Target Q: -7.31610 | Replay: 10000
+[UPDATE #640] Mean Reward:  -1.14 | Q Loss: +0.45086 | Mean Q: -6.39893 | Target Q: -6.48247 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #641] Mean Reward:  -1.35 | Q Loss: +3.26242 | Mean Q: -6.55843 | Target Q: -6.73349 | Replay: 10000
+[UPDATE #642] Mean Reward:  -1.10 | Q Loss: +0.03475 | Mean Q: -6.75755 | Target Q: -6.70226 | Replay: 10000
+[UPDATE #643] Mean Reward:  -0.89 | Q Loss: +0.16546 | Mean Q: -5.95946 | Target Q: -5.79664 | Replay: 10000
+[UPDATE #644] Mean Reward:  -1.25 | Q Loss: +0.02749 | Mean Q: -7.44966 | Target Q: -7.38370 | Replay: 10000
+[UPDATE #645] Mean Reward:  -1.18 | Q Loss: +0.01946 | Mean Q: -7.18289 | Target Q: -7.12092 | Replay: 10000
+[UPDATE #646] Mean Reward:  -1.07 | Q Loss: +0.84895 | Mean Q: -6.50025 | Target Q: -6.59401 | Replay: 10000
+[UPDATE #647] Mean Reward:  -1.38 | Q Loss: +0.06796 | Mean Q: -8.12607 | Target Q: -8.02964 | Replay: 10000
+[UPDATE #648] Mean Reward:  -1.34 | Q Loss: +7.81539 | Mean Q: -5.92714 | Target Q: -6.67830 | Replay: 10000
+[UPDATE #649] Mean Reward:  -1.24 | Q Loss: +0.03820 | Mean Q: -7.51107 | Target Q: -7.42104 | Replay: 10000
+[UPDATE #650] Mean Reward:  -1.18 | Q Loss: +0.04566 | Mean Q: -7.30941 | Target Q: -7.17819 | Replay: 10000
+  └── [SUCCESS] Brain weights checkpoint saved -> /shared/CSE625_QoS/checkpoints/v2x_online_brain_dqn.pth
+[UPDATE #651] Mean Reward:  -1.31 | Q Loss: +3.12159 | Mean Q: -6.39456 | Target Q: -6.62590 | Replay: 10000
+[UPDATE #652] Mean Reward:  -1.25 | Q Loss: +0.06717 | Mean Q: -7.58337 | Target Q: -7.47080 | Replay: 10000
+[UPDATE #653] Mean Reward:  -0.98 | Q Loss: +0.08982 | Mean Q: -6.43416 | Target Q: -6.26641 | Replay: 10000
+[UPDATE #654] Mean Reward:  -1.24 | Q Loss: +0.06754 | Mean Q: -7.59359 | Target Q: -7.49270 | Replay: 10000
+[UPDATE #655] Mean Reward:  -1.04 | Q Loss: +0.05288 | Mean Q: -6.67514 | Target Q: -6.55075 | Replay: 10000
+[UPDATE #656] Mean Reward:  -1.39 | Q Loss: +3.37559 | Mean Q: -6.85391 | Target Q: -7.06643 | Replay: 10000
+
+

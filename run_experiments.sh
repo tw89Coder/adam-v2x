@@ -147,6 +147,13 @@ ONNX_MODEL_PATH=""
 DISABLE_SAFETY=false
 RUN_TRACE=false
 
+
+# Chi-AN : experiment data flow control  parameters 
+
+ZIP_MODE=false
+SEQUENCE_FILE=""
+DRY_RUN=false
+
 # Default global state machine mode and pollution density spectrum arrays
 DEFAULT_MODES=(0 1 2)
 TARGET_MODES=("${DEFAULT_MODES[@]}")
@@ -231,6 +238,36 @@ while [[ $# -gt 0 ]]; do
             DISABLE_SAFETY=true
             shift
             ;;
+        #===================================Chi-AN: new command for training data flow =======================================
+        --zip|--paired)
+            ZIP_MODE=true
+            shift
+            ;;
+
+        --sequence-file|--seq-file)
+            if [[ -n "$2" && ! "$2" =~ ^- ]]; then
+                SEQUENCE_FILE="$2"
+                shift 2
+            else
+                echo -e "${C_ERROR}[ERROR] --sequence-file demands a file path.${C_RESET}"
+                exit 1
+            fi
+            ;;
+
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+
+        -N|--packets)
+            if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
+                TOTAL_PACKETS="$2"
+                shift 2
+            else
+                echo -e "${C_ERROR}[ERROR] -N/--packets demands a positive integer.${C_RESET}"
+                exit 1
+            fi
+            ;;
         *)
             echo -e "${C_ERROR}[ERROR] Unknown option: $1${C_RESET}"
             exit 1
@@ -264,6 +301,30 @@ execute_cmd() {
     fi
 }
 
+# ===============Chi-AN: new function for training data flow control ==========================================
+run_training_pair() {
+    local tgt="$1"
+    local exec_bin="$2"
+    local mode="$3"
+    local rate="$4"
+
+    echo -e "${C_INFO}[EXEC] RL trajectory: target=${tgt}, mode=${mode}, rate=${rate}%, packets=${TOTAL_PACKETS}${C_RESET}"
+
+    local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "--rl")
+
+    if [ "$DISABLE_SAFETY" = true ]; then
+        train_args+=("--disable-safety")
+    fi
+
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "${C_WARN}[DRY-RUN] $exec_bin ${train_args[*]}${C_RESET}"
+    else
+        execute_cmd "$exec_bin" "${train_args[@]}"
+    fi
+
+    echo "----------------------------------------------------------------------"
+}
+
 # Resolve lock status representation for console logs
 get_core_info() {
     if [ "$USE_TASKSET" = true ]; then
@@ -284,35 +345,65 @@ execute_rl_training() {
         exit 1
     fi
 
-    # Ensure isolation directory structures exist before firing synchronization lines
     mkdir -p "${ROOT_DIR}/outputs/rl_env"
-    # Sequentially iterate through configuration sweeps to feed interactive socket state-spaces
-    # for rate in "${POLLUTION_RATES[@]}"; do
-    #     echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory at rate: ${rate}%...${C_RESET}"
-    #     local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" 3 "--rl")
-    #     if [ "$DISABLE_SAFETY" = true ]; then
-    #         train_args+=("--disable-safety")
-    #     fi
-    #     execute_cmd "$exec_bin" "${train_args[@]}"
-    #     echo "----------------------------------------------------------------------"
-    # done
 
-    echo -e "${C_WARN}[NOTICE] Initializing Collaborative DRL Core Infrastructure Server Connection...${C_RESET}"
-    echo -e "${C_INFO}[STAGE] Task Lock Active: Target=${tgt} | Modes=${TARGET_MODES[*]} | Automation Flags=--rl ($(get_core_info))${C_RESET}"
+    echo -e "${C_INFO}[STAGE] RL Training | Target=${tgt} | Packets=${TOTAL_PACKETS} | Core=$(get_core_info)${C_RESET}"
 
-    # Sequentially iterate through mode/rate sweeps to feed interactive socket state-spaces
-    for mode in "${TARGET_MODES[@]}"; do
-        for rate in "${POLLUTION_RATES[@]}"; do
-            echo -e "${C_INFO}[EXEC] Pushing dynamic training trace trajectory: mode=${mode}, rate=${rate}%...${C_RESET}"
+    # Priority 1: read explicit sequence file
+    if [ -n "$SEQUENCE_FILE" ]; then
+        if [ ! -f "$SEQUENCE_FILE" ]; then
+            echo -e "${C_ERROR}[ERROR] Sequence file not found: ${SEQUENCE_FILE}${C_RESET}"
+            exit 1
+        fi
 
-            local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "--rl")
+        echo -e "${C_INFO}[MODE] Using sequence file: ${SEQUENCE_FILE}${C_RESET}"
 
-            if [ "$DISABLE_SAFETY" = true ]; then
-                train_args+=("--disable-safety")
+        local line_no=0
+        while read -r mode rate extra; do
+            line_no=$((line_no + 1))
+
+            # Skip empty lines and comments
+            [[ -z "$mode" ]] && continue
+            [[ "$mode" =~ ^# ]] && continue
+
+            if [[ -z "$rate" ]]; then
+                echo -e "${C_ERROR}[ERROR] Invalid sequence line ${line_no}: missing rate.${C_RESET}"
+                exit 1
             fi
 
-            execute_cmd "$exec_bin" "${train_args[@]}"
-            echo "----------------------------------------------------------------------"
+            if [[ -n "$extra" ]]; then
+                echo -e "${C_WARN}[WARN] Extra tokens ignored at line ${line_no}: ${extra}${C_RESET}"
+            fi
+
+            run_training_pair "$tgt" "$exec_bin" "$mode" "$rate"
+        done < "$SEQUENCE_FILE"
+
+        return
+    fi
+
+    # Priority 2: paired arrays
+    if [ "$ZIP_MODE" = true ]; then
+        echo -e "${C_INFO}[MODE] Using zipped mode/rate arrays.${C_RESET}"
+
+        if [ "${#TARGET_MODES[@]}" -ne "${#POLLUTION_RATES[@]}" ]; then
+            echo -e "${C_ERROR}[ERROR] --zip requires the number of modes and rates to match.${C_RESET}"
+            echo -e "${C_ERROR}[ERROR] modes=${#TARGET_MODES[@]}, rates=${#POLLUTION_RATES[@]}${C_RESET}"
+            exit 1
+        fi
+
+        for i in "${!TARGET_MODES[@]}"; do
+            run_training_pair "$tgt" "$exec_bin" "${TARGET_MODES[$i]}" "${POLLUTION_RATES[$i]}"
+        done
+
+        return
+    fi
+
+    # Priority 3: original matrix behavior
+    echo -e "${C_INFO}[MODE] Using matrix sweep: modes x rates.${C_RESET}"
+
+    for mode in "${TARGET_MODES[@]}"; do
+        for rate in "${POLLUTION_RATES[@]}"; do
+            run_training_pair "$tgt" "$exec_bin" "$mode" "$rate"
         done
     done
 }
