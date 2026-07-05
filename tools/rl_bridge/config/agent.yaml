@@ -19,7 +19,7 @@ infrastructure:
 v2x_bounds:
   max_packet_size: 1500.0               # Maximum Ethernet MTU size in bytes (used for normalizing size feature)
   max_f2_sq: 65025.0                    # Maximum possible F2 sliding-window sketch similarity count (255^2)
-  window_size: 64                       # Number of bytes in the sliding-window F2 sketch window (O(W) cap)
+  window_size: 100                      # Number of bytes in the sliding-window F2 sketch window (O(W) cap)
 
 # ------------------------------------------------------------------------------
 # 3. Model Architecture Parameters

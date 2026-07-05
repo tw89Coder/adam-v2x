@@ -70,11 +70,30 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 # Flush rolling buffers
                 for key in buffer:
                     buffer[key].clear()
+                
+                metrics = learner.update(buffer)
+
+                if "q_loss" in metrics:
+                    print(
+                        f"[UPDATE #{update_count:03d}] "
+                        f"Mean Reward: {metrics.get('mean_reward', reward):+6.2f} | "
+                        f"Q Loss: {metrics['q_loss']:+.5f} | "
+                        f"Mean Q: {metrics['mean_q']:+.5f} | "
+                        f"Target Q: {metrics.get('mean_target_q', 0.0):+.5f} | "
+                        f"Replay: {int(metrics.get('replay_size', 0))}"
+                    )
+                else:
+                    print(
+                        f"[UPDATE #{update_count:03d}] "
+                        f"Mean Reward: {reward:+6.2f} | "
+                        f"Actor Loss: {metrics.get('actor_loss', 0.0):+.5f} | "
+                        f"Critic Loss: {metrics.get('critic_loss', 0.0):+.4f}"
+                    )
                     
-                print(f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
-                      f"Mean Reward: {C_SUCCESS}{reward:+6.2f}{C_RESET} | "
-                      f"Actor Loss: {C_BOLD}{metrics['actor_loss']:+.5f}{C_RESET} | "
-                      f"Critic Loss: {C_BOLD}{metrics['critic_loss']:.4f}{C_RESET}")
+                # print(f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
+                #       f"Mean Reward: {C_SUCCESS}{reward:+6.2f}{C_RESET} | "
+                #       f"Actor Loss: {C_BOLD}{metrics['actor_loss']:+.5f}{C_RESET} | "
+                #       f"Critic Loss: {C_BOLD}{metrics['critic_loss']:.4f}{C_RESET}")
                 
                 # Serialize checkpoints periodically
                 if update_count % 10 == 0:

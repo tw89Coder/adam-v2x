@@ -139,7 +139,15 @@ class DQNLearner(BaseLearner):
             
         # 2. Wait until enough memories are collected
         if self.memory.size < self.batch_size:
-            return {"loss": 0.0, "mean_q": 0.0}
+            return {
+                "q_loss": 0.0,
+                "mean_q": 0.0,
+                "mean_target_q": 0.0,
+                "mean_reward": 0.0,
+                "replay_size": float(self.memory.size),
+                "skipped_update": 1.0,
+            }
+            #return {"loss": 0.0, "mean_q": 0.0}
             
         # 3. Sample batch from Replay Buffer
         b_states, b_actions, b_rewards, b_next_states, b_dones = self.memory.sample(self.batch_size)
@@ -166,12 +174,22 @@ class DQNLearner(BaseLearner):
             
         # Return metrics for console logging
         # To align with run_online logger, we output dummy actor/critic losses or mapping names
+
+        # Return DQN-specific metrics for console logging
         return {
-            "actor_loss": loss.item(),
-            "critic_loss": state_action_values.mean().item(),
-            "loss": loss.item(),
-            "mean_q": state_action_values.mean().item()
+            "q_loss": loss.item(),
+            "mean_q": state_action_values.mean().item(),
+            "mean_target_q": expected_state_action_values.mean().item(),
+            "mean_reward": b_rewards.mean().item(),
+            "replay_size": float(self.memory.size),
         }
+    
+        # return {
+        #     "actor_loss": loss.item(),
+        #     "critic_loss": state_action_values.mean().item(),
+        #     "loss": loss.item(),
+        #     "mean_q": state_action_values.mean().item()
+        # }
 
 
 # ==============================================================================
