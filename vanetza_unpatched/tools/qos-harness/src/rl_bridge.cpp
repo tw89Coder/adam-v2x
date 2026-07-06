@@ -401,8 +401,43 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         float* float_output = output_tensors.front().GetTensorMutableData<float>();
 
         // 3. Dynamic Action Space Mapping (Adapts to model complexity)
-        if (action_dim == 4) {
-            // 4D Model Output: [recovery_rate, penalty_multiplier, sq_threshold, base_sampling_rate]
+        if (action_dim == 5) {
+            // ==========================================
+            // [DQN Model Mapping] Discrete Action Space
+            // ==========================================
+            // 1. Find Argmax (the index with the highest Q-value)
+            int best_action_idx = 0;
+            float max_q_value = float_output[0];
+            for (int i = 1; i < 5; ++i) {
+                if (float_output[i] > max_q_value) {
+                    max_q_value = float_output[i];
+                    best_action_idx = i;
+                }
+            }
+
+            // 2. Map index to delta (matching Python's DqnActionTranslator)
+            float action_map[5] = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f};
+            float delta = action_map[best_action_idx];
+
+            // 3. Calculate new sampling rate based on current environment state
+            float new_rate = telemetry.instant_sampling_rate + delta;
+            
+            // 4. Clamp to boundaries [0.05, 1.0]
+            if (new_rate < 0.05f) new_rate = 0.05f;
+            if (new_rate > 1.0f) new_rate = 1.0f;
+
+            // 5. Output policy: Lock other parameters to default baseline, update only sampling rate
+            out_policy.recovery_rate = 0.05;
+            out_policy.penalty_multiplier = 50.0;
+            out_policy.sq_threshold = 600;
+            out_policy.base_sampling_rate = new_rate;
+        }
+        else if (action_dim == 4) {
+            // ==========================================
+            // [PPO Model Mapping] Continuous Action Space
+            // ==========================================
+            // Note: If you deploy PPO in the future, you need to confirm whether un-normalization has been done when exporting ONNX. 
+            // If the Gym environment outputs [-1, 1], the mapping formula of (val + 1)/2 needs to be applied here.
             out_policy.recovery_rate = float_output[0] * 0.5;
             out_policy.penalty_multiplier = float_output[1] * 100.0;
             out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
