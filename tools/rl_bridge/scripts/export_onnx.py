@@ -53,8 +53,9 @@ class DQNDeploymentWrapper(nn.Module):
         # 3. Retrieve rate delta delta from action map buffer
         delta = self.action_map_tensor[best_action_idx]
         
-        # 4. Extract current base sampling rate from telemetry index 0
-        current_rate = full_observation[:, 0]
+        # 4. Extract current base sampling rate (first feature of the newest frame at the end of the stack)
+        input_dim = full_observation.shape[1]
+        current_rate = full_observation[:, input_dim - 3]
         
         # 5. Compute new rate and enforce safety boundaries in-graph
         new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)

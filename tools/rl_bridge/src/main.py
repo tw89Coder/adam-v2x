@@ -12,10 +12,17 @@ from typing import Dict, Any, List
 import torch
 import pandas as pd
 
+# CRITICAL: Structural auto-path repair to prevent local module discovery failures
+import sys
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
 from src.config import (
+
     C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, C_BOLD, C_WHITE,
     HOST, PORT, CHECKPOINT_DIR, ONLINE_BRAIN_PATH, OFFLINE_BRAIN_PATH,
-    RAW_CFG
+    RAW_CFG, FRAME_STACK
 )
 from src.utils.data_loader import load_telemetry_data
 from src.models.policy_net import DefencePolicyNet
@@ -67,28 +74,26 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 # Run optimization step on learner
                 metrics = learner.update(buffer)
                 
-                # Flush rolling buffers
-                for key in buffer:
-                    buffer[key].clear()
-                
-                metrics = learner.update(buffer)
-
                 if "q_loss" in metrics:
                     print(
-                        f"[UPDATE #{update_count:03d}] "
-                        f"Mean Reward: {metrics.get('mean_reward', reward):+6.2f} | "
-                        f"Q Loss: {metrics['q_loss']:+.5f} | "
-                        f"Mean Q: {metrics['mean_q']:+.5f} | "
-                        f"Target Q: {metrics.get('mean_target_q', 0.0):+.5f} | "
+                        f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
+                        f"Mean Reward: {C_SUCCESS if reward >= 0 else C_ERROR}{reward:+6.2f}{C_RESET} | "
+                        f"Q Loss: {C_BOLD}{metrics['q_loss']:+.5f}{C_RESET} | "
+                        f"Mean Q: {C_BOLD}{metrics['mean_q']:+.5f}{C_RESET} | "
+                        f"Target Q: {C_BOLD}{metrics.get('mean_target_q', 0.0):+.5f}{C_RESET} | "
                         f"Replay: {int(metrics.get('replay_size', 0))}"
                     )
                 else:
                     print(
-                        f"[UPDATE #{update_count:03d}] "
-                        f"Mean Reward: {reward:+6.2f} | "
-                        f"Actor Loss: {metrics.get('actor_loss', 0.0):+.5f} | "
-                        f"Critic Loss: {metrics.get('critic_loss', 0.0):+.4f}"
+                        f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
+                        f"Mean Reward: {C_SUCCESS if reward >= 0 else C_ERROR}{reward:+6.2f}{C_RESET} | "
+                        f"Actor Loss: {C_BOLD}{metrics.get('actor_loss', 0.0):+.5f}{C_RESET} | "
+                        f"Critic Loss: {C_BOLD}{metrics.get('critic_loss', 0.0):.4f}{C_RESET}"
                     )
+                
+                # Flush rolling buffers
+                for key in buffer:
+                    buffer[key].clear()
                     
                 # print(f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
                 #       f"Mean Reward: {C_SUCCESS}{reward:+6.2f}{C_RESET} | "
@@ -163,10 +168,16 @@ def run_offline(env: V2XOfflineDatasetEnv, agent: V2XAgent, learner: PPOLearner,
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
         torch.save(agent.model.state_dict(), OFFLINE_BRAIN_PATH)
         
-        print(f"  {C_WHITE}──{C_RESET} [ {C_INFO}Epoch {epoch+1:02d}/{epochs:02d}{C_RESET} ] "
-              f"Actor Loss: {C_BOLD}{metrics['actor_loss']:+.5f}{C_RESET} | "
-              f"Critic Loss: {C_BOLD}{metrics['critic_loss']:.5f}{C_RESET} | "
-              f"Mean Reward: {C_SUCCESS}{epoch_reward / steps:+.2f}{C_RESET}")
+        if "q_loss" in metrics:
+            print(f"  {C_WHITE}──{C_RESET} [ {C_INFO}Epoch {epoch+1:02d}/{epochs:02d}{C_RESET} ] "
+                  f"Q Loss: {C_BOLD}{metrics['q_loss']:+.5f}{C_RESET} | "
+                  f"Mean Q: {C_BOLD}{metrics.get('mean_q', 0.0):+.5f}{C_RESET} | "
+                  f"Mean Reward: {C_SUCCESS}{epoch_reward / steps:+.2f}{C_RESET}")
+        else:
+            print(f"  {C_WHITE}──{C_RESET} [ {C_INFO}Epoch {epoch+1:02d}/{epochs:02d}{C_RESET} ] "
+                  f"Actor Loss: {C_BOLD}{metrics.get('actor_loss', 0.0):+.5f}{C_RESET} | "
+                  f"Critic Loss: {C_BOLD}{metrics.get('critic_loss', 0.0):.5f}{C_RESET} | "
+                  f"Mean Reward: {C_SUCCESS}{epoch_reward / steps:+.2f}{C_RESET}")
 
 def main():
     parser = argparse.ArgumentParser(description="Unified refactored V2X QoS DRL framework.")
@@ -175,6 +186,8 @@ def main():
     parser.add_argument("--port", type=int, default=None, help="TCP server port")
     parser.add_argument("--epochs", type=int, default=10, help="Offline training epochs count")
     parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
+    parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
+    parser.add_argument("--fresh", action="store_true", help="Start training from scratch, ignoring existing checkpoints")
     args = parser.parse_args()
 
     # 1. Dynamic algorithm pipeline building via registry factory
@@ -186,19 +199,29 @@ def main():
     algo_name = RAW_CFG.get("algorithm", "ppo").lower()
     lr = RAW_CFG["hyperparameters"]["lr_online"] if args.mode == "online" else RAW_CFG["hyperparameters"]["lr_offline"]
     
+    frame_stack = args.frame_stack if args.frame_stack is not None else FRAME_STACK
+    
     builder = get_algorithm_builder(algo_name)
-    env, agent, learner = builder(lr=lr, port=args.port, mode=args.mode, raw_data=raw_data)
+    env, agent, learner = builder(
+        lr=lr,
+        port=args.port,
+        mode=args.mode,
+        raw_data=raw_data,
+        frame_stack=frame_stack
+    )
     model = agent.model
 
     # 2. Instantiate and run environment wrappers dynamically
     if args.mode == "online":
         # Load weights if available
-        if os.path.exists(ONLINE_BRAIN_PATH):
+        if not args.fresh and os.path.exists(ONLINE_BRAIN_PATH):
             try:
                 model.load_state_dict(torch.load(ONLINE_BRAIN_PATH, map_location="cpu"))
                 print(f"  └── {C_SUCCESS}[INIT] Loaded existing online model weights from {ONLINE_BRAIN_PATH}{C_RESET}")
             except Exception as e:
                 print(f"  └── {C_WARN}[INIT] Cannot load online model weights: {e}. Starting fresh...{C_RESET}")
+        else:
+            print(f"  └── {C_INFO}[INIT] Starting training fresh from scratch...{C_RESET}")
                 
         # Override env host if provided in CLI arguments
         if args.host:
@@ -208,12 +231,14 @@ def main():
         run_online(env, agent, learner, batch_size)
     else:
         # Load weights if available
-        if os.path.exists(OFFLINE_BRAIN_PATH):
+        if not args.fresh and os.path.exists(OFFLINE_BRAIN_PATH):
             try:
                 model.load_state_dict(torch.load(OFFLINE_BRAIN_PATH, map_location="cpu"))
                 print(f"  └── {C_SUCCESS}[INIT] Loaded existing offline model weights from {OFFLINE_BRAIN_PATH}{C_RESET}")
             except Exception as e:
                 print(f"  └── {C_WARN}[INIT] Cannot load offline model weights: {e}. Starting fresh...{C_RESET}")
+        else:
+            print(f"  └── {C_INFO}[INIT] Starting training fresh from scratch...{C_RESET}")
                 
         run_offline(env, agent, learner, args.epochs)
 

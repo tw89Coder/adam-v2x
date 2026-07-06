@@ -45,7 +45,13 @@ print_usage() {
     echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
     echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
     echo -e ""
-    echo -e "${C_BOLD}Automation Configuration Modifiers (Short & Long Flags):${C_RESET}"
+    echo -e "${C_BOLD}Common Modifiers (Applies to both Python & C++):${C_RESET}"
+    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Override pollution rates (Default: \"1.0 5.0 10.0\")."
+    echo -e "                          * \"mix\" blends multiple intensity traces (1.0%, 5.0%, 10.0% mode3 traces)"
+    echo -e "                            to pre-train model checkpoints (Offline training only)."
+    echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable heuristic safety clamping boundaries for RL agent"
+    echo -e ""
+    echo -e "${C_BOLD}C++ Simulation Specific Modifiers:${C_RESET}"
     echo -e "  ${C_INFO}-c, --core <id>${C_RESET}       Hardware CPU core index for taskset processor locking (Default: 9)"
     echo -e "  ${C_INFO}-n, --no-taskset${C_RESET}      Disable taskset core pinning (Bypasses core locking; recommended for RL)"
     echo -e "  ${C_INFO}-B, --baseline-only${C_RESET}   Execute ONLY Filter=OFF simulation steps (No mitigation)"
@@ -56,11 +62,11 @@ print_usage() {
     echo -e "                            1 = Single Pulse Attack (Sudden burst at 30%-50% window)"
     echo -e "                            2 = Periodic On-Off (5 waves of peak attack cycles)"
     echo -e "                            3 = Grand Mix Scenario (Dynamic hybrid mix for RL training)"
-    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Override pollution rates (Default: \"1.0 5.0 10.0\")."
-    echo -e "                          * \"mix\" blends multiple intensity traces (1.0%, 5.0%, 10.0% mode3 traces)"
-    echo -e "                            to pre-train model checkpoints (Offline training only)."
     echo -e "  ${C_INFO}-o, --onnx [path]${C_RESET}     Enable in-process ONNX model inference during simulation"
-    echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable heuristic safety clamping boundaries for RL agent"
+    echo -e ""
+    echo -e "${C_BOLD}Python DRL Specific Modifiers:${C_RESET}"
+    echo -e "  ${C_INFO}--frame-stack <k>${C_RESET}    Specify frame stacking size (K=1 is stateless; default: from agent.yaml)"
+    echo -e "  ${C_INFO}--fresh${C_RESET}             Bypass loading existing PyTorch weights and train from scratch"
     echo -e ""
     echo -e "${C_BOLD}Examples:${C_RESET}"
     echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET} -m \"0 1\" -r \"1.0 5.0\"      \033[90m# Run specific C++ sweep\033[0m"
@@ -123,7 +129,13 @@ if [ "$1" = "python" ]; then
     if [ ! -f "$PYTHON_EXEC" ]; then PYTHON_EXEC="python3"; fi
 
     # Launch python script and pass remaining arguments untouched
-    exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/${SCRIPT}" "$@"
+    if [ "$ACTION" = "--train-online" ]; then
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/src/main.py" --mode online "$@"
+    elif [ "$ACTION" = "--train-offline" ]; then
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/src/main.py" --mode offline "$@"
+    else
+        exec "$PYTHON_EXEC" "${ROOT_DIR}/tools/rl_bridge/${SCRIPT}" "$@"
+    fi
 fi
 
 # ── C++ SIMULATION TARGET ARGUMENT PARSING ───────────────────────────────────

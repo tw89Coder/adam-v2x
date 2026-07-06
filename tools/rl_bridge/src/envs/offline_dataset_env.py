@@ -40,22 +40,36 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
         )
         self.action_space = self.action_translator.get_action_space()
 
-    def build_state_tensor(self, avg_size: float, avg_sq: float, anomaly_rate: float) -> torch.Tensor:
+    def build_state_tensor(self, current_rate: float, avg_sq: float, anomaly_rate: float) -> torch.Tensor:
         """
         Constructs normalized 3-dimensional state Tensor.
         """
-        norm_size = avg_size / MAX_PACKET_SIZE
+        import numpy as np
+        # Defensive validation against corrupt or out-of-bound dataset entries
+        current_rate = float(np.clip(current_rate, 0.0, 1.0)) if np.isfinite(current_rate) else 0.05
+        avg_sq = float(np.clip(avg_sq, 0.0, MAX_F2_SQ)) if np.isfinite(avg_sq) else 0.0
+        anomaly_rate = float(np.clip(anomaly_rate, 0.0, 1.0)) if np.isfinite(anomaly_rate) else 0.0
+
         norm_sq = avg_sq / MAX_F2_SQ
-        return torch.tensor([norm_size, norm_sq, anomaly_rate], dtype=torch.float32)
+        return torch.tensor([current_rate, norm_sq, anomaly_rate], dtype=torch.float32)
 
     def extract_state_from_df(self, df_slice: pd.DataFrame) -> torch.Tensor:
         """
         Parses packet lists from window slices into normalized states.
         """
-        avg_size = df_slice["packet_size"].mean()
         avg_sq = df_slice["max_sum_sq"].mean()
         anomaly_rate = df_slice["is_anomalous"].mean()
-        return self.build_state_tensor(avg_size, avg_sq, anomaly_rate)
+        
+        # Extract budget and convert to rate to match online socket env
+        current_budget = df_slice["current_budget"].mean()
+        import numpy as np
+        if not np.isfinite(current_budget) or current_budget < 0.0 or current_budget > 100.0:
+            current_budget = float(np.clip(current_budget, 0.0, 100.0))
+            if not np.isfinite(current_budget):
+                current_budget = 100.0
+        current_rate = current_budget / 100.0
+        
+        return self.build_state_tensor(current_rate, avg_sq, anomaly_rate)
 
     def reset(self) -> torch.Tensor:
         """
@@ -80,6 +94,14 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
         # Retrieve observations from current slice
         anomaly_rate = window_slice["is_anomalous"].mean()
         current_budget = window_slice["current_budget"].mean()
+        
+        # Defensive validation: clamp budget to valid range [0.0, 100.0] and handle underflow garbage values
+        import numpy as np
+        if not np.isfinite(current_budget) or current_budget < 0.0 or current_budget > 100.0:
+            current_budget = float(np.clip(current_budget, 0.0, 100.0))
+            if not np.isfinite(current_budget):
+                current_budget = 100.0 # Default fallback to full budget
+                
         current_rate = current_budget / 100.0  # Scale budget to [0.0, 1.0] for translation
         
         # Translate the action to C++ FSM 4D policy parameters using the strategy

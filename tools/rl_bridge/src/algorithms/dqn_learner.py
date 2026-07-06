@@ -198,7 +198,7 @@ class DQNLearner(BaseLearner):
 from src.utils.registry import register_algorithm
 
 @register_algorithm("dqn")
-def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None):
+def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None, frame_stack: int = 1, **kwargs):
     """
     Dynamic DQN RL pipeline builder callback.
     """
@@ -217,10 +217,15 @@ def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None):
     else:
         env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
         
-    state_dim = len(env.active_features) if hasattr(env, "active_features") else 3
+    if frame_stack > 1:
+        from src.envs.wrappers import FrameStackWrapper
+        env = FrameStackWrapper(env, k=frame_stack)
+        
+    state_dim = env.state_dim if hasattr(env, "state_dim") else (len(env.active_features) if hasattr(env, "active_features") else 3)
     action_dim = translator.get_action_space().n
     
     model = DQNNet(state_dim=state_dim, action_dim=action_dim)
     agent = DQNAgent(model, action_translator=translator)
     learner = DQNLearner(agent, lr=lr)
     return env, agent, learner
+

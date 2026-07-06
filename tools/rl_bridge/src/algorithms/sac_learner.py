@@ -64,7 +64,7 @@ class SACLearner(BaseLearner):
 from src.utils.registry import register_algorithm
 
 @register_algorithm("sac")
-def build_sac_pipeline(lr: float, port: int, mode: str, raw_data=None):
+def build_sac_pipeline(lr: float, port: int, mode: str, raw_data=None, frame_stack: int = 1, **kwargs):
     """
     Dynamic SAC RL pipeline builder callback.
     """
@@ -90,13 +90,19 @@ def build_sac_pipeline(lr: float, port: int, mode: str, raw_data=None):
         w_nominal=w_nominal
     )
     
-    model = DefencePolicyNet()
-    agent = V2XAgent(model)
-    
     if mode == "online":
         env = V2XOnlineSocketEnv(port=port, action_translator=translator, reward_strategy=reward_strategy)
     else:
         env = V2XOfflineDatasetEnv(raw_data=raw_data, action_translator=translator, reward_strategy=reward_strategy)
         
+    if frame_stack > 1:
+        from src.envs.wrappers import FrameStackWrapper
+        env = FrameStackWrapper(env, k=frame_stack)
+        
+    state_dim = env.state_dim if hasattr(env, "state_dim") else (len(env.active_features) if hasattr(env, "active_features") else 3)
+    
+    model = DefencePolicyNet(input_dim=state_dim)
+    agent = V2XAgent(model)
     learner = SACLearner(agent, lr=lr)
     return env, agent, learner
+

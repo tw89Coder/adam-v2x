@@ -40,9 +40,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO/DQN Optimization Pipeline")
     parser.add_argument("-r", "--rate", type=str, default="mix", help="Target trace training dataset directory filter")
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
-    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter ceiling")
+    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter parameter ceiling")
     parser.add_argument("--clip", type=float, default=0.2, help="PPO boundary clipping limits")
     parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
+    parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     return parser.parse_args()
 
 def main():
@@ -60,9 +61,18 @@ def main():
 
     # Dynamically build the offline dataset pipeline via registry factory
     from src.utils.registry import get_algorithm_builder
+    from src.config import FRAME_STACK
+    
+    frame_stack = args.frame_stack if args.frame_stack is not None else FRAME_STACK
     
     builder = get_algorithm_builder(args.algo)
-    env, agent, learner = builder(lr=args.lr, port=None, mode="offline", raw_data=raw_data)
+    env, agent, learner = builder(
+        lr=args.lr,
+        port=None,
+        mode="offline",
+        raw_data=raw_data,
+        frame_stack=frame_stack
+    )
 
     print(f"\n{C_WARN}[*] Compiling policy graphs. Executing optimization loops...{C_RESET}\n")
     
@@ -72,7 +82,7 @@ def main():
     # Export optimized binary parameters
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     weight_output_path = f"{CHECKPOINT_DIR}/v2x_offline_r{args.rate}_e{args.epochs}.pth"
-    torch.save(model.state_dict(), weight_output_path)
+    torch.save(agent.model.state_dict(), weight_output_path)
     
     print(f"\n{C_SUCCESS}┌───────────────────────────────────────────────────────────────┐{C_RESET}")
     print(f"{C_SUCCESS}│     PROXIMAL POLICY OPTIMIZATION COMPLETE - BRAIN ALIGNED     │{C_RESET}")

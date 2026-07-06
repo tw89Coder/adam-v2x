@@ -27,6 +27,9 @@ YAML_PATH = os.path.join(CONFIG_DIR, "config", "agent.yaml")
 # Fallback fail-safe default maps in case YAML file loading encounters issues
 _defaults = {
     "algorithm": "dqn",
+    "state_representation": {
+        "frame_stack": 1
+    },
     "infrastructure": {
         "host": "127.0.0.1", "port": 8080, "checkpoint_dir": "checkpoints",
         "online_brain_path": "checkpoints/v2x_online_brain.pth",
@@ -101,6 +104,7 @@ OFFLINE_BRAIN_PATH = os.path.join(WORKSPACE_ROOT, f"{offline_base}{ALGO_SUFFIX}{
 MAX_PACKET_SIZE = cfg["v2x_bounds"]["max_packet_size"]
 MAX_F2_SQ = cfg["v2x_bounds"]["max_f2_sq"]
 WINDOW_SIZE = cfg["v2x_bounds"]["window_size"]
+FRAME_STACK = cfg.get("state_representation", {}).get("frame_stack", 1)
 
 # Expose the raw configuration matrix dictionary for semantic runtime deep-reads
 RAW_CFG = cfg

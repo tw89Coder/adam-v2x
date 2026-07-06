@@ -40,6 +40,7 @@ def parse_arguments():
     parser.add_argument("-b", "--batch", type=int, default=32, help="Rollout batch optimization threshold")
     parser.add_argument("-l", "--lr", type=float, default=0.0003, help="Actor-Critic / Q-Network learning speed")
     parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
+    parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     return parser.parse_args()
 
 def main():
@@ -53,9 +54,17 @@ def main():
 
     # Dynamically build the co-simulation training pipeline via registry factory
     from src.utils.registry import get_algorithm_builder
+    from src.config import FRAME_STACK
+    
+    frame_stack = args.frame_stack if args.frame_stack is not None else FRAME_STACK
     
     builder = get_algorithm_builder(args.algo)
-    env, agent, learner = builder(lr=args.lr, port=args.port, mode="online")
+    env, agent, learner = builder(
+        lr=args.lr,
+        port=args.port,
+        mode="online",
+        frame_stack=frame_stack
+    )
         
     # Run the online serving co-simulation loop
     run_online(env, agent, learner, batch_size=args.batch)

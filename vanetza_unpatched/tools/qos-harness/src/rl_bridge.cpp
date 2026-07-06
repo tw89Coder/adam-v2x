@@ -332,26 +332,59 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // The last element of output shape vector is the action dimension (e.g. 2, 3, or 4).
         size_t action_dim = output_shape.back();
 
-        // 1. Prepare Input Tensor (Shape: 1x3)
+        // 1. Prepare Current Features (Shape: 1x3)
         // Feature Engineering Alignment:
         // Construct the normalized 3D state vector exactly matching Python training pipelines.
-        // Simulated packet size is mapped stochastically depending on anomaly rate (325.0 during nominal, 1400.0 during attack).
         // Features:
-        // [0]: normalized_packet_size (0.0 to 1.0)
+        // [0]: instant_sampling_rate (0.0 to 1.0)
         // [1]: normalized_max_f2_similarity (0.0 to 1.0)
         // [2]: raw_anomaly_rate (0.0 to 1.0)
-        float simulated_size = (telemetry.anomaly_rate > 0.05f) ? 1400.0f : 325.0f;
-        std::vector<int64_t> input_shape = {1, 3};
-        std::vector<float> input_tensor_values = {
-            simulated_size / 1500.0f,
+        std::vector<float> current_features = {
+            static_cast<float>(telemetry.instant_sampling_rate),
             static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
             static_cast<float>(telemetry.anomaly_rate)
         };
 
-        // Create the CPU tensor representation. The memory is allocated locally on the thread's stack.
+        // --- NEW: DYNAMIC DIMENSION INSPECTION ---
+        static auto input_type_info = session.GetInputTypeInfo(0);
+        static auto input_tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
+        static std::vector<int64_t> model_input_shape = input_tensor_info.GetShape();
+        static int64_t model_input_dim = model_input_shape.back(); // e.g. 3 or 12
+        
+        const size_t FEATURE_DIM = 3;
+        static size_t K = model_input_dim / FEATURE_DIM;
+        
+        // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION STATIC BUFFER ---
+        static std::vector<float> input_history_buffer(model_input_dim, 0.0f);
+        static bool history_initialized = false;
+
+        // 2. Manage Frame History Buffer (Zero-Allocation ring shifting)
+        if (!history_initialized) {
+            // Fill history buffer by repeating the first frame K times
+            for (size_t i = 0; i < K; ++i) {
+                std::copy(current_features.begin(), current_features.end(), 
+                          input_history_buffer.begin() + i * FEATURE_DIM);
+            }
+            history_initialized = true;
+        } else {
+            if (K > 1) {
+                // Shift older frames to the left by FEATURE_DIM
+                std::copy(input_history_buffer.begin() + FEATURE_DIM, 
+                          input_history_buffer.end(), 
+                          input_history_buffer.begin());
+                // Place new frame at the end of the history
+                std::copy(current_features.begin(), current_features.end(), 
+                          input_history_buffer.end() - FEATURE_DIM);
+            } else {
+                input_history_buffer = current_features;
+            }
+        }
+
+        // 3. Prepare Input Tensor (Using the contiguous flat history vector)
+        std::vector<int64_t> input_shape = {1, static_cast<int64_t>(model_input_dim)};
         auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, input_tensor_values.data(), input_tensor_values.size(),
+            memory_info, input_history_buffer.data(), input_history_buffer.size(),
             input_shape.data(), input_shape.size()
         );
 
