@@ -3,6 +3,7 @@
 import os
 import sys
 import argparse
+from engine.logger import LogStyle
 
 def main():
     # Dynamically resolve paths relative to the physical location of this script file
@@ -15,11 +16,19 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Industrial-Grade Verification and Plotting Engine for Academic Publication Manuscripts.",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=f"{LogStyle.BOLD}Available Plotting Types and Semantic Meanings:{LogStyle.RESET}\n"
+               f"  {LogStyle.STAGE}amp{LogStyle.RESET}         : Packet amplification ratio profiling (Defense metrics comparison)\n"
+               f"  {LogStyle.STAGE}qos{LogStyle.RESET}         : Cumulative Distribution Function (CDF) latency/loss curves\n"
+               f"  {LogStyle.STAGE}timeline{LogStyle.RESET}    : Multi-modal temporal attack execution traces\n"
+               f"  {LogStyle.STAGE}debug{LogStyle.RESET}       : Diagnostics diagnostic log output checks\n"
+               f"  {LogStyle.STAGE}budget{LogStyle.RESET}      : Resource depletion threshold boundaries under mitigations\n"
+               f"  {LogStyle.STAGE}convergence{LogStyle.RESET} : DRL offline/online training Episode-Reward convergence metrics"
     )
     
     parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
-    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence'], help="Isolate target execution pipelines.")
+    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence'], 
+                        help="Isolate target execution pipelines (see type details below).")
     parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
     parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
@@ -27,7 +36,7 @@ def main():
     args = parser.parse_args()
 
     # Deferred initialization pass to prevent heavy library load overhead on help flags
-    from engine import LogStyle, AmplificationPlotter, QoSPlotter, ConvergencePlotter
+    from engine import AmplificationPlotter, QoSPlotter, ConvergencePlotter
 
     # Enforce absolute path casting on final target boundary
     base_dir = os.path.abspath(args.output_dir)
