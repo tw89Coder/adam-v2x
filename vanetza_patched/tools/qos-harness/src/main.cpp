@@ -136,6 +136,41 @@ void printHelp(const char* progName) {
 }
 
 int main(int argc, char* argv[]) {
+    // STANDALONE DIAGNOSTIC ONNX TESTING MODE
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--test-onnx" && i + 1 < argc) {
+            std::string test_model_path = argv[++i];
+            std::cout << "[TEST] Initiating standalone C++ ONNX equivalence check...\n";
+            qos_harness::RLBridge bridge(REPO_ROOT_STR);
+            bridge.initialize_onnx(true, test_model_path);
+            bridge.set_safety_guards(false); // Disable safety guards during check to get raw model outputs
+            
+            // Feed 4 frames in sequence to populate the history buffer (K=4)
+            // Frame 1: 1.0, 2.0, 3.0
+            qos_harness::WindowTelemetry t1 = {2.0 * 65025.0, 1.0, 3.0};
+            qos_harness::FilterPolicy p1;
+            bridge.run_onnx_test(t1, p1);
+
+            // Frame 2: 1.1, 2.1, 3.1
+            qos_harness::WindowTelemetry t2 = {2.1 * 65025.0, 1.1, 3.1};
+            bridge.run_onnx_test(t2, p1);
+
+            // Frame 3: 1.2, 2.2, 3.2
+            qos_harness::WindowTelemetry t3 = {2.2 * 65025.0, 1.2, 3.2};
+            bridge.run_onnx_test(t3, p1);
+
+            // Frame 4: 1.3, 2.3, 3.3 (this triggers final stacked state input)
+            qos_harness::WindowTelemetry t4 = {2.3 * 65025.0, 1.3, 3.3};
+            bridge.run_onnx_test(t4, p1);
+
+            std::cout << "[TEST] C++ Output recovery_rate: " << p1.recovery_rate << "\n";
+            std::cout << "[TEST] C++ Output penalty_multiplier: " << p1.penalty_multiplier << "\n";
+            std::cout << "[TEST] C++ Output sq_threshold: " << p1.sq_threshold << "\n";
+            std::cout << "[TEST] C++ Output base_sampling_rate: " << p1.base_sampling_rate << "\n";
+            return 0;
+        }
+    }
+
     // Default simulation and mitigation parameters
     int total_packets = 1000000;
     double pollution_rate = 5.0;

@@ -40,6 +40,7 @@ print_usage() {
     echo -e "  ${C_WARN}--deploy${C_RESET}             Start production inference serve daemon"
     echo -e "  ${C_WARN}--verify-brain${C_RESET}       Audit brain checkpoints on baseline scenarios"
     echo -e "  ${C_WARN}--export-onnx${C_RESET}        Export trained PyTorch model weights to ONNX format"
+    echo -e "  ${C_WARN}--verify-onnx${C_RESET}        Run numeric alignment check between PyTorch, ONNX, and C++"
     echo -e "  ${C_WARN}--plot${C_RESET}               Execute verification and plotting engine scripts"
     echo -e "  ${C_WARN}--test${C_RESET}               Run python strategy consistency unit tests via pytest"
     echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
@@ -100,6 +101,9 @@ if [ "$1" = "python" ]; then
             ;;
         --export-onnx)
             SCRIPT="scripts/export_onnx.py"
+            ;;
+        --verify-onnx)
+            SCRIPT="../verify_equivalence.py"
             ;;
         --plot)
             # Plot engine is in the tools folder

@@ -112,6 +112,13 @@ public:
     void set_safety_guards(bool enabled);
 
     /**
+     * @brief Diagnostic hook for testing ONNX outputs with mock inputs.
+     */
+    void run_onnx_test(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+        run_onnx_inference(telemetry, out_policy);
+    }
+
+    /**
      * @brief Logs per-packet metrics to the training trace file.
      * @param pkt_size Length of the raw packet.
      * @param max_sum_sq The maximum F2 similarity count.
