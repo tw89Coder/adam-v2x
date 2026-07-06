@@ -62,9 +62,9 @@ graph TD
     ASN1 -->|Process Normal Frame| Success([Frame Decoded & Processed])
 ```
 
-### 1.2 Low-Overhead IPC Protocol
+### 1.2 Low-Overhead IPC Interface
 
-To eliminate latency and overhead during co-simulation, we implemented a Zero-Allocation Binary Struct Wire Protocol. The C++ kernel packs metrics into a 40-byte fixed-size struct, preventing text serialization and memory allocation bottlenecks:
+To eliminate latency and overhead during co-simulation, we implemented a Zero-Allocation Binary Struct Wire Format. The C++ kernel packs metrics into a 40-byte fixed-size struct, preventing text serialization and memory allocation bottlenecks:
 
 ```mermaid
 sequenceDiagram
