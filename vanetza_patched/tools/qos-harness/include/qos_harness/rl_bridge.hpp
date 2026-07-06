@@ -137,6 +137,10 @@ private:
     bool onnx_enabled_;
     std::string onnx_model_path_;
     bool safety_guards_enabled_ = true;
+    
+    // Instance-level variables for frame stacking to prevent cross-node data leakage
+    bool history_initialized_ = false;
+    std::vector<float> input_history_buffer_;
 
     /**
      * @brief Executes in-process ONNX model inference.

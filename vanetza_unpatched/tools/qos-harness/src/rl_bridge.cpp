@@ -354,29 +354,30 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         const size_t FEATURE_DIM = 3;
         static size_t K = model_input_dim / FEATURE_DIM;
         
-        // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION STATIC BUFFER ---
-        static std::vector<float> input_history_buffer(model_input_dim, 0.0f);
-        static bool history_initialized = false;
+        // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION INSTANCE BUFFER ---
+        if (input_history_buffer_.empty()) {
+            input_history_buffer_.resize(model_input_dim, 0.0f);
+        }
 
         // 2. Manage Frame History Buffer (Zero-Allocation ring shifting)
-        if (!history_initialized) {
+        if (!history_initialized_) {
             // Fill history buffer by repeating the first frame K times
             for (size_t i = 0; i < K; ++i) {
                 std::copy(current_features.begin(), current_features.end(), 
-                          input_history_buffer.begin() + i * FEATURE_DIM);
+                          input_history_buffer_.begin() + i * FEATURE_DIM);
             }
-            history_initialized = true;
+            history_initialized_ = true;
         } else {
             if (K > 1) {
                 // Shift older frames to the left by FEATURE_DIM
-                std::copy(input_history_buffer.begin() + FEATURE_DIM, 
-                          input_history_buffer.end(), 
-                          input_history_buffer.begin());
+                std::copy(input_history_buffer_.begin() + FEATURE_DIM, 
+                          input_history_buffer_.end(), 
+                          input_history_buffer_.begin());
                 // Place new frame at the end of the history
                 std::copy(current_features.begin(), current_features.end(), 
-                          input_history_buffer.end() - FEATURE_DIM);
+                          input_history_buffer_.end() - FEATURE_DIM);
             } else {
-                input_history_buffer = current_features;
+                input_history_buffer_ = current_features;
             }
         }
 
@@ -384,7 +385,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         std::vector<int64_t> input_shape = {1, static_cast<int64_t>(model_input_dim)};
         auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, input_history_buffer.data(), input_history_buffer.size(),
+            memory_info, input_history_buffer_.data(), input_history_buffer_.size(),
             input_shape.data(), input_shape.size()
         );
 
