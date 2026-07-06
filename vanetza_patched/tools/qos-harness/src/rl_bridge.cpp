@@ -65,6 +65,19 @@ RLBridge::~RLBridge() {
 void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_mode) {
     socket_enabled_ = enable_socket;
 
+    // Reset episodic states to prevent cross-run telemetry pollution
+    history_initialized_ = false;
+    input_history_buffer_.clear();
+    packet_buffer_.clear();
+
+    window_tp_count_ = 0;
+    window_tn_count_ = 0;
+    window_fp_count_ = 0;
+    window_fn_count_ = 0;
+    window_inspected_count_ = 0;
+    window_sq_sum_ = 0;
+    window_latency_ticks_ = 0;
+
     std::string dir_path;
     char file_path[512];
 
@@ -134,20 +147,7 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
         }
     }
     
-    //===================================================================================
-    //================== Chi-Aan: An array of each packet's features . ==================
-    //===================================================================================
-    PacketFeature feat{
-        static_cast<float>(pkt_size) / 1500.0f,
-        static_cast<float>(max_sum_sq) / 65025.0f,
-        is_anomalous ? 1.0f : 0.0f
-    };
 
-    packet_feature_arr.push_back(feat);
-
-    if (packet_feature_arr.size() > OBS_HISTORY_LEN) {
-        packet_feature_arr.pop_front();
-    }
 
     // Classify packet into confusion matrix categories for structural byte dumping
     if (is_malware) {
