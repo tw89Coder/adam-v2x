@@ -11,23 +11,6 @@
 namespace qos_harness {
 
 //==================================================================
-//======chian: Packet Feature Array ================================
-//==================================================================
-/**
- * @brief Representation of packet-level features sent to the RL/DQN agent as observations.
- * @note DEVELOPER GUIDE: If you want to experiment with different neural network input states
- *       (e.g., adding or removing features like budget, size, rate), modify this struct.
- *       Do NOT modify PacketTelemetry which is strictly for offline CSV logging.
- */
-struct PacketFeature {
-    float packet_size_norm;
-    float max_sum_sq_norm;
-    float is_anomalous;
-};
-
-static constexpr size_t OBS_HISTORY_LEN = 100;
-
-//==================================================================
 
 /**
  * @brief Structure holding defense policy parameters received from RL agent.
@@ -165,7 +148,6 @@ private:
     uint64_t window_sq_sum_ = 0;
     uint64_t window_latency_ticks_ = 0;
     
-    std::deque<PacketFeature> packet_feature_arr;
     std::ofstream csv_file_;
     std::vector<PacketTelemetry> packet_buffer_;
 
