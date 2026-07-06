@@ -8,11 +8,13 @@ from engine.logger import LogStyle
 from engine.base import BasePlotter
 from engine.amplification import AmplificationPlotter
 from engine.qos import QoSPlotter
+from engine.convergence import ConvergencePlotter
 
 # Explicitly define public API exports for this module package
 __all__ = [
     'LogStyle',
     'BasePlotter',
     'AmplificationPlotter',
-    'QoSPlotter'
+    'QoSPlotter',
+    'ConvergencePlotter'
 ]

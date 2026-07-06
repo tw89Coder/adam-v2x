@@ -19,7 +19,7 @@ def main():
     )
     
     parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
-    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget'], help="Isolate target execution pipelines.")
+    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence'], help="Isolate target execution pipelines.")
     parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
     parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
@@ -27,7 +27,7 @@ def main():
     args = parser.parse_args()
 
     # Deferred initialization pass to prevent heavy library load overhead on help flags
-    from engine import LogStyle, AmplificationPlotter, QoSPlotter
+    from engine import LogStyle, AmplificationPlotter, QoSPlotter, ConvergencePlotter
 
     # Enforce absolute path casting on final target boundary
     base_dir = os.path.abspath(args.output_dir)
@@ -43,6 +43,7 @@ def main():
 
     amp_engine = AmplificationPlotter(root_output_dir=base_dir)
     qos_engine = QoSPlotter(root_output_dir=base_dir)
+    conv_engine = ConvergencePlotter(root_output_dir=base_dir)
 
     try:
         if args.all:
@@ -56,6 +57,11 @@ def main():
             qos_engine.plot_pulse_timeline()
             qos_engine.plot_periodic_timeline()
             qos_engine.print_diagnostic_debug()
+            
+            # Auto-run convergence plot if training logs exist
+            csv_path = os.path.join(project_root, "checkpoints", "training_progress.csv")
+            conv_engine.execute(csv_path)
+            
             LogStyle.log_success("Comprehensive analytical evaluation cycle finished cleanly without failures.")
             return
 
@@ -79,6 +85,10 @@ def main():
             rates = [float(r) for r in args.rate.split()]
             for r in rates:
                 qos_engine.plot_budget_vs_attack(target_mode=args.mode, target_rate=r)
+                
+        elif args.type == 'convergence':
+            csv_path = os.path.join(project_root, "checkpoints", "training_progress.csv")
+            conv_engine.execute(csv_path)
 
     except KeyboardInterrupt:
         print(f"\n{LogStyle.WARN}[SIGINT DETECTED] Processing loop gracefully aborted by user event link.{LogStyle.RESET}\n")

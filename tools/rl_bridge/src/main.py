@@ -47,6 +47,15 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         "rewards": [], "values": [], "next_states": [], "dones": []
     }
     
+    # Initialize CSV logger for recording convergence metrics
+    import csv
+    import os
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    log_path = os.path.join(CHECKPOINT_DIR, "training_progress.csv")
+    log_file = open(log_path, mode="w", newline="", encoding="utf-8")
+    log_writer = csv.writer(log_file)
+    log_writer.writerow(["update", "reward", "loss", "mean_q"])
+    
     try:
         while True:
             # 1. Action inference and adaptation
@@ -83,6 +92,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Target Q: {C_BOLD}{metrics.get('mean_target_q', 0.0):+.5f}{C_RESET} | "
                         f"Replay: {int(metrics.get('replay_size', 0))}"
                     )
+                    log_writer.writerow([update_count, reward, metrics['q_loss'], metrics['mean_q']])
                 else:
                     print(
                         f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
@@ -90,6 +100,9 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Actor Loss: {C_BOLD}{metrics.get('actor_loss', 0.0):+.5f}{C_RESET} | "
                         f"Critic Loss: {C_BOLD}{metrics.get('critic_loss', 0.0):.4f}{C_RESET}"
                     )
+                    log_writer.writerow([update_count, reward, metrics.get('actor_loss', 0.0), metrics.get('critic_loss', 0.0)])
+                
+                log_file.flush()
                 
                 # Flush rolling buffers
                 for key in buffer:
@@ -116,6 +129,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             print(f"  └── {C_ERROR}[ERROR] Failed to save final weights: {save_err}{C_RESET}")
         print(f"{C_WARN}[*] Releasing TCP server and closing connections safely...{C_RESET}")
     finally:
+        log_file.close()
         env.close()
 
 def run_offline(env: V2XOfflineDatasetEnv, agent: V2XAgent, learner: PPOLearner, epochs: int):

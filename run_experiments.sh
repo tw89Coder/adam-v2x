@@ -259,6 +259,10 @@ while [[ $# -gt 0 ]]; do
         --sequence-file|--seq-file)
             if [[ -n "$2" && ! "$2" =~ ^- ]]; then
                 SEQUENCE_FILE="$2"
+                # If path has no slash, default to tools/trainingConfigs directory
+                if [[ "$SEQUENCE_FILE" != *"/"* ]]; then
+                    SEQUENCE_FILE="${ROOT_DIR}/tools/trainingConfigs/${SEQUENCE_FILE}"
+                fi
                 shift 2
             else
                 echo -e "${C_ERROR}[ERROR] --sequence-file demands a file path.${C_RESET}"
@@ -328,13 +332,16 @@ run_training_pair() {
         train_args+=("--disable-safety")
     fi
 
+    local status=0
     if [ "$DRY_RUN" = true ]; then
         echo -e "${C_WARN}[DRY-RUN] $exec_bin ${train_args[*]}${C_RESET}"
     else
         execute_cmd "$exec_bin" "${train_args[@]}"
+        status=$?
     fi
 
     echo "----------------------------------------------------------------------"
+    return $status
 }
 
 # Resolve lock status representation for console logs
@@ -388,6 +395,11 @@ execute_rl_training() {
             fi
 
             run_training_pair "$tgt" "$exec_bin" "$mode" "$rate"
+            local exit_code=$?
+            if [ $exit_code -eq 130 ] || [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
+                echo -e "${C_WARN}[NOTICE] Sequence training loop aborted by user (SIGINT/SIGTERM).${C_RESET}"
+                exit 130
+            fi
         done < "$SEQUENCE_FILE"
 
         return
@@ -405,6 +417,11 @@ execute_rl_training() {
 
         for i in "${!TARGET_MODES[@]}"; do
             run_training_pair "$tgt" "$exec_bin" "${TARGET_MODES[$i]}" "${POLLUTION_RATES[$i]}"
+            local exit_code=$?
+            if [ $exit_code -eq 130 ] || [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
+                echo -e "${C_WARN}[NOTICE] Paired training loop aborted by user (SIGINT/SIGTERM).${C_RESET}"
+                exit 130
+            fi
         done
 
         return
@@ -416,6 +433,11 @@ execute_rl_training() {
     for mode in "${TARGET_MODES[@]}"; do
         for rate in "${POLLUTION_RATES[@]}"; do
             run_training_pair "$tgt" "$exec_bin" "$mode" "$rate"
+            local exit_code=$?
+            if [ $exit_code -eq 130 ] || [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
+                echo -e "${C_WARN}[NOTICE] Matrix sweep training loop aborted by user (SIGINT/SIGTERM).${C_RESET}"
+                exit 130
+            fi
         done
     done
 }
