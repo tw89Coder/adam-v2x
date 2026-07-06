@@ -18,6 +18,8 @@ class ConvergencePlotter(BasePlotter):
         Loads the training progress CSV file, performs rolling average smoothing
         for visual clarity, and saves the convergence analysis curves.
         """
+        import matplotlib.ticker as ticker
+
         if not os.path.exists(csv_path):
             LogStyle.log_warn(f"Training progress logs not found at: {csv_path}. Skipping DRL convergence plot.")
             return
@@ -36,31 +38,51 @@ class ConvergencePlotter(BasePlotter):
         smoothed_reward = reward.rolling(window=window, min_periods=1).mean()
         std_reward = reward.rolling(window=window, min_periods=1).std().fillna(0)
 
-        fig, ax1 = plt.subplots(figsize=(7, 4.5))
+        # Standard academic paper aspect ratio (8 x 4.5 inches)
+        fig, ax1 = plt.subplots(figsize=(8, 4.5))
 
         color_reward = "#1f77b4"
-        ax1.set_xlabel("Training Updates (Batches)", fontweight="bold")
-        ax1.set_ylabel("Mean Reward", color=color_reward, fontweight="bold")
+        ax1.set_xlabel("Training Updates (Batches)", fontweight="normal")
+        ax1.set_ylabel("Mean Reward", color=color_reward, fontweight="normal")
 
         # Plot raw reward underlay and smoothed mean overlay
-        ax1.plot(x, reward, color=color_reward, alpha=0.2, linestyle="-", linewidth=1.0, label="Raw Reward")
-        ax1.plot(x, smoothed_reward, color=color_reward, linewidth=2.0, label=f"Smoothed Reward (window={window})")
+        line_raw, = ax1.plot(x, reward, color=color_reward, alpha=0.15, linestyle="-", linewidth=0.75, label="Raw Reward")
+        line_smooth, = ax1.plot(x, smoothed_reward, color=color_reward, linewidth=1.5, label=f"Smoothed Reward (window={window})")
         ax1.fill_between(x, smoothed_reward - 0.5 * std_reward, smoothed_reward + 0.5 * std_reward, 
-                         color=color_reward, alpha=0.1)
+                         color=color_reward, alpha=0.08)
         ax1.tick_params(axis='y', labelcolor=color_reward)
-        ax1.legend(loc="upper left")
+
+        # Configure clean grid on primary axis and disable twin axis grid to prevent overlaps
+        ax1.grid(True, linestyle=":", alpha=0.3, color="gray")
 
         # Secondary Y axis for loss metrics
         ax2 = ax1.twinx()
         color_loss = "#d62728"
-        ax2.set_ylabel("Training Loss", color=color_loss, fontweight="bold")
+        ax2.set_ylabel("Training Loss", color=color_loss, fontweight="normal")
 
         smoothed_loss = loss.rolling(window=window, min_periods=1).mean()
-        ax2.plot(x, smoothed_loss, color=color_loss, linewidth=1.5, linestyle="--", alpha=0.8, label="Training Loss")
+        line_loss, = ax2.plot(x, smoothed_loss, color=color_loss, linewidth=1.2, linestyle="--", alpha=0.7, label="Training Loss")
         ax2.tick_params(axis='y', labelcolor=color_loss)
-        ax2.legend(loc="upper right")
+        ax2.grid(False)
 
-        plt.title("Deep Reinforcement Learning (DRL) Convergence Analysis", pad=15)
+        # De-densified y-axis tick intervals for Loss (0.5 or 1.0 steps based on maximum value)
+        max_loss = loss.max()
+        if max_loss > 2.0:
+            ax2.yaxis.set_major_locator(ticker.MultipleLocator(1.0))
+        elif max_loss > 1.0:
+            ax2.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+        elif max_loss > 0.1:
+            ax2.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
+        else:
+            ax2.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5))
+
+        # Combine all legend handles and labels into a horizontal box placed below the chart
+        lines = [line_raw, line_smooth, line_loss]
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3, 
+                   frameon=True, edgecolor='black', facecolor='white', framealpha=0.9)
+
+        # Apply tight layout to ensure labels are not cropped and верхней space is saved (Title is handled by LaTeX caption)
         fig.tight_layout()
 
         self.export_figure(fig, category="rl_env", filename_prefix="convergence_curve")
