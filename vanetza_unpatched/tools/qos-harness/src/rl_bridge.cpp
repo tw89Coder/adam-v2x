@@ -31,6 +31,9 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <sstream>
+#include <fstream>
+#include <algorithm>
 
 #ifdef USE_ONNX
 #include <onnxruntime_cxx_api.h>
@@ -125,6 +128,75 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
 void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) {
     onnx_enabled_ = enable_onnx;
     onnx_model_path_ = model_path;
+
+    if (onnx_enabled_) {
+        // 1. Ensure the ONNX model file exists to prevent silent execution fallback
+        struct stat st;
+        if (stat(onnx_model_path_.c_str(), &st) != 0) {
+            std::cerr << "\n[FATAL] ONNX Model file not found at path: " << onnx_model_path_ << "\n";
+            std::cerr << "[FATAL] Please verify the path or export the model first.\n";
+            std::exit(1);
+        }
+
+        // 2. Dynamically parse agent.yaml to read algorithm and action_map
+        algorithm_ = "dqn"; // Default fallback
+        dqn_action_map_ = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f}; // Default fallback
+
+        std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
+        std::ifstream config_file(config_path);
+        if (config_file.is_open()) {
+            std::string line;
+            while (std::getline(config_file, line)) {
+                // Strip comments first
+                size_t comment_pos = line.find('#');
+                if (comment_pos != std::string::npos) {
+                    line = line.substr(0, comment_pos);
+                }
+
+                // Find algorithm: "..."
+                size_t algo_pos = line.find("algorithm:");
+                if (algo_pos != std::string::npos) {
+                    std::string val = line.substr(algo_pos + 10);
+                    val.erase(0, val.find_first_not_of(" \t\"'"));
+                    val.erase(val.find_last_not_of(" \t\"'") + 1);
+                    for (auto& c : val) c = std::tolower(c);
+                    algorithm_ = val;
+                }
+
+                // Find action_map: [...]
+                size_t map_pos = line.find("action_map:");
+                if (map_pos != std::string::npos) {
+                    size_t start_bracket = line.find('[', map_pos);
+                    size_t end_bracket = line.find(']', map_pos);
+                    if (start_bracket != std::string::npos && end_bracket != std::string::npos) {
+                        std::string array_str = line.substr(start_bracket + 1, end_bracket - start_bracket - 1);
+                        std::vector<float> parsed_map;
+                        std::stringstream ss(array_str);
+                        std::string token;
+                        try {
+                            while (std::getline(ss, token, ',')) {
+                                token.erase(0, token.find_first_not_of(" \t"));
+                                token.erase(token.find_last_not_of(" \t") + 1);
+                                if (!token.empty()) {
+                                    parsed_map.push_back(std::stof(token));
+                                }
+                            }
+                            if (!parsed_map.empty()) {
+                                dqn_action_map_ = parsed_map;
+                            }
+                        } catch (...) {
+                            // Keep default fallback on parse error
+                        }
+                    }
+                }
+            }
+            config_file.close();
+        }
+        std::cout << "\n[INIT] C++ ONNX Bridge initialized dynamically:\n"
+                  << "  └── Algorithm detected: " << algorithm_ << "\n"
+                  << "  └── Action space map size: " << dqn_action_map_.size() << "\n"
+                  << "  └── Model path verified: " << onnx_model_path_ << "\n\n";
+    }
 }
 
 void RLBridge::set_safety_guards(bool enabled) {
@@ -437,74 +509,79 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // Retrieve raw floating point outputs from the output tensor.
         float* float_output = output_tensors.front().GetTensorMutableData<float>();
 
-        // 3. Dynamic Action Space Mapping (Adapts to model complexity)
-        if (action_dim == 5) {
-            // ==========================================
-            // [DQN Model Mapping] Discrete Action Space
-            // ==========================================
-            // 1. Find Argmax (the index with the highest Q-value)
-            int best_action_idx = 0;
-            float max_q_value = float_output[0];
-            for (int i = 1; i < 5; ++i) {
-                if (float_output[i] > max_q_value) {
-                    max_q_value = float_output[i];
-                    best_action_idx = i;
+        // 3. Explicit Algorithm Mapping (DQN vs PPO)
+        if (algorithm_ == "dqn") {
+            if (action_dim == dqn_action_map_.size()) {
+                // ==========================================
+                // [Raw DQN Model Mapping] Q-values output
+                // ==========================================
+                int best_action_idx = 0;
+                float max_q_value = float_output[0];
+                for (size_t i = 1; i < dqn_action_map_.size(); ++i) {
+                    if (float_output[i] > max_q_value) {
+                        max_q_value = float_output[i];
+                        best_action_idx = i;
+                    }
                 }
+
+                float delta = dqn_action_map_[best_action_idx];
+                float new_rate = telemetry.instant_sampling_rate + delta;
+                if (new_rate < 0.05f) new_rate = 0.05f;
+                if (new_rate > 1.0f) new_rate = 1.0f;
+
+                out_policy.recovery_rate = 0.05;
+                out_policy.penalty_multiplier = 50.0;
+                out_policy.sq_threshold = 600;
+                out_policy.base_sampling_rate = new_rate;
             }
-
-            // 2. Map index to delta (matching Python's DqnActionTranslator)
-            float action_map[5] = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f};
-            float delta = action_map[best_action_idx];
-
-            // 3. Calculate new sampling rate based on current environment state
-            float new_rate = telemetry.instant_sampling_rate + delta;
-            
-            // 4. Clamp to boundaries [0.05, 1.0]
-            if (new_rate < 0.05f) new_rate = 0.05f;
-            if (new_rate > 1.0f) new_rate = 1.0f;
-
-            // 5. Output policy: Lock other parameters to default baseline, update only sampling rate
-            out_policy.recovery_rate = 0.05;
-            out_policy.penalty_multiplier = 50.0;
-            out_policy.sq_threshold = 600;
-            out_policy.base_sampling_rate = new_rate;
+            else if (action_dim == 4) {
+                // ==========================================
+                // [Wrapped DQN Model Mapping] DQNDeploymentWrapper
+                // ==========================================
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+                out_policy.base_sampling_rate = float_output[3];
+            }
+            else {
+                std::cerr << "[FATAL] ONNX DQN model returned unexpected action dimensions: " << action_dim 
+                          << " (Expected raw=" << dqn_action_map_.size() << " or wrapped=4)\n";
+                std::exit(1);
+            }
         }
-        else if (action_dim == 4) {
-            // ==========================================
-            // [PPO Model Mapping] Continuous Action Space
-            // ==========================================
-            // Note: If you deploy PPO in the future, you need to confirm whether un-normalization has been done when exporting ONNX. 
-            // If the Gym environment outputs [-1, 1], the mapping formula of (val + 1)/2 needs to be applied here.
-            out_policy.recovery_rate = float_output[0] * 0.5;
-            out_policy.penalty_multiplier = float_output[1] * 100.0;
-            out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-            out_policy.base_sampling_rate = float_output[3];
-        } 
-        else if (action_dim == 3) {
-            // 3D Model Output: [recovery_rate, penalty_multiplier, sq_threshold]
-            out_policy.recovery_rate = float_output[0] * 0.5;
-            out_policy.penalty_multiplier = float_output[1] * 100.0;
-            out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-            
-            // For 3D models, directly apply the current instant sampling rate
-            out_policy.base_sampling_rate = telemetry.instant_sampling_rate;
-        } 
-        else if (action_dim == 2) {
-            // 2D Model Output: [recovery_rate, penalty_multiplier]
-            out_policy.recovery_rate = float_output[0] * 0.5;
-            out_policy.penalty_multiplier = float_output[1] * 100.0;
-            
-            // Set static defaults for remaining unmanaged variables
-            out_policy.sq_threshold = 650;
-            out_policy.base_sampling_rate = 0.05;
+        else if (algorithm_ == "ppo") {
+            if (action_dim == 4) {
+                // ==========================================
+                // [PPO Model Mapping] Continuous Action Space
+                // ==========================================
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+                out_policy.base_sampling_rate = float_output[3];
+            } 
+            else if (action_dim == 3) {
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+                out_policy.base_sampling_rate = telemetry.instant_sampling_rate;
+            } 
+            else if (action_dim == 2) {
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = 650;
+                out_policy.base_sampling_rate = 0.05;
+            }
+            else {
+                std::cerr << "[FATAL] ONNX PPO model returned unexpected action dimensions: " << action_dim << "\n";
+                std::exit(1);
+            }
         }
         else {
-            std::cerr << "[WARNING] ONNX model returned unexpected action dimensions: " << action_dim << "\n";
-            return false;
+            std::cerr << "[FATAL] ONNX C++ Bridge: Unrecognized algorithm name: " << algorithm_ << "\n";
+            std::exit(1);
         }
 
         // 4. Heuristic Safety Clamping (Layer 2 Safeguard)
-        // Keeps actions bounded within empirically proven safety limits to guarantee FNR performance floors.
         if (safety_guards_enabled_) {
             if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
             if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
@@ -515,7 +592,9 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         return true;
     } 
     catch (const std::exception& e) {
-        std::cerr << "[ERROR] ONNX C++ Inference session failure: " << e.what() << "\n";
+        std::cerr << "\n[FATAL] ONNX C++ Inference session failure: " << e.what() << "\n";
+        std::cerr << "[FATAL] The ONNX model failed to load or execute. Exiting immediately to prevent silent heuristic fallback.\n";
+        std::exit(1);
         return false;
     }
 }

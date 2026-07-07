@@ -455,7 +455,7 @@ int main(int argc, char* argv[]) {
 
         // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
-            if (enable_trace || rl_train_mode) {
+            if (enable_trace || rl_train_mode || enable_onnx) {
                 // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet, is_malware,

@@ -78,8 +78,9 @@ public:
      * @param enable_socket If true, activates real-time blocking TCP synchronization.
      * @param pollution_rate Current packet injection anomaly density profile.
      * @param attack_mode Target traffic pattern model logic index.
+     * @param enable_trace If true, logs packet-level telemetry (Default: true).
      */
-    void initialize(bool enable_socket, double pollution_rate, int attack_mode);
+    void initialize(bool enable_socket, double pollution_rate, int attack_mode, bool enable_trace = true);
 
     /**
      * @brief Configures ONNX inference state.
@@ -149,7 +150,11 @@ private:
     uint64_t window_latency_ticks_ = 0;
     
     std::ofstream csv_file_;
+    std::ofstream window_csv_file_;
     std::vector<PacketTelemetry> packet_buffer_;
+    int window_idx_ = 0;
+    std::string algorithm_ = "dqn";
+    std::vector<float> dqn_action_map_;
 
     /**
      * @brief Flushes buffered telemetry data to the CSV file on disk.

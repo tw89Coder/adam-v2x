@@ -123,6 +123,8 @@ void ConsolePresenter::printSimulationProgress(int current, int total, int malwa
                 100.0 * current / total);
 
     // If the filter is enabled, monitoring metrics from RL and FSM are dynamically concatenated.
+    // A = Actual (the proportion of actual F2 Sketch execution)
+    // T = Target (the target sampling rate currently determined by the FSM)
     if (enable_filter && current > 0) {
         std::printf(" | %sInsp[A/T]:%s %6.2f%% / %6.2f%%", 
                     warn().c_str(), reset().c_str(), actual_rate, target_rate);

@@ -329,6 +329,11 @@ execute_cmd() {
     else
         "$@"
     fi
+    local status=$?
+    if [ $status -ne 0 ]; then
+        # If the command failed or was terminated by Ctrl+C (exit status 130)
+        exit $status
+    fi
 }
 
 # ===============Chi-AN: new function for training data flow control ==========================================

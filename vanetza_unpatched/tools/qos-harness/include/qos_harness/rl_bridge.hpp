@@ -153,6 +153,8 @@ private:
     std::ofstream window_csv_file_;
     std::vector<PacketTelemetry> packet_buffer_;
     int window_idx_ = 0;
+    std::string algorithm_ = "dqn";
+    std::vector<float> dqn_action_map_;
 
     /**
      * @brief Flushes buffered telemetry data to the CSV file on disk.
