@@ -33,6 +33,7 @@ def main():
     parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
     parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
+    parser.add_argument('--onnx', action='store_true', help="Use ONNX actual deployment results instead of heuristic FSM filtered results for QoS plots.")
 
     args = parser.parse_args()
 
@@ -45,14 +46,14 @@ def main():
     if not (args.all or args.type):
         LogStyle.log_warn("No specific execution pipeline flags declared. Defaulting to full processing synthesis (--all).")
         args.all = True
-
+ 
     # Validate target output root infrastructure before runtime initiation
     if not os.path.exists(base_dir):
         LogStyle.log_error(f"Configured output directory boundary does not exist: '{base_dir}'")
         sys.exit(1)
-
+ 
     amp_engine = AmplificationPlotter(root_output_dir=base_dir)
-    qos_engine = QoSPlotter(root_output_dir=base_dir)
+    qos_engine = QoSPlotter(root_output_dir=base_dir, use_onnx=args.onnx)
     conv_engine = ConvergencePlotter(root_output_dir=base_dir)
 
     try:
@@ -60,8 +61,8 @@ def main():
             amp_engine.execute()
             qos_engine.compute_all_combinations_stats()
             
-            for m in QoSPlotter.MODES:
-                for r in QoSPlotter.RATES:
+            for m in qos_engine.MODES:
+                for r in qos_engine.RATES:
                     qos_engine.plot_master_cdf(target_mode=m, target_rate=r)
             
             qos_engine.plot_pulse_timeline()
@@ -80,7 +81,10 @@ def main():
 
         elif args.type == 'qos':
             qos_engine.compute_all_combinations_stats()
-            rates = [float(r) for r in args.rate.split()]
+            if not any(arg in sys.argv for arg in ['-r', '--rate']):
+                rates = qos_engine.RATES
+            else:
+                rates = [float(r) for r in args.rate.split()]
             for r in rates:
                 qos_engine.plot_master_cdf(target_mode=args.mode, target_rate=r)
 

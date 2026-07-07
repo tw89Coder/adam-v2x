@@ -17,9 +17,42 @@ class QoSPlotter(BasePlotter):
     MODES = [0, 1, 2]
     RATES = [1.0, 5.0, 10.0]
 
-    def __init__(self, root_output_dir="outputs"):
+    def __init__(self, root_output_dir="outputs", use_onnx=False):
         super().__init__(root_output_dir)
         self.raw_dir = os.path.join(root_output_dir, "csv_raw")
+        self.use_onnx = use_onnx
+        self._discover_modes_and_rates()
+
+    def _discover_modes_and_rates(self):
+        import glob
+        import re
+        
+        discovered_rates = set()
+        discovered_modes = set()
+        
+        for env in ["unpatched", "patched"]:
+            pattern = os.path.join(self.raw_dir, env, "qos_attack_*_mode*.csv")
+            for filepath in glob.glob(pattern):
+                filename = os.path.basename(filepath)
+                match = re.match(r"qos_attack_([\d\.]+)_mode(\d+)(.*)\.csv", filename)
+                if match:
+                    try:
+                        rate = float(match.group(1))
+                        mode = int(match.group(2))
+                        discovered_rates.add(rate)
+                        discovered_modes.add(mode)
+                    except ValueError:
+                        continue
+                        
+        if discovered_rates:
+            self.RATES = sorted(list(discovered_rates))
+        else:
+            self.RATES = [1.0, 5.0, 10.0]
+            
+        if discovered_modes:
+            self.MODES = sorted(list(discovered_modes))
+        else:
+            self.MODES = [0, 1, 2]
 
     def _resolve_dataframe(self, environment, filename):
         target_path = os.path.join(self.raw_dir, environment, filename)
@@ -88,11 +121,12 @@ class QoSPlotter(BasePlotter):
 
         for mode in self.MODES:
             for rate in self.RATES:
+                suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
                 scenarios = [
                     ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',   False),
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Unpatched Filtered', True),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}{suffix}',      'Unpatched Filtered', True),
                     ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',     False),
-                    ('patched',   f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Patched Filtered',   True),
+                    ('patched',   f'qos_attack_{rate}_mode{mode}{suffix}',      'Patched Filtered',   True),
                 ]
                 for env, filename, label, is_filt in scenarios:
                     df = self._resolve_dataframe(env, filename)
@@ -121,14 +155,16 @@ class QoSPlotter(BasePlotter):
     def plot_master_cdf(self, target_mode, target_rate):
         LogStyle.log_stage(f"Synthesizing Jitter/CDF Master Plots: Mode {target_mode} @ {target_rate}%")
         
+        suffix = "_onnx" if self.use_onnx else "_filtered"
+
         df_b   = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
         df_un  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_unf = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_filtered.csv')
+        df_unf = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
         df_p   = self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_pf  = self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}_filtered.csv')
+        df_pf  = self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
-            ("Baseline",          df_b,   '#2ca02c', '-',  1),
+            ("Baseline",           df_b,   '#2ca02c', '-',  1),
             ("Unpatched Native",   df_un,  '#d62728', '-',  2),
             ("Unpatched Filtered", df_unf, '#ff7f0e', ':',  3),
             ("Patched Native",     df_p,   '#9467bd', '--', 4),
@@ -174,13 +210,15 @@ class QoSPlotter(BasePlotter):
         ax2.grid(True, which="both", linestyle=':', alpha=0.7)
         ax2.legend(loc='lower right', fontsize=10)
 
-        self.export_figure(fig, "qos/master", f"comparison_mode{target_mode}_{target_rate}pct")
+        out_suffix = "_onnx" if self.use_onnx else ""
+        self.export_figure(fig, "qos/master", f"comparison_mode{target_mode}_{target_rate}pct{out_suffix}")
         plt.close(fig)
 
     def plot_pulse_timeline(self):
         LogStyle.log_stage("Generating Pulse Attack Mitigation Timeline (Mode 1)...")
+        suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
         df_native = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1.csv')
-        df_filter = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1_filtered.csv')
+        df_filter = self._resolve_dataframe('unpatched', f'qos_attack_10.0_mode1{suffix}')
 
         if df_native is None or df_filter is None:
             LogStyle.log_warn("Aborting Pulse Timeline: Missing required mode1 target execution matrix dependencies.")
@@ -208,13 +246,15 @@ class QoSPlotter(BasePlotter):
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
 
-        self.export_figure(fig, "qos/timeline", "pulse_recovery_timeline")
+        out_suffix = "_onnx" if self.use_onnx else ""
+        self.export_figure(fig, "qos/timeline", f"pulse_recovery_timeline{out_suffix}")
         plt.close(fig)
 
     def plot_periodic_timeline(self):
         LogStyle.log_stage("Generating Periodic Flapping Resilience Timeline (Mode 2)...")
+        suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
         df_native = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode2.csv')
-        df_filter = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode2_filtered.csv')
+        df_filter = self._resolve_dataframe('unpatched', f'qos_attack_10.0_mode2{suffix}')
 
         if df_native is None or df_filter is None:
             LogStyle.log_warn("Aborting Periodic Timeline: Missing required mode2 target execution matrix dependencies.")
@@ -255,13 +295,15 @@ class QoSPlotter(BasePlotter):
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
 
-        self.export_figure(fig, "qos/timeline", "periodic_recovery_timeline")
+        out_suffix = "_onnx" if self.use_onnx else ""
+        self.export_figure(fig, "qos/timeline", f"periodic_recovery_timeline{out_suffix}")
         plt.close(fig)
 
     def print_diagnostic_debug(self):
         LogStyle.log_stage("Running Diagnostic State Validation Logs (Debug Module Pass)...")
+        suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
         df_native = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1.csv')
-        df_filter = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1_filtered.csv')
+        df_filter = self._resolve_dataframe('unpatched', f'qos_attack_10.0_mode1{suffix}')
 
         if df_native is None or df_filter is None:
             LogStyle.log_error("Diagnostic suite execution terminated: Missing reference profile frameworks.")
@@ -302,13 +344,18 @@ class QoSPlotter(BasePlotter):
         LogStyle.log_stage(f"Generating Budget vs Attack Intensity Curve: Mode {target_mode} @ {target_rate}%")
         
         # 1. Try to load the structured manual FSM trace first
-        trace_filename = f"fsm_trace_rate_{float(target_rate):.1f}_mode{target_mode}.csv"
+        suffix = "_onnx" if self.use_onnx else ""
+        trace_filename = f"fsm_trace_rate_{float(target_rate):.1f}_mode{target_mode}{suffix}.csv"
         target_path = os.path.join(self.root_output_dir, "traces", "unpatched", trace_filename)
         
         # 2. Fallback to training trace path if manual trace doesn't exist
         if not os.path.exists(target_path):
-            training_filename = f"training_trace_{float(target_rate):.1f}_mode{target_mode}.csv"
-            target_path = os.path.join(self.root_output_dir, "rl_env", training_filename)
+            training_filename = f"training_trace_{float(target_rate):.1f}_mode{target_mode}{suffix}.csv"
+            # Try nested unpatched directory first
+            target_path = os.path.join(self.root_output_dir, "rl_env", "unpatched", training_filename)
+            if not os.path.exists(target_path):
+                # Fallback to direct flat path
+                target_path = os.path.join(self.root_output_dir, "rl_env", training_filename)
         
         if not os.path.exists(target_path):
             LogStyle.log_error(f"Required trace file does not exist (checked both traces/ and rl_env/): '{target_path}'")

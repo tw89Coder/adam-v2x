@@ -4,6 +4,13 @@
 algorithm: "dqn"                        # Default algorithm selection ('dqn' or 'ppo')
 
 # ------------------------------------------------------------------------------
+# State Representation Settings
+# ------------------------------------------------------------------------------
+state_representation:
+  frame_stack: 4                        # k frames to stack. Set to 1 for stateless mode.
+
+
+# ------------------------------------------------------------------------------
 # 1. Infrastructure Settings: Network Host, Port, and Saved Model Paths
 # ------------------------------------------------------------------------------
 infrastructure:
@@ -137,5 +144,5 @@ dqn:
   reward_shaping:
     lambda_penalty: 10.0
     lambda_lr: 0.05
-    leakage_target: 0.1
+    leakage_target: 0.01
     overhead_scale: 2.0
