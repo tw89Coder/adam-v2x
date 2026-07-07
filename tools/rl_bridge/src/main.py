@@ -44,7 +44,8 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     # trajectory buffer for rolling online batches
     buffer = {
         "states": [], "actions": [], "log_probs": [],
-        "rewards": [], "values": [], "next_states": [], "dones": []
+        "rewards": [], "values": [], "next_states": [], "dones": [],
+        "leakage_rates": []
     }
     
     # Initialize CSV logger for recording convergence metrics
@@ -73,6 +74,12 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             buffer["values"].append(state_value)
             buffer["next_states"].append(next_state)
             buffer["dones"].append(torch.tensor([float(done)], dtype=torch.float32))
+            # Store leakage rate for Lagrangian penalty update
+            if "metrics" in info:
+                buffer["leakage_rates"].append(
+                    info["metrics"].get("leakage_rate", 0.0)
+                )
+
             
             state = next_state
             
@@ -83,6 +90,15 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 # Run optimization step on learner
                 metrics = learner.update(buffer)
                 
+                # Update Lagrangian multiplier for constrained DQN reward
+                if hasattr(env.reward_strategy, "update_lambda") and len(buffer["leakage_rates"]) > 0:
+                    avg_leakage_rate = sum(buffer["leakage_rates"]) / len(buffer["leakage_rates"])
+                    current_lambda = env.reward_strategy.update_lambda(avg_leakage_rate)
+
+                    metrics["avg_leakage_rate"] = avg_leakage_rate
+                    metrics["lambda_penalty"] = current_lambda
+                
+                
                 if "q_loss" in metrics:
                     print(
                         f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
@@ -90,6 +106,8 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Q Loss: {C_BOLD}{metrics['q_loss']:+.5f}{C_RESET} | "
                         f"Mean Q: {C_BOLD}{metrics['mean_q']:+.5f}{C_RESET} | "
                         f"Target Q: {C_BOLD}{metrics.get('mean_target_q', 0.0):+.5f}{C_RESET} | "
+                        f"Leakage: {C_BOLD}{metrics.get('avg_leakage_rate', 0.0):.4f}{C_RESET} | "
+                        f"Lambda: {C_BOLD}{metrics.get('lambda_penalty', 0.0):.3f}{C_RESET} | "
                         f"Replay: {int(metrics.get('replay_size', 0))}"
                     )
                     log_writer.writerow([update_count, reward, metrics['q_loss'], metrics['mean_q']])
@@ -162,6 +180,8 @@ def run_offline(env: V2XOfflineDatasetEnv, agent: V2XAgent, learner: PPOLearner,
             buffer["values"].append(state_value)
             buffer["next_states"].append(next_state)
             buffer["dones"].append(torch.tensor([float(done)], dtype=torch.float32))
+        
+
             
             state = next_state
             epoch_reward += reward

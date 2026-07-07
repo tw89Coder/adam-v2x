@@ -72,7 +72,9 @@ _defaults = {
         "tau": 0.005,
         "hidden_dim": 64,
         "reward_shaping": {
-            "penalty_scale": 10.0,
+            "lambda_penalty": 10.0,
+            "lambda_lr": 0.05,
+            "leakage_target": 0.01,
             "overhead_scale": 2.0
         }
     }

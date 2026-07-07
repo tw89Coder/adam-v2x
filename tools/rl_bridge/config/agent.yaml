@@ -4,13 +4,6 @@
 algorithm: "dqn"                        # Default algorithm selection ('dqn' or 'ppo')
 
 # ------------------------------------------------------------------------------
-# State Representation Settings
-# ------------------------------------------------------------------------------
-state_representation:
-  frame_stack: 4                        # k frames to stack. Set to 1 for stateless mode.
-
-
-# ------------------------------------------------------------------------------
 # 1. Infrastructure Settings: Network Host, Port, and Saved Model Paths
 # ------------------------------------------------------------------------------
 infrastructure:
@@ -142,5 +135,7 @@ dqn:
   
   # DQN Specific Reward shaping weights
   reward_shaping:
-    penalty_scale: 10.0                 # Reward penalty weight for leaking malware packets
-    overhead_scale: 2.0                 # Reward penalty weight for computational overhead (inspection rate)
+    lambda_penalty: 10.0
+    lambda_lr: 0.05
+    leakage_target: 0.1
+    overhead_scale: 2.0

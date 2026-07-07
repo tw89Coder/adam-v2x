@@ -46,26 +46,89 @@ class PpoSurrogateReward(RewardStrategy):
             )
         return float(reward)
 
-
 class DqnSamplingReward(RewardStrategy):
     """
-    DQN specific reward strategy.
-    Measures the absolute trade-off between security (true anomaly rate vs. detected anomalies) 
-    and performance (computational overhead of packet inspections).
+    DQN reward with Lagrangian-style adaptive constraint penalty.
+    Objective: minimize inspection overhead.
+    Constraint: keep leakage_rate below leakage_target.
     """
-    def __init__(self, penalty_scale: float = None, overhead_scale: float = None):
+    def __init__(
+        self,
+        lambda_penalty: float = None,
+        lambda_lr: float = None,
+        leakage_target: float = None,
+        overhead_scale: float = None,
+    ):
         from src.config import RAW_CFG
         dqn_r = RAW_CFG.get("dqn", {}).get("reward_shaping", {})
-        self.penalty_scale = penalty_scale if penalty_scale is not None else dqn_r.get("penalty_scale", 10.0)
-        self.overhead_scale = overhead_scale if overhead_scale is not None else dqn_r.get("overhead_scale", 2.0)
+
+        self.lambda_penalty = (
+            lambda_penalty
+            if lambda_penalty is not None
+            else dqn_r.get("lambda_penalty", 10.0)
+        )
+        self.lambda_lr = (
+            lambda_lr
+            if lambda_lr is not None
+            else dqn_r.get("lambda_lr", 0.05)
+        )
+        self.leakage_target = (
+            leakage_target
+            if leakage_target is not None
+            else dqn_r.get("leakage_target", 0.01)
+        )
+        self.overhead_scale = (
+            overhead_scale
+            if overhead_scale is not None
+            else dqn_r.get("overhead_scale", 2.0)
+        )
 
     def compute(self, metrics: dict, action_policy: list) -> float:
-        # Penalty for leaking malware packets (leakage rate is FN / (FN + TP))
         leakage_rate = metrics["leakage_rate"]
-        
-        # Overhead cost of inspecting packets (instant sampling rate)
         inspect_rate = metrics["instant_sampling_rate"]
-        
-        # Compute multi-objective reward
-        reward = - (leakage_rate * self.penalty_scale + inspect_rate * self.overhead_scale)
+
+        violation = max(0.0, leakage_rate - self.leakage_target)
+
+        reward = (
+            -self.overhead_scale * inspect_rate
+            -self.lambda_penalty * violation
+        )
+
         return float(reward)
+
+    def update_lambda(self, avg_leakage_rate: float):
+        self.lambda_penalty = max(
+            0.0,
+            self.lambda_penalty
+            + self.lambda_lr * (avg_leakage_rate - self.leakage_target)
+        )
+        return self.lambda_penalty
+    
+    
+# class DqnSamplingReward(RewardStrategy):
+#     """
+#     DQN specific reward strategy.
+#     Measures the absolute trade-off between security (true anomaly rate vs. detected anomalies) 
+#     and performance (computational overhead of packet inspections).
+#     """
+#     def __init__(self, penalty_scale: float = None, overhead_scale: float = None):
+#         from src.config import RAW_CFG
+#         dqn_r = RAW_CFG.get("dqn", {}).get("reward_shaping", {})
+#         self.penalty_scale = penalty_scale if penalty_scale is not None else dqn_r.get("penalty_scale", 10.0)
+#         self.overhead_scale = overhead_scale if overhead_scale is not None else dqn_r.get("overhead_scale", 2.0)
+
+#     def compute(self, metrics: dict, action_policy: list) -> float:
+#         # Penalty for leaking malware packets (leakage rate is FN / (FN + TP))
+#         leakage_rate = metrics["leakage_rate"]
+        
+#         # Overhead cost of inspecting packets (instant sampling rate)
+#         inspect_rate = metrics["instant_sampling_rate"]
+        
+#         # Compute multi-objective reward
+
+#         #REWARD SHAPING STRATEGY:
+#         #reward = - (leakage_rate * self.penalty_scale + inspect_rate * self.overhead_scale)
+
+
+#         reward = -inspect_rate - lambda_penalty * max(0.0, leakage_rate - 0.01)
+#         return float(reward)
