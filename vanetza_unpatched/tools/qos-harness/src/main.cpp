@@ -359,8 +359,11 @@ int main(int argc, char* argv[]) {
     int mode1_start = total_packets * 0.3;
     int mode1_end = total_packets * 0.5;
     int mode2_period = total_packets / 10;
-    int print_interval = total_packets / 20;
+    int print_interval = total_packets / 100;
     int malware_so_far = 0;
+
+    // Used to track the total number of packets sampled by FSM
+    int total_inspected = 0;
 
     // Convert pollution rate percentage into basis points (0.01% resolution)
     // Ensures sub-1.0% pollution rates (e.g. 0.1%, 0.5%) map to accurate integer ranges
@@ -369,7 +372,15 @@ int main(int argc, char* argv[]) {
     // Main packet generation and processing iteration loop
     for (int i = 0; i < total_packets; ++i) {
         if (i % print_interval == 0 || i == total_packets - 1) {
-            qos_harness::ConsolePresenter::printSimulationProgress(i, total_packets, malware_so_far);
+            // Calculate current actual and target sampling rates
+            double actual_avg_rate = (i > 0) ? (static_cast<double>(total_inspected) / i) * 100.0 : 0.0;
+            double current_target_rate = enable_filter ? filter_fsm.get_sampling_rate() * 100.0 : 0.0;
+            
+            // Call the console presenter
+            qos_harness::ConsolePresenter::printSimulationProgress(
+                i, total_packets, malware_so_far, 
+                enable_filter, actual_avg_rate, current_target_rate
+            );
         }
 
         // Determine if current packet slot contains an attack variant based on the active mode schedule
@@ -412,6 +423,11 @@ int main(int argc, char* argv[]) {
         // Execute parsing and record processing latency
         auto start = std::chrono::high_resolution_clock::now();
         bool drop_packet = enable_filter ? filter_fsm.process_packet(buf) : false;
+
+        // If the filter is enabled and the packet is indeed sampled, increment the count.
+        if (enable_filter && filter_fsm.was_inspected()) {
+            total_inspected++;
+        }
 
         // Classification metric routing
         if (drop_packet) {

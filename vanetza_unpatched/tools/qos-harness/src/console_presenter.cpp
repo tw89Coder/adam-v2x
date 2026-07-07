@@ -114,13 +114,23 @@ void ConsolePresenter::printDatasetProgress(int gen, int target, int rj, long lo
 /**
  * @brief Prints progress details of active simulation sequences.
  */
-void ConsolePresenter::printSimulationProgress(int current, int total, int malware) {
+void ConsolePresenter::printSimulationProgress(int current, int total, int malware, 
+                                               bool enable_filter, double actual_rate, double target_rate) {
     // Appended ANSI clear sequence to vaporize any unexpected trailing shell prompt ghosts
-    std::printf("\r  %s[*] Monitoring Execution Loop:%s  %d/%d  |  %sMalware Count: %-6d%s  |  %.1f%%\033[K",
-                info().c_str(), reset().c_str(), current, total, crit().c_str(), malware, reset().c_str(),
+    std::printf("\r  %s[*] Loop:%s %7d/%7d | %sMal: %-5d%s | %5.1f%%",
+                info().c_str(), reset().c_str(), current, total, 
+                crit().c_str(), malware, reset().c_str(), 
                 100.0 * current / total);
 
-    // FIXED: Inject explicit line feed on termination frame to release carriage return scrollback lock
+    // If the filter is enabled, monitoring metrics from RL and FSM are dynamically concatenated.
+    if (enable_filter && current > 0) {
+        std::printf(" | %sInsp[A/T]:%s %6.2f%% / %6.2f%%", 
+                    warn().c_str(), reset().c_str(), actual_rate, target_rate);
+    }
+
+    std::printf("\033[K");
+
+    // Inject explicit line feed on termination frame to release carriage return scrollback lock
     if (current >= total - 1) {
         std::printf("\n");
     }

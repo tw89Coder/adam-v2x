@@ -36,7 +36,10 @@ public:
     static void printProbeProgress(size_t size, int idx, int count, const std::string& name, int ok, int rj,
                                    long long med);
     static void printDatasetProgress(int gen, int target, int rj, long long lat);
-    static void printSimulationProgress(int current, int total, int malware);
+    static void printSimulationProgress(int current, int total, int malware, 
+                                        bool enable_filter = false, 
+                                        double actual_rate = 0.0, 
+                                        double target_rate = 0.0);
 
     // Hardware-level terminal carriage eraser
     static void clearLine();
