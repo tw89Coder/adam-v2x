@@ -358,3 +358,175 @@ class QoSPlotter(BasePlotter):
         self.export_figure(fig, "qos/budget", f"budget_vs_attack_mode{target_mode}_{target_rate}pct")
         plt.close(fig)
         LogStyle.log_success(f"Budget curve generated successfully.")
+
+    def _resolve_window_dataframe(self, environment, filename):
+        target_path = os.path.join(self.root_output_dir, "rl_env", environment, filename)
+        if not os.path.exists(target_path):
+            return None
+        return self._load_csv_file(target_path)
+
+    def plot_window_metrics(self, target_mode, target_rate, suffix='onnx'):
+        """
+        Plots a high-quality visualization of window-level telemetry metrics:
+        actual/target inspection rate, attack intensity, and leakage rate (FNR).
+        """
+        filename = f"window_trace_{target_rate}_mode{target_mode}_{suffix}.csv"
+        
+        # Load data for the configured environments
+        df_patched = self._resolve_window_dataframe("patched", filename)
+        df_unpatched = self._resolve_window_dataframe("unpatched", filename)
+        
+        # Fallback to direct root if environment folders are not separated
+        if df_patched is None and df_unpatched is None:
+            # Check if it was placed directly in outputs/rl_env (e.g. legacy or flat layout)
+            target_path = os.path.join(self.root_output_dir, "rl_env", filename)
+            if os.path.exists(target_path):
+                df_unpatched = self._load_csv_file(target_path)
+
+        if df_patched is None and df_unpatched is None:
+            LogStyle.log_warn(f"Aborting Window Timeline: Missing window telemetry CSV file: '{filename}' in outputs/rl_env/")
+            return
+
+        for env, df in [('patched', df_patched), ('unpatched', df_unpatched)]:
+            if df is None or df.empty:
+                continue
+
+            fig, ax1 = plt.subplots(figsize=(10, 5))
+            
+            x_vals = df['window_index']
+            
+            # 1. Plot Attack Intensity (percentage of malware packets) as a shaded region
+            ax1.fill_between(x_vals, df['attack_intensity'] * 100.0, color='#e31a1c', alpha=0.12, 
+                             label='Attack Intensity (Malware %)')
+            ax1.plot(x_vals, df['attack_intensity'] * 100.0, color='#e31a1c', linestyle='--', linewidth=1.5, alpha=0.6)
+            
+            # 2. Plot Target Sampling Rate determined by the RL policy / FSM
+            ax1.plot(x_vals, df['target_sampling_rate'] * 100.0, color='#1f78b4', linewidth=2.0, 
+                     label='DRL Target Sampling Rate')
+            
+            # 3. Plot Actual Inspection Rate (real F2 sketch sampling)
+            ax1.plot(x_vals, df['actual_inspection_rate'] * 100.0, color='#33a02c', linewidth=1.5, 
+                     linestyle=':', label='Actual Inspection Rate')
+            
+            ax1.set_xlabel('Window Index (Every 1000 Packets)')
+            ax1.set_ylabel('Inspection / Attack Rate (%)')
+            ax1.set_ylim(-5, 105)
+            ax1.grid(True, linestyle=':', alpha=0.6)
+            
+            # 4. Create twin axis for Leakage Rate (FNR)
+            ax2 = ax1.twinx()
+            ax2.plot(x_vals, df['fnr'] * 100.0, color='#ff7f00', linewidth=1.8, 
+                     label='False Negative Rate (Leakage FNR)', alpha=0.85)
+            ax2.set_ylabel('Leakage Rate (FNR %)', color='#ff7f00')
+            ax2.tick_params(axis='y', labelcolor='#ff7f00')
+            ax2.set_ylim(-5, 105)
+            ax2.grid(False)
+            
+            # Combine legends horizontally at the bottom center to allow horizontal layout
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            all_lines = lines1 + lines2
+            all_labels = labels1 + labels2
+            
+            ax1.legend(all_lines, all_labels, loc='upper center', bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=True)
+            
+            plt.tight_layout()
+            
+            plot_filename = f"window_metrics_mode{target_mode}_rate{target_rate}_{env}_{suffix}"
+            self.export_figure(fig, "qos/window", plot_filename)
+            plt.close(fig)
+            
+            LogStyle.log_success(f"Generated Dynamic Window Metrics plot for [{env}] -> {plot_filename}.{{png,pdf,svg}}")
+
+    def plot_all_existing_window_metrics(self):
+        """
+        Scans outputs/rl_env/ patched and unpatched subdirectories,
+        and automatically plots window metrics for every telemetry file found.
+        """
+        import glob
+        import re
+        
+        search_pattern = os.path.join(self.root_output_dir, "rl_env", "*", "window_trace_*_mode*_*.csv")
+        files = glob.glob(search_pattern)
+        
+        if not files:
+            LogStyle.log_info("No isolated deployment window telemetry traces found in outputs/rl_env/*/")
+            return
+            
+        LogStyle.log_stage(f"Auto-scanning: Found {len(files)} window telemetry traces. Generating plots...")
+        
+        # Keep track of plotted sets to avoid redundant work
+        plotted_sets = set()
+        
+        for file_path in files:
+            filename = os.path.basename(file_path)
+            match = re.match(r"window_trace_([\d\.]+)_mode(\d+)_([a-zA-Z0-9_]+)\.csv", filename)
+            if match:
+                rate = float(match.group(1))
+                mode = int(match.group(2))
+                suffix = match.group(3)
+                
+                # Deduplicate combination keys (since we plot patched & unpatched together inside plot_window_metrics)
+                key = (mode, rate, suffix)
+                if key not in plotted_sets:
+                    self.plot_window_metrics(target_mode=mode, target_rate=rate, suffix=suffix)
+                    plotted_sets.add(key)
+
+    def plot_online_training_telemetry(self):
+        """
+        Plots a high-quality visualization of the step-by-step telemetry recorded during online training.
+        """
+        csv_path = os.path.join(os.path.dirname(self.root_output_dir), "checkpoints", "online_training_telemetry.csv")
+        if not os.path.exists(csv_path):
+            LogStyle.log_warn("Aborting Online Telemetry Plot: Missing 'checkpoints/online_training_telemetry.csv'.")
+            return
+            
+        df = self._load_csv_file(csv_path)
+        if df is None or df.empty:
+            return
+
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        x_vals = df['step']
+        
+        # Smooth curves slightly for readability over long training runs
+        # Use a rolling window of 50 steps
+        WINDOW = min(50, len(df))
+        if WINDOW > 1:
+            smoothed_attack = df['attack_intensity'].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_target = df['target_sampling_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_actual = df['actual_inspection_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_fnr = df['fnr'].rolling(WINDOW, min_periods=1).mean() * 100.0
+        else:
+            smoothed_attack = df['attack_intensity'] * 100.0
+            smoothed_target = df['target_sampling_rate'] * 100.0
+            smoothed_actual = df['actual_inspection_rate'] * 100.0
+            smoothed_fnr = df['fnr'] * 100.0
+
+        # Plot left axis
+        ax1.fill_between(x_vals, smoothed_attack, color='#e31a1c', alpha=0.12, label='Attack Intensity (Malware %)')
+        ax1.plot(x_vals, smoothed_attack, color='#e31a1c', linestyle='--', linewidth=1.2, alpha=0.5)
+        ax1.plot(x_vals, smoothed_target, color='#1f78b4', linewidth=2.0, label='DRL Target Sampling Rate')
+        ax1.plot(x_vals, smoothed_actual, color='#33a02c', linewidth=1.2, linestyle=':', label='Actual Inspection Rate')
+        
+        ax1.set_xlabel('Training Step (Environment Window Transitions)')
+        ax1.set_ylabel('Inspection / Attack Rate (%)')
+        ax1.set_ylim(-5, 105)
+        ax1.grid(True, linestyle=':', alpha=0.6)
+        
+        # Plot right axis for Leakage
+        ax2 = ax1.twinx()
+        ax2.plot(x_vals, smoothed_fnr, color='#ff7f00', linewidth=1.5, label='False Negative Rate (Leakage FNR)', alpha=0.8)
+        ax2.set_ylabel('Leakage Rate (FNR %)', color='#ff7f00')
+        ax2.tick_params(axis='y', labelcolor='#ff7f00')
+        ax2.set_ylim(-5, 105)
+        ax2.grid(False)
+
+        # Combined Legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper center', bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=True)
+        
+        plt.tight_layout()
+        self.export_figure(fig, "qos/window", "online_training_telemetry_timeline")
+        plt.close(fig)
+        LogStyle.log_success("Generated Online Training Telemetry Timeline plot.")

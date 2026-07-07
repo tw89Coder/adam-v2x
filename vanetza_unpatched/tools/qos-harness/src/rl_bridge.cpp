@@ -53,6 +53,9 @@ RLBridge::~RLBridge() {
     if (csv_file_.is_open()) {
         csv_file_.close();
     }
+    if (window_csv_file_.is_open()) {
+        window_csv_file_.close();
+    }
 }
 
 /**
@@ -62,13 +65,14 @@ RLBridge::~RLBridge() {
  * @param pollution_rate Anomaly flow percentage representing fuzzer intensity.
  * @param attack_mode Selected traffic generator schedule index.
  */
-void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_mode) {
+void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_mode, bool enable_trace) {
     socket_enabled_ = enable_socket;
 
     // Reset episodic states to prevent cross-run telemetry pollution
     history_initialized_ = false;
     input_history_buffer_.clear();
     packet_buffer_.clear();
+    window_idx_ = 0;
 
     window_tp_count_ = 0;
     window_tn_count_ = 0;
@@ -78,34 +82,44 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
     window_sq_sum_ = 0;
     window_latency_ticks_ = 0;
 
-    std::string dir_path;
-    char file_path[512];
-
-    if (socket_enabled_) {
-        // [DRL Training Mode] output to outputs/rl_env
-        dir_path = repo_root_ + "/outputs/rl_env";
-        mkdir(dir_path.c_str(), 0755);
-        std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
-                      attack_mode);
-    } else {
-        // [Manual Trace Mode] output to outputs/traces/{build_type}/
-        std::string build_type = "unpatched";
-        if (repo_root_.find("vanetza_patched") != std::string::npos) {
-            build_type = "patched";
-        }
-
-        std::string base_dir = repo_root_ + "/outputs/traces";
-        mkdir(base_dir.c_str(), 0755);
-        dir_path = base_dir + "/" + build_type;
-        mkdir(dir_path.c_str(), 0755);
-
-        std::snprintf(file_path, sizeof(file_path), "%s/fsm_trace_rate_%.1f_mode%d.csv", dir_path.c_str(), pollution_rate,
-                      attack_mode);
+    std::string build_type = "unpatched";
+    std::string source_file = __FILE__;
+    if (source_file.find("vanetza_patched") != std::string::npos) {
+        build_type = "patched";
     }
 
-    // Open file using truncation to ensure clean episodic runs
-    csv_file_.open(file_path, std::ios::out);
-    write_csv_header();
+    std::string parent_dir = repo_root_ + "/outputs/rl_env";
+    std::string dir_path = parent_dir + "/" + build_type;
+    mkdir(parent_dir.c_str(), 0755);
+    mkdir(dir_path.c_str(), 0755);
+
+    std::string suffix = "filtered";
+    if (socket_enabled_) {
+        suffix = "rl";
+    } else if (onnx_enabled_) {
+        suffix = "onnx";
+    }
+
+    char file_path[512];
+    char win_file_path[512];
+    std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d_%s.csv", dir_path.c_str(), pollution_rate,
+                  attack_mode, suffix.c_str());
+    std::snprintf(win_file_path, sizeof(win_file_path), "%s/window_trace_%.1f_mode%d_%s.csv", dir_path.c_str(), pollution_rate,
+                  attack_mode, suffix.c_str());
+
+    if (csv_file_.is_open()) csv_file_.close();
+    if (enable_trace || socket_enabled_) {
+        csv_file_.open(file_path, std::ios::out);
+        write_csv_header();
+    }
+
+    if (window_csv_file_.is_open()) window_csv_file_.close();
+    if (enable_trace || socket_enabled_) {
+        window_csv_file_.open(win_file_path, std::ios::out);
+        if (window_csv_file_.is_open()) {
+            window_csv_file_ << "window_index,actual_inspection_rate,target_sampling_rate,attack_intensity,fpr,fnr,avg_sq,tp,tn,fp,fn\n";
+        }
+    }
 }
 
 void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) {
@@ -223,7 +237,30 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
     }
+    // Write window-level metrics to window CSV log
+    if (window_csv_file_.is_open()) {
+        double actual_insp = (total_packets > 0) ? (static_cast<double>(window_inspected_count_) / total_packets) : 0.0;
+        double target_samp = filter.get_sampling_rate();
+        double attack_int = (total_packets > 0) ? (static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets) : 0.0;
+        
+        double fpr = (window_fp_count_ + window_tn_count_ > 0) ? 
+            (static_cast<double>(window_fp_count_) / (window_fp_count_ + window_tn_count_)) : 0.0;
+        double fnr = (window_tp_count_ + window_fn_count_ > 0) ? 
+            (static_cast<double>(window_fn_count_) / (window_tp_count_ + window_fn_count_)) : 0.0;
+        double avg_sq = (total_packets > 0) ? (static_cast<double>(window_sq_sum_) / total_packets) : 0.0;
 
+        window_csv_file_ << window_idx_++ << ","
+                         << actual_insp << ","
+                         << target_samp << ","
+                         << attack_int << ","
+                         << fpr << ","
+                         << fnr << ","
+                         << avg_sq << ","
+                         << window_tp_count_ << ","
+                         << window_tn_count_ << ","
+                         << window_fp_count_ << ","
+                         << window_fn_count_ << "\n";
+    }
     // Reset window statistical accumulators
     window_tp_count_ = 0;
     window_tn_count_ = 0;

@@ -23,11 +23,12 @@ def main():
                f"  {LogStyle.STAGE}timeline{LogStyle.RESET}    : Multi-modal temporal attack execution traces\n"
                f"  {LogStyle.STAGE}debug{LogStyle.RESET}       : Diagnostics diagnostic log output checks\n"
                f"  {LogStyle.STAGE}budget{LogStyle.RESET}      : Resource depletion threshold boundaries under mitigations\n"
-               f"  {LogStyle.STAGE}convergence{LogStyle.RESET} : DRL offline/online training Episode-Reward convergence metrics"
+               f"  {LogStyle.STAGE}convergence{LogStyle.RESET} : DRL offline/online training Episode-Reward convergence metrics\n"
+               f"  {LogStyle.STAGE}window{LogStyle.RESET}      : Dynamic timeline curves of window-level sampling, attack, and leakage rates"
     )
     
     parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
-    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence'], 
+    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence', 'window'], 
                         help="Isolate target execution pipelines (see type details below).")
     parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
     parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
@@ -98,6 +99,12 @@ def main():
         elif args.type == 'convergence':
             csv_path = os.path.join(project_root, "checkpoints", "training_progress.csv")
             conv_engine.execute(csv_path)
+
+        elif args.type == 'window':
+            # 1. Plot online training telemetry if available
+            qos_engine.plot_online_training_telemetry()
+            # 2. Auto-scan outputs/rl_env and plot all existing deployment window traces
+            qos_engine.plot_all_existing_window_metrics()
 
     except KeyboardInterrupt:
         print(f"\n{LogStyle.WARN}[SIGINT DETECTED] Processing loop gracefully aborted by user event link.{LogStyle.RESET}\n")

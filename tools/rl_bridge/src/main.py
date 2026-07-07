@@ -56,6 +56,18 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     log_file = open(log_path, mode="w", newline="", encoding="utf-8")
     log_writer = csv.writer(log_file)
     log_writer.writerow(["update", "reward", "loss", "mean_q"])
+
+    # Initialize CSV logger for step-by-step training telemetry curves
+    telemetry_path = os.path.join(CHECKPOINT_DIR, "online_training_telemetry.csv")
+    telemetry_file = open(telemetry_path, mode="w", newline="", encoding="utf-8")
+    telemetry_writer = csv.writer(telemetry_file)
+    telemetry_writer.writerow([
+        "step", "reward", "actual_inspection_rate", "target_sampling_rate",
+        "attack_intensity", "fpr", "fnr", "avg_sq", "tp", "tn", "fp", "fn"
+    ])
+
+    print(f"  └── {C_SUCCESS}[ACTIVE]{C_RESET} Step-by-step training telemetry logging -> {C_BOLD}checkpoints/online_training_telemetry.csv{C_RESET}")
+    step_count = 0
     
     try:
         while True:
@@ -65,6 +77,19 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             
             # 2. Step environment (send parameters and wait for next observation)
             next_state, reward, done, info = env.step(safe_actions)
+            step_count += 1
+
+            # Record step telemetry to CSV file
+            if "metrics" in info:
+                m = info["metrics"]
+                tot = m.get("tp_count", 0) + m.get("tn_count", 0) + m.get("fp_count", 0) + m.get("fn_count", 0)
+                if tot == 0: tot = 1
+                actual_insp = m.get("inspected_count", 0) / tot
+                telemetry_writer.writerow([
+                    step_count, reward, actual_insp, m.get("instant_sampling_rate", 0.0),
+                    m.get("true_anomaly_rate", 0.0), m.get("fpr", 0.0), m.get("fnr", 0.0), m.get("avg_sq", 0.0),
+                    m.get("tp_count", 0), m.get("tn_count", 0), m.get("fp_count", 0), m.get("fn_count", 0)
+                ])
             
             # 3. Store transition step in rolling buffer
             buffer["states"].append(state)
@@ -121,6 +146,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                     log_writer.writerow([update_count, reward, metrics.get('actor_loss', 0.0), metrics.get('critic_loss', 0.0)])
                 
                 log_file.flush()
+                telemetry_file.flush()
                 
                 # Flush rolling buffers
                 for key in buffer:
@@ -148,6 +174,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         print(f"{C_WARN}[*] Releasing TCP server and closing connections safely...{C_RESET}")
     finally:
         log_file.close()
+        telemetry_file.close()
         env.close()
 
 def run_offline(env: V2XOfflineDatasetEnv, agent: V2XAgent, learner: PPOLearner, epochs: int):

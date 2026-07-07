@@ -42,6 +42,7 @@ print_usage() {
     echo -e "  ${C_WARN}--export-onnx${C_RESET}        Export trained PyTorch model weights to ONNX format"
     echo -e "  ${C_WARN}--verify-onnx${C_RESET}        Run numeric alignment check between PyTorch, ONNX, and C++"
     echo -e "  ${C_WARN}--plot${C_RESET}               Execute verification and plotting engine scripts"
+    echo -e "  ${C_WARN}--clean${C_RESET}              Purge telemetry CSV logs and old window plots to prevent data pollution"
     echo -e "  ${C_WARN}--test${C_RESET}               Run python strategy consistency unit tests via pytest"
     echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
     echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
@@ -108,6 +109,15 @@ if [ "$1" = "python" ]; then
         --plot)
             # Plot engine is in the tools folder
             SCRIPT="../plot_engine.py"
+            ;;
+        --clean)
+            echo -e "${C_INFO}[*] Purging stale window telemetry CSV logs and plots...${C_RESET}"
+            rm -f "${ROOT_DIR}/outputs/rl_env/unpatched"/*.csv
+            rm -f "${ROOT_DIR}/outputs/rl_env/patched"/*.csv
+            rm -f "${ROOT_DIR}/checkpoints"/online_training_telemetry.csv
+            rm -rf "${ROOT_DIR}/outputs/plots/qos/window"/*
+            echo -e "${C_SUCCESS}[SUCCESS] Purge completed safely. Stale CSV/plot data cleared.${C_RESET}"
+            exit 0
             ;;
         --test|--run-tests)
             # Unified testing entry point executing consistency checks via pytest

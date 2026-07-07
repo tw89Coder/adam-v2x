@@ -328,6 +328,9 @@ int main(int argc, char* argv[]) {
               << "% | Filter: " << (enable_filter ? "ON" : "OFF")
               << " | ONNX: " << (enable_onnx ? "ON" : "OFF") << "\n";
     std::cout << "[*] Starting QoS Measurement...\n";
+    if (enable_filter) {
+        std::cout << "[*] Metric Legend: Insp[A/T] = Inspection Rate [Actual / Target]\n";
+    }
 
     // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
@@ -345,8 +348,8 @@ int main(int argc, char* argv[]) {
         rl_bridge.set_safety_guards(false);
     }
     rl_bridge.initialize_onnx(enable_onnx, onnx_model_path);
-    if (enable_trace || rl_train_mode) {
-        rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode);
+    if (enable_trace || rl_train_mode || enable_onnx) {
+        rl_bridge.initialize(rl_train_mode, pollution_rate, attack_mode, enable_trace);
     }
 
     vanetza::RouterFuzzingContext context;
