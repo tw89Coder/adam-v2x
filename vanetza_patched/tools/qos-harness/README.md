@@ -108,7 +108,7 @@ sequenceDiagram
         Router->>Security: verify(packet)
         Note over Security: Cryptographic signature checks (OpenSSL / Crypto++)
     else drop_packet is true (Drop & Shield)
-        Note over Harness: Bypass deserialization to preserve CPU cycles
+        Note over Harness: Early-stage load shedding to protect CPU resources
     end
 ```
 
