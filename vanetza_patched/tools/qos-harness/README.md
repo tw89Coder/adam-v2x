@@ -225,6 +225,7 @@ To align C++ implementation variables with academic writing conventions, we map 
 | $\theta_{\text{sq}}$ | `SQ_THRESHOLD` | Sliding window Sum-of-Squares anomaly threshold |
 | $K_{\text{pen}}$ | `PENALTY_MULTIPLIER` | Budget depletion multiplier factor |
 | $N_{\text{str}}$ | `STREAK_THRESHOLD` | Continuous packet streak threshold ($1000$) |
+| $\text{streak}$ | `clean_streak` | Continuous clean packet counter |
 | $R_{\text{rec}}$ | `RECOVERY_RATE` | Base recovery rate of the budget ($0.05$) |
 | $S_{\text{base}}$ | `BASE_SAMPLING_RATE` | Minimum stochastic inspection sampling rate floor |
 
@@ -252,7 +253,7 @@ The virtual CPU budget ($B$) acts as the FSM's central state coordinator.
   $$B \leftarrow \max\left(0, B - \text{Excess} \times K_{\text{pen}} \times 10.0\right)$$
 - **Budget Recovery (Peacetime)**: During peacetime, a clean packet stream increments a `clean_streak` counter. If the streak exceeds $N_{\text{str}}$, budget recovery accelerates by a factor of 6:
   $$B \leftarrow \min\left(B_{\text{max}}, B + \text{rate}\right)$$
-  $$\text{where } \text{rate} = \begin{cases} R_{\text{rec}} \times 6.0 & \text{if } \text{clean\_streak} > N_{\text{str}} \\ R_{\text{rec}} & \text{otherwise} \end{cases}$$
+  $$\text{where } \text{rate} = 6.0 \times R_{\text{rec}} \quad (\text{if } \text{streak} > N_{\text{str}}), \quad \text{else} \quad R_{\text{rec}}$$
 
 ---
 
