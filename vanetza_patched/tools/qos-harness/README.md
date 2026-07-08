@@ -80,13 +80,14 @@ To evaluate the CWE-674 Workload Amplification vulnerability (recursive certific
 
 ### Layer 1: Co-Simulation & IPC Architecture (System Level)
 
-This layer manages the interactive Python-C++ co-simulation. We use a **Zero-Allocation Binary Struct Wire Protocol** over TCP socket connections. This bypasses text serialization overhead (like JSON/XML), ensuring that IPC latency does not distort experimental timing.
+This layer manages the interactive Python-C++ co-simulation. We use a **Zero-Allocation C-Struct Binary Layout** over TCP socket connections. This bypasses text serialization overhead (like JSON/XML), ensuring that IPC latency does not distort experimental timing.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant PY as Python Daemon (rl_bridge)
     participant Harness as C++ QoS Harness Kernel
+    participant FSM as AdaptiveFilterFSM
     participant Router as vanetza::geonet::Router
     participant Security as vanetza::security::VerifyService
 
@@ -94,13 +95,21 @@ sequenceDiagram
     Harness->>PY: Send raw 40-byte Binary Struct (telemetry data)
     Note over PY: Zero-allocation unpack via struct.unpack()
     Note over PY: Runs Neural RL Policy (DQN or PPO)
-    PY->>Harness: Return comma-separated actions (sampling_rate, filter_flags)
-    Note over Harness: AdaptiveFilterFSM updates parameters
+    PY->>Harness: Return comma-separated actions (FSM policy updates)
+    Harness->>FSM: update_policy_params()
     
-    Note over Harness, Security: Phase 2: In-Process Packet Validation
-    Harness->>Router: indicate(packet)
-    Router->>Security: verify(packet)
-    Note over Security: Cryptographic signature checks (OpenSSL / Crypto++)
+    Note over Harness, Security: Phase 2: Adaptive Filtering & Packet Validation
+    Note over Harness: Receives incoming V2X packet
+    Harness->>FSM: process_packet(packet)
+    Note over FSM: Fast sliding-window Sum-of-Squares telemetry check
+    FSM-->>Harness: Returns drop_packet (true/false)
+    alt drop_packet is false (Pass & Inspect)
+        Harness->>Router: indicate(packet)
+        Router->>Security: verify(packet)
+        Note over Security: Cryptographic signature checks (OpenSSL / Crypto++)
+    else drop_packet is true (Drop & Shield)
+        Note over Harness: Bypass deserialization to preserve CPU cycles
+    end
 ```
 
 ---
@@ -111,6 +120,11 @@ To maintain the **Separation of Concerns (SoC)** principle, all evaluation, fuzz
 
 ```mermaid
 classDiagram
+    class main {
+        +main()
+        -filter_fsm: AdaptiveFilterFSM
+        -rl_bridge: RLBridge
+    }
     class RouterFuzzingContext {
         +runtime: Clock
         +security: MockSecurityEntity
@@ -143,7 +157,24 @@ classDiagram
         +runFloodDiagnosis()
         +runAmplificationProfiling()
     }
+    class AdaptiveFilterFSM {
+        +current_budget: double
+        +process_packet(ByteBuffer) bool
+        +get_sampling_rate() double
+        +update_policy_params(recovery, penalty, sq_thresh, base_sampling)
+        -calculate_max_sum_sq(ByteBuffer) int
+    }
+    class RLBridge {
+        +check_and_sync_window(packet_idx, filter_fsm)
+        +run_onnx_inference(telemetry, out_policy) bool
+        +handshake_with_agent(payload, out_policy) bool
+    }
     
+    main ..> RouterFuzzingContext : Initiates
+    main ..> AmplificationProfiler : Runs sweep
+    main --> AdaptiveFilterFSM : Owns
+    main --> RLBridge : Owns
+    RLBridge ..> AdaptiveFilterFSM : Updates policy params via socket/ONNX
     RouterFuzzingContext ..|> dcc__RequestInterface : Emulates DCC endpoint
     RouterFuzzingContext ..|> geonet__TransportInterface : Emulates Transport handler
     FuzzingRequestInterface --|> dcc__RequestInterface : Implements mock
@@ -157,6 +188,25 @@ classDiagram
 - **`HarnessEngine`**: Runs timing benchmarks on packet operations using high-resolution nanosecond clock offsets and catches hardware/software exception faults.
 - **`TrafficGenerator`**: Coordinates the payload building strategies, managing the nested certificate chain serialization.
 - **`AmplificationProfiler`**: The benchmark orchestrator that sweeps sizes, executes tests, and dumps statistics.
+
+---
+
+### Layer 2.5: Adaptive Filter FSM Mitigation Mechanism (Mitigation Level)
+
+The `AdaptiveFilterFSM` is a lightweight, low-overhead security pre-filter executing in the C++ packet reception fast path. It operates as follows:
+
+1. **State Machine & Jitter Budget**:
+   - The FSM transits through four security states: `S0_NORMAL`, `S1_ELEVATED`, `S2_CONSTRAINED`, and `S3_QUARANTINE`.
+   - Transitions are driven by a dynamic `current_budget` variable (bounded by `MAX_BUDGET = 100.0`), which increases upon detecting latency anomalies or payload byte distortions, and decreases over time via `RECOVERY_RATE`.
+2. **Zero-Decoding Sliding Window Feature Extraction (Sum-of-Squares)**:
+   - Instead of running expensive ASN.1 deserialization on every packet (which triggers stack exhaustion under attack), the FSM extracts a lightweight telemetry feature using `calculate_max_sum_sq`.
+   - It runs a sliding window of size 64 across the initial bytes, computing the accumulated sum of squares. If the byte values deviate heavily from standard normal formats (exceeding `SQ_THRESHOLD`), the packet triggers a latency penalty.
+3. **Budget-to-Sampling Rate Mapping**:
+   - The FSM dynamically lowers the validation sampling rate to preserve CPU cycles when the budget spikes (e.g. entering quarantine):
+     - `current_budget <= 40.0` ($\tau_2$): $100\%$ check rate.
+     - `40.0 < current_budget <= 70.0` ($\tau_1$): Linear interpolation down to $50\%$ check rate.
+     - `70.0 < current_budget < 100.0`: Linear interpolation down to `BASE_SAMPLING_RATE` ($10\%$).
+   - A fast, zero-allocation Xorshift random number generator (`fast_rand()`) decides whether to bypass cryptographic decoding for non-sampled packets, shielding the receiver under heavy DDoS floods.
 
 ---
 
@@ -232,6 +282,9 @@ If you are incorporating this benchmarking kernel into research papers, slides, 
 3. **Empirical Defense Verification (Evaluation)**:
    - *Academic Value*: Demonstrates quantitative performance recovery of the stack-nesting prevention guard.
    - *Thesis Reference*: Standardizes a synchronized payload re-use mechanism to test both unpatched and patched systems under identical exploit binaries, proving that the nesting guard limits CPU amplification factor from $23\times$ down to $<1.3\times$ (nominal $11\,\mu\text{s}$ parsing duration).
+4. **Two-Tier Closed-Loop Adaptive Control Defense Model (System Level)**:
+   - *Academic Value*: Provides a hybrid, dynamic mitigation model combining local low-overhead filtering with remote RL policy tuning.
+   - *Thesis Reference*: Pairs a microsecond-level budget-driven FSM pre-filter (Fast Path in C++) with a macro-window DRL controller (Slow Path in Python) to dynamically throttle malicious traffic under DDoS presentation-layer stack exhaustion attacks, preserving QoS limits.
 
 ---
 
