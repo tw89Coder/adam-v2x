@@ -213,9 +213,24 @@ The `AdaptiveFilterFSM` is a lightweight, low-overhead security pre-filter execu
 <details>
 <summary><b>📐 Technical Specification: FSM Mathematical Model & Heuristics (Click to expand)</b></summary>
 
-Here we detail the internal heuristics, mathematical state transition thresholds, and algorithm pseudocode of the `AdaptiveFilterFSM` for academic reference.
+Here we detail the internal heuristics, mathematical state transition thresholds, and algorithm formulas of the `AdaptiveFilterFSM` for academic reference.
 
-### 1. Sliding-Window $F_2$ Sketch Heuristic (Byte Distortion Detection)
+### 1. Mathematical Symbol Mapping Table
+To align C++ implementation variables with academic writing conventions, we map code variables to standard mathematical notations:
+
+| Mathematical Notation | Implementation Variable | Description |
+| :--- | :--- | :--- |
+| $B$ | `current_budget` | Dynamic virtual CPU budget (State coordinator) |
+| $B_{\text{max}}$ | `MAX_BUDGET` | Maximum budget capacity ($100.0$) |
+| $\theta_{\text{sq}}$ | `SQ_THRESHOLD` | Sliding window Sum-of-Squares anomaly threshold |
+| $K_{\text{pen}}$ | `PENALTY_MULTIPLIER` | Budget depletion multiplier factor |
+| $N_{\text{str}}$ | `STREAK_THRESHOLD` | Continuous packet streak threshold ($1000$) |
+| $R_{\text{rec}}$ | `RECOVERY_RATE` | Base recovery rate of the budget ($0.05$) |
+| $S_{\text{base}}$ | `BASE_SAMPLING_RATE` | Minimum stochastic inspection sampling rate floor |
+
+---
+
+### 2. Sliding-Window $F_2$ Sketch Heuristic (Byte Distortion Detection)
 
 To detect repeating byte patterns (such as continuous `0x02` exploit sequences) with $O(1)$ lookup time, the FSM implements a sliding-window histogram.
 
@@ -223,35 +238,41 @@ To detect repeating byte patterns (such as continuous `0x02` exploit sequences) 
 - **Scan Limit ($L$)**: Capped at $\min(|P|, W + 16)$ bytes where $P$ is the packet byte buffer. This prevents attackers from launching a secondary CPU exhaustion vector using infinitely long benign payloads.
 - **Metric Formulation**: For a window sliding over bytes $b_1, b_2, \dots, b_W$, let $c_i$ be the occurrence frequency of byte value $i \in [0, 255]$ within the window. The window's distortion metric is the sum of squares:
   $$\text{SumSq} = \sum_{i=0}^{255} c_i^2$$
-- **Early-Exit Optimization**: While accumulating the sum of squares, if $\text{SumSq}$ surpasses the security threshold $\text{SQ\_THRESHOLD}$, the scan aborts immediately and flags the packet, saving massive CPU cycles.
+- **Early-Exit Optimization**: While accumulating the sum of squares, if $\text{SumSq}$ surpasses the security threshold $\theta_{\text{sq}}$, the scan aborts immediately and flags the packet, saving massive CPU cycles.
 
-### 2. Jitter Budget and Accelerated Recovery Math
+---
+
+### 3. Jitter Budget and Accelerated Recovery Math
 
 The virtual CPU budget ($B$) acts as the FSM's central state coordinator.
 
 - **Budget Range**: $B \in [0, B_{\text{max}}]$ where $B_{\text{max}} = 100.0$.
 - **Budget Depletion (Attack Penalty)**: When an anomalous packet is detected, the budget drains proportionally to the excess anomaly ratio:
-  $$\text{Excess} = \frac{\text{SumSq} - \text{SQ\_THRESHOLD}}{\text{SQ\_THRESHOLD}}$$
-  $$B \leftarrow \max\left(0, B - \text{Excess} \times \text{PENALTY\_MULTIPLIER} \times 10.0\right)$$
-- **Budget Recovery (Peacetime)**: During peacetime, a clean packet stream increments a `clean_streak` counter. If the streak exceeds $\text{STREAK\_THRESHOLD} = 1000$, budget recovery accelerates by a factor of 6:
+  $$\text{Excess} = \frac{\text{SumSq} - \theta_{\text{sq}}}{\theta_{\text{sq}}}$$
+  $$B \leftarrow \max\left(0, B - \text{Excess} \times K_{\text{pen}} \times 10.0\right)$$
+- **Budget Recovery (Peacetime)**: During peacetime, a clean packet stream increments a `clean_streak` counter. If the streak exceeds $N_{\text{str}}$, budget recovery accelerates by a factor of 6:
   $$B \leftarrow \min\left(B_{\text{max}}, B + \text{rate}\right)$$
-  $$\text{where } \text{rate} = \begin{cases} \text{RECOVERY\_RATE} \times 6.0 & \text{if } \text{clean\_streak} > 1000 \\ \text{RECOVERY\_RATE} & \text{otherwise} \end{cases}$$
+  $$\text{where } \text{rate} = \begin{cases} R_{\text{rec}} \times 6.0 & \text{if } \text{clean\_streak} > N_{\text{str}} \\ R_{\text{rec}} & \text{otherwise} \end{cases}$$
 
-### 3. Dynamic Sampling Rate Mapping
+---
 
-The virtual budget is mapped to the packet sampling rate ($S \in [\text{BASE\_SAMPLING\_RATE}, 1.0]$) using a piecewise continuous function defined by thresholds $\tau_1 = 70.0$ and $\tau_2 = 40.0$:
+### 4. Dynamic Sampling Rate Mapping
+
+The virtual budget is mapped to the packet sampling rate ($S \in [S_{\text{base}}, 1.0]$) using a piecewise continuous function defined by thresholds $\tau_1 = 70.0$ and $\tau_2 = 40.0$:
 
 $$S(B) = \begin{cases} 
 1.0 & \text{if } B \le \tau_2 \\
 1.0 - 0.5 \times \left(\frac{B - \tau_2}{\tau_1 - \tau_2}\right) & \text{if } \tau_2 < B \le \tau_1 \\
-0.5 - (0.5 - \text{BASE\_SAMPLING\_RATE}) \times \left(\frac{B - \tau_1}{B_{\text{max}} - \tau_1}\right) & \text{if } \tau_1 < B < B_{\text{max}} \\
-\text{BASE\_SAMPLING\_RATE} & \text{if } B = B_{\text{max}}
+0.5 - (0.5 - S_{\text{base}}) \times \left(\frac{B - \tau_1}{B_{\text{max}} - \tau_1}\right) & \text{if } \tau_1 < B < B_{\text{max}} \\
+S_{\text{base}} & \text{if } B = B_{\text{max}}
 \end{cases}$$
 
 For every packet, a high-speed Xorshift32 pseudo-random generator decides validation entry:
 $$\text{inspect} \leftarrow (\text{Xorshift32}() \pmod{100} < S(B) \times 100)$$
 
-### 4. Discrete Security States
+---
+
+### 5. Discrete Security States
 
 Based on $B$, the discrete FSM transitions through four security states:
 - **`S0_NORMAL`**: $B \in (\tau_1, B_{\text{max}}]$ (Peacetime, stochastic sampling)
