@@ -9,6 +9,7 @@ add_executable(qos-harness
     src/pre_filter.cpp
     src/rl_bridge.cpp
     src/router_fuzzing_context.cpp
+    src/dataset_builder.cpp
 )
 
 target_include_directories(qos-harness PRIVATE

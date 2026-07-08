@@ -15,102 +15,12 @@
 #include "qos_harness/rl_bridge.hpp"
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/traffic_generator.hpp"
-
-// Dataset generation parameters
-const int DATASET_TARGET = 1000;      // Target count of verified, CPU-expensive attack packets
-const int MAX_ATTEMPTS = 1000000;     // Fallback limit for structural fuzzing search loops
+#include "qos_harness/dataset_builder.hpp"
 
 // Repository filesystem paths resolving normal packets and raw attack POC binaries
 const std::string REPO_ROOT_STR = REPO_ROOT;
 const std::string NORMAL_FOLDER = REPO_ROOT_STR + "/inputs/base_packets";
 const std::string ATTACK_FOLDER = REPO_ROOT_STR + "/inputs/attack_vectors/malware";
-
-/**
- * @brief Profiles a base POC exploit and generates a dataset of verified CPU-expensive attack packet mutations.
- *        Validates each candidate mutation via multi-run latency benchmarks.
- * 
- * @param base_normal Reference standards-compliant baseline packet buffer.
- * @param poc_packet Base ASN.1 exploit packet containing structural recursion triggers.
- * @return true if target dataset size was successfully generated, false otherwise.
- */
-bool buildAttackDataset(const vanetza::ByteBuffer& base_normal, const vanetza::ByteBuffer& poc_packet) {
-    mkdir(ATTACK_FOLDER.c_str(), 0755);
-    std::cout << "[*] Profiling base POC packet latency baseline...\n";
-
-    // Measure the baseline parser execution latency of the original POC exploit packet
-    long long poc_total_ns = 0;
-    for (int i = 0; i < 10; ++i) {
-        long long lat = qos_harness::HarnessEngine::measurePacketLatency(poc_packet);
-        if (lat < 0) return false;
-        poc_total_ns += lat;
-    }
-
-    // Set target latency threshold to 105% of the baseline POC exploit's parser duration
-    long long latency_threshold = static_cast<long long>((poc_total_ns / 10) * 1.05);
-    int generated = 0, attempts = 0, rejected = 0;
-
-    std::cout << "[+] Base POC Mean Latency: " << (poc_total_ns / 10) << " ns\n";
-    std::cout << "[*] Performance Threshold set to: " << latency_threshold << " ns\n";
-    std::cout << "[*] Building attack dataset (Target: " << DATASET_TARGET << " verified SLOW packets)...\n";
-
-    // Stochastic fuzzing loop generating and filtering mutated parser bombs
-    while (generated < DATASET_TARGET && attempts < MAX_ATTEMPTS) {
-        attempts++;
-
-        // Initialize unique seed combining current Unix time and iteration index
-        unsigned int seed = static_cast<unsigned int>(time(nullptr)) ^ (attempts * 2654435761u);
-        vanetza::ByteBuffer candidate = qos_harness::TrafficGenerator::craftAttackPacket(poc_packet, seed);
-
-        bool consistently_potent = true;
-        long long running_lat_sum = 0;
-        const int VERIFICATION_RUNS = 3;
-
-        // Verify processing latency overhead consistency across multiple runs
-        for (int v = 0; v < VERIFICATION_RUNS; ++v) {
-            long long sample_lat = qos_harness::HarnessEngine::measurePacketLatency(candidate);
-            if (sample_lat < latency_threshold) {
-                consistently_potent = false;
-                break;
-            }
-            running_lat_sum += sample_lat;
-        }
-
-        // Commit consistently slow exploit variants to the output directory
-        if (consistently_potent) {
-            long long confirmed_avg_lat = running_lat_sum / VERIFICATION_RUNS;
-            char path[256];
-            std::snprintf(path, sizeof(path), "%s/attack_%05d.bin", ATTACK_FOLDER.c_str(), generated);
-            qos_harness::FileManager::writeBufferToFile(path, candidate);
-            generated++;
-
-            if (generated % 10 == 0 || generated == DATASET_TARGET) {
-                qos_harness::ConsolePresenter::printDatasetProgress(generated, DATASET_TARGET, rejected,
-                                                                    confirmed_avg_lat);
-            }
-        } else {
-            rejected++;
-            if (attempts % 1000 == 0) {
-                std::printf("\r  [*] Searching... Potent Found: %4d/%-4d | Rejects: %-7d\033[K", generated,
-                            DATASET_TARGET, rejected);
-                std::fflush(stdout);
-            }
-        }
-    }
-
-    std::cout << "\n";
-    if (generated < DATASET_TARGET) {
-        std::cout << "[!] Warning: only generated " << generated << "/" << DATASET_TARGET << " packets after "
-                  << attempts << " attempts.\n";
-        return generated > 0;
-    }
-
-    std::cout << qos_harness::ConsolePresenter::green() << "[+] Dataset complete: " << generated
-              << " attack packets saved to " << ATTACK_FOLDER << qos_harness::ConsolePresenter::reset() << "/\n";
-    std::cout << qos_harness::ConsolePresenter::red()
-              << "[+] Vanetza rejection rate during generation: " << (rejected * 100.0 / attempts) << "%"
-              << qos_harness::ConsolePresenter::reset() << "\n";
-    return true;
-}
 
 /**
  * @brief Prints CLI instructions mapping available parameter sweep arguments.
@@ -267,7 +177,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     if (build_dataset) {
-        return buildAttackDataset(base_normal, poc_packet) ? 0 : 1;
+        return qos_harness::DatasetBuilder::build(base_normal, poc_packet) ? 0 : 1;
     }
 
     // Load attack dataset generated via offline fuzzer

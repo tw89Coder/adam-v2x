@@ -353,4 +353,49 @@ void ConsolePresenter::printSecurityReport(int total, int malware, int tp, int t
                 reset().c_str());
 }
 
+void ConsolePresenter::printDatasetHeader(long long normal_lat, long long base_poc_lat) {
+    std::printf("\n%s============================================================%s\n", frame().c_str(), reset().c_str());
+    std::printf("%s              REPRODUCIBLE DATASET GENERATION TOOL           %s\n", info().c_str(), reset().c_str());
+    std::printf("%s============================================================%s\n", frame().c_str(), reset().c_str());
+    std::printf("  %sNormal Safety Packet Latency:%s %7.3f ms (%lld ns)\n", 
+                label().c_str(), reset().c_str(), normal_lat / 1e6, normal_lat);
+    std::printf("  %sBase POC Exploit Latency:    %s %7.3f ms (%lld ns)\n", 
+                label().c_str(), reset().c_str(), base_poc_lat / 1e6, base_poc_lat);
+    std::printf("  %sBase Amplification Factor:   %s %7.2fx\n", 
+                label().c_str(), reset().c_str(), static_cast<double>(base_poc_lat) / normal_lat);
+    std::printf("%s------------------------------------------------------------%s\n", frame().c_str(), reset().c_str());
+    std::fflush(stdout);
+}
+
+void ConsolePresenter::printHillClimbStep(int generated, int target, int attempt, int gen, int total_gens, 
+                                         long long parent_lat, long long mutant_lat, long long normal_lat, 
+                                         int rejects) {
+    double parent_amp = static_cast<double>(parent_lat) / normal_lat;
+    double mutant_amp = static_cast<double>(mutant_lat) / normal_lat;
+    
+    std::string amp_color = (parent_amp < 5.0) ? safe() : (parent_amp < 15.0) ? warn() : crit();
+    
+    std::printf("\r  %s[Gen %2d/%2d]%s | %sP_Lat:%s %6.2f ms (%s%.1fx%s) | %sM_Lat:%s %6.2f ms (%6.1fx) | %sFound:%s %d/%d | %sRj:%s %d\033[K",
+                info().c_str(), gen, total_gens, reset().c_str(),
+                label().c_str(), reset().c_str(), parent_lat / 1e6, amp_color.c_str(), parent_amp, reset().c_str(),
+                label().c_str(), reset().c_str(), mutant_lat / 1e6, mutant_amp,
+                safe().c_str(), reset().c_str(), generated, target,
+                crit().c_str(), reset().c_str(), rejects);
+    std::fflush(stdout);
+}
+
+void ConsolePresenter::printDatasetCompleteSummary(int generated, int total_attempts, int rejects, double avg_lat, double normal_lat) {
+    double final_amp = avg_lat / normal_lat;
+    std::printf("\n%s------------------------------------------------------------%s\n", frame().c_str(), reset().c_str());
+    std::printf("%s[+] DATASET GENERATION COMPLETE%s\n", safe().c_str(), reset().c_str());
+    std::printf("  %sTotal Generated:       %s %d packets\n", label().c_str(), reset().c_str(), generated);
+    std::printf("  %sTotal Mutation Trials: %s %d\n", label().c_str(), reset().c_str(), total_attempts);
+    std::printf("  %sTotal Discarded/Rejects:%s %d (Rejection Rate: %.1f%%)\n", 
+                label().c_str(), reset().c_str(), rejects, (rejects * 100.0 / total_attempts));
+    std::printf("  %sMean Dataset Latency:  %s %.3f ms (%s%.2fx normal%s)\n", 
+                label().c_str(), reset().c_str(), avg_lat / 1e6, crit().c_str(), final_amp, reset().c_str());
+    std::printf("%s============================================================%s\n\n", frame().c_str(), reset().c_str());
+    std::fflush(stdout);
+}
+
 }  // namespace qos_harness
