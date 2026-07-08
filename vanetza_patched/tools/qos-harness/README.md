@@ -261,12 +261,14 @@ The virtual CPU budget ($B$) acts as the FSM's central state coordinator.
 
 The virtual budget is mapped to the packet sampling rate ($S \in [S_{\text{base}}, 1.0]$) using a piecewise continuous function defined by thresholds $\tau_1 = 70.0$ and $\tau_2 = 40.0$:
 
-$$S(B) = \begin{cases} 
-1.0 & \text{if } B \le \tau_2 \\
-1.0 - 0.5 \times \left(\frac{B - \tau_2}{\tau_1 - \tau_2}\right) & \text{if } \tau_2 < B \le \tau_1 \\
-0.5 - (0.5 - S_{\text{base}}) \times \left(\frac{B - \tau_1}{B_{\text{max}} - \tau_1}\right) & \text{if } \tau_1 < B < B_{\text{max}} \\
-S_{\text{base}} & \text{if } B = B_{\text{max}}
-\end{cases}$$
+- **If $B \le \tau_2$ (High Alert / Inspect All)**:
+  $$S(B) = 1.0$$
+- **If $\tau_2 < B \le \tau_1$ (Elevated Threat)**:
+  $$S(B) = 1.0 - 0.5 \times \left(\frac{B - \tau_2}{\tau_1 - \tau_2}\right)$$
+- **If $\tau_1 < B < B_{\text{max}}$ (Light Jitter / Stochastic Mode)**:
+  $$S(B) = 0.5 - (0.5 - S_{\text{base}}) \times \left(\frac{B - \tau_1}{B_{\text{max}} - \tau_1}\right)$$
+- **If $B = B_{\text{max}}$ (Safe Peacetime)**:
+  $$S(B) = S_{\text{base}}$$
 
 For every packet, a high-speed Xorshift32 pseudo-random generator decides validation entry:
 $$\text{inspect} \leftarrow (\text{Xorshift32}() \pmod{100} < S(B) \times 100)$$
