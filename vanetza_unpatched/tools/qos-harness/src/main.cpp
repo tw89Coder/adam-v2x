@@ -95,6 +95,7 @@ int main(int argc, char* argv[]) {
     bool disable_safety = false;
     bool has_custom_policy = false;
     bool enable_trace = false;
+    unsigned int seed = 42;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -141,8 +142,14 @@ int main(int argc, char* argv[]) {
             attack_mode = std::atoi(argv[++i]);
         } else if (arg == "--trace") {
             enable_trace = true;
+        } else if (arg == "--seed" && i + 1 < argc) {
+            seed = std::atoi(argv[++i]);
         }
     }
+    
+    // Configure simulation random seed
+    srand(seed);
+    std::cout << "[*] Configured simulation random seed: " << seed << "\n";
     
     // Defensive check: Assert ONNX cannot run without FSM pre-filter enabled
     if (enable_onnx && !enable_filter) {

@@ -12,6 +12,11 @@
 #include "qos_harness/traffic_generator.hpp"
 #include <cstdlib>
 #include <algorithm>
+#include <vanetza/common/byte_buffer_sink.hpp>
+#include <vanetza/common/serialization_buffer.hpp>
+#include <vanetza/security/v2/certificate.hpp>
+#include <vanetza/security/v2/signer_info.hpp>
+#include <boost/iostreams/stream.hpp>
 
 namespace qos_harness {
 
@@ -117,19 +122,119 @@ vanetza::ByteBuffer TrafficGenerator::floodDeepNested(size_t n) {
     }
     return buf;
 }
+int TrafficGenerator::s_last_depth = 0;
+
+int TrafficGenerator::getLastGeneratedDepth() {
+    return s_last_depth;
+}
+
+namespace {
+
+vanetza::security::v2::Certificate createNestedCert(int depth, size_t padding_size) {
+    using namespace vanetza::security::v2;
+    Certificate cert;
+    cert.subject_info.subject_type = SubjectType::Authorization_Authority;
+
+    if (depth > 0) {
+        cert.signer_info = createNestedCert(depth - 1, padding_size);
+    } else {
+        cert.signer_info = nullptr;
+    }
+
+    vanetza::security::EcdsaSignature sig;
+    vanetza::security::X_Coordinate_Only x_coord;
+    x_coord.x.assign(32, 0x02);
+    sig.R = x_coord;
+    sig.s.assign(32, 0x02);
+    cert.signature = sig;
+
+    if (depth == 0 && padding_size > 0) {
+        vanetza::ByteBuffer dummy_ssp(padding_size, 0x02);
+        cert.add_permission(36, dummy_ssp);
+    }
+
+    return cert;
+}
+
+vanetza::ByteBuffer serializeSignerInfo(const vanetza::security::v2::SignerInfo& info) {
+    using namespace vanetza;
+    ByteBuffer buf;
+    byte_buffer_sink sink(buf);
+    boost::iostreams::stream_buffer<byte_buffer_sink> stream(sink);
+    OutputArchive ar(stream);
+    vanetza::security::v2::serialize(ar, info);
+    stream.close();
+    return buf;
+}
+
+} // namespace
+
+vanetza::ByteBuffer TrafficGenerator::floodStructuralNested(size_t n) {
+    using namespace vanetza::security::v2;
+    if (n == 0) return {};
+
+    // Base size for 1 layer of nested certificate without padding is around 70 bytes.
+    if (n < 70) {
+        s_last_depth = 1;
+        return vanetza::ByteBuffer(n, 0x02);
+    }
+
+    int best_depth = 0;
+    for (int d = 1; d <= 50; ++d) {
+        Certificate cert = createNestedCert(d, 0);
+        SignerInfo s_info = cert;
+        vanetza::ByteBuffer test_buf = serializeSignerInfo(s_info);
+        if (test_buf.size() <= n) {
+            best_depth = d;
+        } else {
+            break;
+        }
+    }
+
+    if (best_depth == 0) {
+        s_last_depth = 1;
+        return vanetza::ByteBuffer(n, 0x02);
+    }
+
+    s_last_depth = best_depth;
+
+    Certificate base_cert = createNestedCert(best_depth, 0);
+    size_t base_size = serializeSignerInfo(base_cert).size();
+    size_t padding_guess = (n > base_size) ? n - base_size : 0;
+
+    for (int trial = 0; trial < 100; ++trial) {
+        Certificate cert = createNestedCert(best_depth, padding_guess);
+        vanetza::ByteBuffer buf = serializeSignerInfo(cert);
+        if (buf.size() == n) {
+            return buf;
+        } else if (buf.size() > n) {
+            if (padding_guess > 0) {
+                padding_guess--;
+            } else {
+                break;
+            }
+        } else {
+            padding_guess++;
+        }
+    }
+
+    vanetza::ByteBuffer fallback_buf(n, 0x02);
+    return fallback_buf;
+}
 
 /**
  * @brief Factory class loading available flood strategies.
  */
 std::vector<std::pair<std::string, FloodStrategy>> TrafficGenerator::makeStrategies() {
     return {
-        { "flat-0x02 (INTEGER tags)",          floodFlat02            },
-        { "flat-0x03 (BIT STRING tags)",       floodFlat03            },
-        { "flat-0x04 (OCTET STRING tags)",     floodFlat04            },
-        { "valid INTEGER triples 02 01 00",    floodValidIntegers     },
-        { "large INTEGER 02 82 xx xx",         floodLargeIntegers     },
-        { "SEQUENCE of INTEGER triples",       floodSequenceOfIntegers},
-        { "deep nested SEQUENCE headers",      floodDeepNested        },
+        { "flat-0x02 (INTEGER tags)",                         floodFlat02            },
+        { "flat-0x03 (BIT STRING tags)",                      floodFlat03            },
+        { "flat-0x04 (OCTET STRING tags)",                    floodFlat04            },
+        { "valid INTEGER triples 02 01 00",                   floodValidIntegers     },
+        { "large INTEGER 02 82 xx xx",                        floodLargeIntegers     },
+        { "SEQUENCE of INTEGER triples",                      floodSequenceOfIntegers},
+        { "deep nested SEQUENCE headers",                     floodDeepNested        },
+        { "structural nested Certificate (C++ serialized)",   floodStructuralNested  },
     };
 }
 
