@@ -203,9 +203,9 @@ graph TD
    - Triggers `srand(seed)` at startup. This eliminates random packet scheduling variances during simulation, guaranteeing identical runs across co-sim evaluations.
 2. **Dense ASN.1 Exploit Calibration (`traffic_generator.cpp`)**:
    - Programmed the `flat-0x02` generator to align exactly with OER tag-version parsing patterns (1 byte for `SignerInfoType::Certificate`, 1 byte for inner `version=2`). 
-   - This achieves maximum possible recursion depth density ($\text{depth} = \text{flood\_size} / 2$) within MTU boundaries, ensuring a clean worst-case latency profiling curve.
+   - This achieves maximum possible recursion depth density (`depth = flood_size / 2`) within MTU boundaries, ensuring a clean worst-case latency profiling curve.
 3. **Exploit Payload Synchronization (`amplification_profiler.cpp`)**:
-   - On `unpatched` runs, worst-case binary packets are saved to `outputs/amp_packets/` with metadata filenames (e.g. `_depth144.bin`).
+   - On `unpatched` runs, worst-case binary packets are saved to `outputs/amp_packets/` with metadata filenames (e.g., `_depth144.bin`).
    - On `patched` runs, these exact binary files are loaded and evaluated. This guarantees a scientifically sound comparison under the same exploit binaries.
 4. **Noise Self-Correction & Auto-Retry Loop (`amplification_profiler.cpp`)**:
    - Restored runs per packet size to `10000` to maintain robust statistical confidence.
