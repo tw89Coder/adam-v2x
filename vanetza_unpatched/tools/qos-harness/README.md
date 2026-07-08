@@ -74,8 +74,6 @@ The real-time status output utilizes standard ASCII box borders. To prevent line
 
 ---
 
----
-
 ## CWE-674 Profiling & Mitigation Architecture
 
 To evaluate the CWE-674 Workload Amplification vulnerability (recursive certificate parsing) and verify the patch, we updated the C++ benchmarking kernel with a reproducible, noise-resilient profiling architecture. Below is the multi-layered design mapping.
@@ -169,14 +167,14 @@ This layer demonstrates how the parser interprets the `flat-0x02` (Dense ASN.1) 
 #### Unpatched Vulnerable Flow (Recursive Stack Exhaustion)
 ```mermaid
 graph TD
-    subgraph Input Stream [flat-0x02 Exploit Payload]
+    subgraph InputStream [flat-0x02 Exploit Payload]
         byte0[Byte 0: 0x02 Tag] --> byte1[Byte 1: 0x02 Version]
         byte1 --> byte2[Byte 2: 0x02 Tag]
         byte2 --> byte3[Byte 3: 0x02 Version]
         byte3 --> eof[...]
     end
 
-    subgraph Unpatched Stack [CWE-674 Infinite Recursion]
+    subgraph UnpatchedStack [CWE-674 Infinite Recursion]
         direction TB
         un_dec[deserialize secured_message] -->|reads 0x02 Tag| un_sinfo[deserialize signer_info]
         un_sinfo -->|deserializes Certificate field| un_cert[deserialize certificate]
@@ -185,7 +183,7 @@ graph TD
         un_inner_cert -->|repeats up to 668 times| overflow[Stack Overflow / High CPU Overhead]
     end
 
-    Input Stream -->|Infinite Tag-Version Pairs| Unpatched Stack
+    InputStream -->|Infinite Tag-Version Pairs| UnpatchedStack
 ```
 
 #### Patched Mitigated Flow (Security Guard Interception)
