@@ -8,7 +8,7 @@ This directory houses the C++ benchmarking evaluation kernel for the V2X ratio-c
 
 A major engineering focus was minimizing latency and overhead during interactive Python-C++ co-simulation. Standard serialization formats (like JSON) introduce severe text encoding/decoding latency and frequent memory allocations, which distort simulation timing. 
 
-To resolve this, we implemented a Zero-Allocation C-Struct Binary Layout:
+To resolve this, we implemented a Zero-Allocation Binary Struct Wire Protocol:
 
 ```mermaid
 sequenceDiagram
@@ -80,7 +80,7 @@ To evaluate the CWE-674 Workload Amplification vulnerability (recursive certific
 
 ### Layer 1: Co-Simulation & IPC Architecture (System Level)
 
-This layer manages the interactive Python-C++ co-simulation. We use a **Zero-Allocation C-Struct Binary Layout** over TCP socket connections. This bypasses text serialization overhead (like JSON/XML), ensuring that IPC latency does not distort experimental timing.
+This layer manages the interactive Python-C++ co-simulation. We use a **Zero-Allocation Binary Struct Wire Protocol** over TCP socket connections. This bypasses text serialization overhead (like JSON/XML), ensuring that IPC latency does not distort experimental timing.
 
 ```mermaid
 sequenceDiagram
@@ -352,7 +352,7 @@ If you are incorporating this benchmarking kernel into research papers, slides, 
 
 1. **Low-Latency Co-Simulation Architecture (System Level)**:
    - *Academic Value*: Solves the IPC transmission latency bottleneck in microsecond-sensitive V2X security control.
-   - *Thesis Reference*: Establishes a zero-allocation packed C-struct binary wire layout that replaces heavy text-based serializers (like JSON), preserving microsecond-accurate simulation timelines during C++ protocol execution and Python DRL agent inference.
+   - *Thesis Reference*: Establishes a zero-allocation packed C-struct binary wire protocol that replaces heavy text-based serializers (like JSON), preserving microsecond-accurate simulation timelines during C++ protocol execution and Python DRL agent inference.
 2. **Deterministic Worst-Case Vulnerability Profiling (Methodology)**:
    - *Academic Value*: Proves the absolute upper bounds of CWE-674 presentation-layer denial-of-service vulnerabilities.
    - *Thesis Reference*: Designs a systematic OER amplification profiling vector (`flat-0x02` Dense ASN.1 Exploit) which guarantees maximum recursion density (`depth = flood_size / 2`) within the physical MTU (1400-byte) boundary.
