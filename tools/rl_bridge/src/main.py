@@ -249,6 +249,8 @@ def main():
     parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
     parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     parser.add_argument("--fresh", action="store_true", help="Start training from scratch, ignoring existing checkpoints")
+    parser.add_argument("-a", "--algo", "--algorithm", dest="algo", type=str, choices=["ppo", "sac", "dqn"], default=None,
+                        help="RL algorithm to use (defaults to config/agent.yaml)")
     args = parser.parse_args()
 
     # 1. Dynamic algorithm pipeline building via registry factory
@@ -257,7 +259,7 @@ def main():
     # Load offline DataFrame telemetry if offline mode is chosen
     raw_data = load_telemetry_data(args.rate) if args.mode == "offline" else None
     
-    algo_name = RAW_CFG.get("algorithm", "ppo").lower()
+    algo_name = (args.algo or RAW_CFG.get("algorithm", "ppo")).lower()
     lr = RAW_CFG["hyperparameters"]["lr_online"] if args.mode == "online" else RAW_CFG["hyperparameters"]["lr_offline"]
     
     frame_stack = args.frame_stack if args.frame_stack is not None else FRAME_STACK
