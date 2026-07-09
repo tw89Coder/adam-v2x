@@ -36,7 +36,15 @@ public:
     static void printProbeProgress(size_t size, int idx, int count, const std::string& name, int ok, int rj,
                                    long long med);
     static void printDatasetProgress(int gen, int target, int rj, long long lat);
-    static void printSimulationProgress(int current, int total, int malware);
+    static void printDatasetHeader(long long normal_lat, long long base_poc_lat);
+    static void printHillClimbStep(int generated, int target, int attempt, int gen, int total_gens, 
+                                   long long parent_lat, long long mutant_lat, long long normal_lat, 
+                                   int rejects);
+    static void printDatasetCompleteSummary(int generated, int total_attempts, int rejects, double avg_lat, double normal_lat);
+    static void printSimulationProgress(int current, int total, int malware, 
+                                        bool enable_filter = false, 
+                                        double actual_rate = 0.0, 
+                                        double target_rate = 0.0);
 
     // Hardware-level terminal carriage eraser
     static void clearLine();

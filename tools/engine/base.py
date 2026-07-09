@@ -70,14 +70,17 @@ class BasePlotter:
 
     def export_figure(self, fig, category, filename_prefix):
         """
-        Saves the current target figure as a high-resolution raster PNG and an uncompressed vector PDF.
+        Saves the current target figure as a high-resolution raster PNG,
+        an uncompressed vector PDF, and a scalable vector SVG file.
         """
         target_dir = os.path.join(self.plots_dir, category)
         self._ensure_directory_exists(target_dir)
 
         png_path = os.path.join(target_dir, f"{filename_prefix}.png")
         pdf_path = os.path.join(target_dir, f"{filename_prefix}.pdf")
+        svg_path = os.path.join(target_dir, f"{filename_prefix}.svg")
 
         fig.savefig(png_path, dpi=300, bbox_inches='tight')
         fig.savefig(pdf_path, format='pdf', bbox_inches='tight')
-        LogStyle.log_success(f"Generated Art: [{category}] -> {filename_prefix}.{{png,pdf}}")
+        fig.savefig(svg_path, format='svg', bbox_inches='tight')
+        LogStyle.log_success(f"Generated Art: [{category}] -> {filename_prefix}.{{png,pdf,svg}}")

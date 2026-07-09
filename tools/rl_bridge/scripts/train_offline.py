@@ -23,50 +23,66 @@ if PROJECT_ROOT not in sys.path:
 
 from src.config import C_INFO, C_RESET, C_BOLD, C_WARN, C_SUCCESS, CHECKPOINT_DIR
 from src.models.policy_net import DefencePolicyNet
+from src.models.dqn_net import DQNNet
 from src.agents.v2x_agent import V2XAgent
-from src.pipelines.offline_trainer import V2XOfflinePipeline
+from src.agents.dqn_agent import DQNAgent
+from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
+from src.algorithms.ppo_learner import PPOLearner
+from src.algorithms.sac_learner import SACLearner
+from src.algorithms.dqn_learner import DQNLearner
 from src.utils.data_loader import load_telemetry_data
+from src.main import run_offline
 
 def parse_arguments():
     """
     Sets up options for sweeps, clipping boundaries, and optimization iterations.
     """
-    parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO Optimization Pipeline")
+    parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO/DQN Optimization Pipeline")
     parser.add_argument("-r", "--rate", type=str, default="mix", help="Target trace training dataset directory filter")
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
-    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic learning parameter ceiling")
+    parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter parameter ceiling")
     parser.add_argument("--clip", type=float, default=0.2, help="PPO boundary clipping limits")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
+    parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
 
     print(f"{C_INFO}┌──────────────────────────────────────────────────────────────┐{C_RESET}")
-    print(f"{C_INFO}│          DRL PPO POLICY OPTIMIZATION ENGINE SANDBOX          │{C_RESET}")
+    print(f"{C_INFO}│          DRL POLICY OPTIMIZATION ENGINE SANDBOX              │{C_RESET}")
     print(f"{C_INFO}└──────────────────────────────────────────────────────────────┘{C_RESET}")
     print(f"  ├── Hardware Context : Pytorch Device -> [ {C_BOLD}CPU{C_RESET} ]")
     print(f"  ├── Target Profile   : Anomaly Density -> [ {C_WARN}{args.rate}{C_RESET} ]")
-    print(f"  ├── Hyperparameters  : Learning Rate  -> [ {args.lr} ] | PPO Clip -> [ {args.clip} ]")
+    print(f"  ├── Hyperparameters  : Learning Rate  -> [ {args.lr} ] | PPO Clip -> [ {args.clip} ] | Algo -> [ {args.algo.upper()} ]")
 
     # Load static CSV simulation historical trajectory dumps
     raw_data = load_telemetry_data(args.rate)
 
-    # Initialize modular standardized components
-    model = DefencePolicyNet()
-    agent = V2XAgent(model)
+    # Dynamically build the offline dataset pipeline via registry factory
+    from src.utils.registry import get_algorithm_builder
+    from src.config import FRAME_STACK
     
-    # Bind dependencies to pipeline controller 
-    pipeline = V2XOfflinePipeline(agent, lr=args.lr, clip_eps=args.clip, ppo_epochs=10)
+    frame_stack = args.frame_stack if args.frame_stack is not None else FRAME_STACK
+    
+    builder = get_algorithm_builder(args.algo)
+    env, agent, learner = builder(
+        lr=args.lr,
+        port=None,
+        mode="offline",
+        raw_data=raw_data,
+        frame_stack=frame_stack
+    )
 
-    print(f"\n{C_WARN}[*] Compiling policy graphs. Executing Proximal Policy Optimization loops...{C_RESET}\n")
+    print(f"\n{C_WARN}[*] Compiling policy graphs. Executing optimization loops...{C_RESET}\n")
     
     # Launch matrix optimization execution loop
-    pipeline.train_episodes(raw_data, args.epochs)
+    run_offline(env, agent, learner, args.epochs)
 
     # Export optimized binary parameters
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     weight_output_path = f"{CHECKPOINT_DIR}/v2x_offline_r{args.rate}_e{args.epochs}.pth"
-    torch.save(model.state_dict(), weight_output_path)
+    torch.save(agent.model.state_dict(), weight_output_path)
     
     print(f"\n{C_SUCCESS}┌───────────────────────────────────────────────────────────────┐{C_RESET}")
     print(f"{C_SUCCESS}│     PROXIMAL POLICY OPTIMIZATION COMPLETE - BRAIN ALIGNED     │{C_RESET}")

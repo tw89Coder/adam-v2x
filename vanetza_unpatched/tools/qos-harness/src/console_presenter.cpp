@@ -37,7 +37,7 @@ std::string ConsolePresenter::label() { return "\033[1;34m"; } // Bold Blue
 void ConsolePresenter::printDiagnosisHeader() {
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s                VANETZA SYSTEM: FLOOD REGION DIAGNOSIS      %s│\n"
+        "│%s                VANETZA SYSTEM: FLOOD REGION DIAGNOSIS        %s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
 }
@@ -47,9 +47,9 @@ void ConsolePresenter::printDiagnosisHeader() {
  */
 void ConsolePresenter::printProfilerHeader() {
     std::printf(
-        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s          VANETZA SYSTEM: MTU AMPLIFICATION PROFILER        %s│\n"
-        "└──────────────────────────────────────────────────────────────┘%s\n\n",
+        "\n%s┌─────────────────────────────────────────────────────────────────────────────────┐\n"
+        "│%s                   VANETZA SYSTEM: MTU AMPLIFICATION PROFILER                    %s│\n"
+        "└─────────────────────────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
 }
 
@@ -114,13 +114,25 @@ void ConsolePresenter::printDatasetProgress(int gen, int target, int rj, long lo
 /**
  * @brief Prints progress details of active simulation sequences.
  */
-void ConsolePresenter::printSimulationProgress(int current, int total, int malware) {
+void ConsolePresenter::printSimulationProgress(int current, int total, int malware, 
+                                               bool enable_filter, double actual_rate, double target_rate) {
     // Appended ANSI clear sequence to vaporize any unexpected trailing shell prompt ghosts
-    std::printf("\r  %s[*] Monitoring Execution Loop:%s  %d/%d  |  %sMalware Count: %-6d%s  |  %.1f%%\033[K",
-                info().c_str(), reset().c_str(), current, total, crit().c_str(), malware, reset().c_str(),
+    std::printf("\r  %s[*] Loop:%s %7d/%7d | %sMal: %-5d%s | %5.1f%%",
+                info().c_str(), reset().c_str(), current, total, 
+                crit().c_str(), malware, reset().c_str(), 
                 100.0 * current / total);
 
-    // FIXED: Inject explicit line feed on termination frame to release carriage return scrollback lock
+    // If the filter is enabled, monitoring metrics from RL and FSM are dynamically concatenated.
+    // A = Actual (the proportion of actual F2 Sketch execution)
+    // T = Target (the target sampling rate currently determined by the FSM)
+    if (enable_filter && current > 0) {
+        std::printf(" | %sInsp[A/T]:%s %6.2f%% / %6.2f%%", 
+                    warn().c_str(), reset().c_str(), actual_rate, target_rate);
+    }
+
+    std::printf("\033[K");
+
+    // Inject explicit line feed on termination frame to release carriage return scrollback lock
     if (current >= total - 1) {
         std::printf("\n");
     }
@@ -301,12 +313,12 @@ void ConsolePresenter::printDiagnosisEndBox() {
  */
 void ConsolePresenter::printProfilerEndBox(size_t limit, const std::string& csv, const std::string& bin) {
     std::printf(
-        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│ %sTELEMETRY COLLECTION COMPLETE%s                                            │\n"
-        "│ ├── Operation Scope Limit : <= %4zu Bytes (ITS MTU Threshold)      │\n"
-        "│ ├── Target Output Records : %-48s │\n"
-        "│ └── Extracted Binary Maps : %-48s │\n"
-        "└──────────────────────────────────────────────────────────────┘%s\n\n",
+        "\n%s┌─────────────────────────────────────────────────────────────────────────────────┐\n"
+        "│ %sTELEMETRY COLLECTION COMPLETE%s                                                   │\n"
+        "│ ├── Operation Scope Limit : <= %4zu Bytes (ITS MTU Threshold)                   │\n"
+        "│ ├── Target Output Records : %-51s │\n"
+        "│ └── Extracted Binary Maps : %-51s │\n"
+        "└─────────────────────────────────────────────────────────────────────────────────┘%s\n\n",
         frame().c_str(), safe().c_str(), frame().c_str(), limit, csv.c_str(), bin.c_str(), reset().c_str());
 }
 
@@ -339,6 +351,51 @@ void ConsolePresenter::printSecurityReport(int total, int malware, int tp, int t
                   << reset();
     std::printf("  %s──────────────────────────────────────────────────────────────%s\n\n", frame().c_str(),
                 reset().c_str());
+}
+
+void ConsolePresenter::printDatasetHeader(long long normal_lat, long long base_poc_lat) {
+    std::printf("\n%s============================================================%s\n", frame().c_str(), reset().c_str());
+    std::printf("%s              REPRODUCIBLE DATASET GENERATION TOOL           %s\n", info().c_str(), reset().c_str());
+    std::printf("%s============================================================%s\n", frame().c_str(), reset().c_str());
+    std::printf("  %sNormal Safety Packet Latency:%s %7.3f ms (%lld ns)\n", 
+                label().c_str(), reset().c_str(), normal_lat / 1e6, normal_lat);
+    std::printf("  %sBase POC Exploit Latency:    %s %7.3f ms (%lld ns)\n", 
+                label().c_str(), reset().c_str(), base_poc_lat / 1e6, base_poc_lat);
+    std::printf("  %sBase Amplification Factor:   %s %7.2fx\n", 
+                label().c_str(), reset().c_str(), static_cast<double>(base_poc_lat) / normal_lat);
+    std::printf("%s------------------------------------------------------------%s\n", frame().c_str(), reset().c_str());
+    std::fflush(stdout);
+}
+
+void ConsolePresenter::printHillClimbStep(int generated, int target, int attempt, int gen, int total_gens, 
+                                         long long parent_lat, long long mutant_lat, long long normal_lat, 
+                                         int rejects) {
+    double parent_amp = static_cast<double>(parent_lat) / normal_lat;
+    double mutant_amp = static_cast<double>(mutant_lat) / normal_lat;
+    
+    std::string amp_color = (parent_amp < 5.0) ? safe() : (parent_amp < 15.0) ? warn() : crit();
+    
+    std::printf("\r  %s[Gen %2d/%2d]%s | %sP_Lat:%s %6.2f ms (%s%.1fx%s) | %sM_Lat:%s %6.2f ms (%6.1fx) | %sFound:%s %d/%d | %sRj:%s %d\033[K",
+                info().c_str(), gen, total_gens, reset().c_str(),
+                label().c_str(), reset().c_str(), parent_lat / 1e6, amp_color.c_str(), parent_amp, reset().c_str(),
+                label().c_str(), reset().c_str(), mutant_lat / 1e6, mutant_amp,
+                safe().c_str(), reset().c_str(), generated, target,
+                crit().c_str(), reset().c_str(), rejects);
+    std::fflush(stdout);
+}
+
+void ConsolePresenter::printDatasetCompleteSummary(int generated, int total_attempts, int rejects, double avg_lat, double normal_lat) {
+    double final_amp = avg_lat / normal_lat;
+    std::printf("\n%s------------------------------------------------------------%s\n", frame().c_str(), reset().c_str());
+    std::printf("%s[+] DATASET GENERATION COMPLETE%s\n", safe().c_str(), reset().c_str());
+    std::printf("  %sTotal Generated:       %s %d packets\n", label().c_str(), reset().c_str(), generated);
+    std::printf("  %sTotal Mutation Trials: %s %d\n", label().c_str(), reset().c_str(), total_attempts);
+    std::printf("  %sTotal Discarded/Rejects:%s %d (Rejection Rate: %.1f%%)\n", 
+                label().c_str(), reset().c_str(), rejects, (rejects * 100.0 / total_attempts));
+    std::printf("  %sMean Dataset Latency:  %s %.3f ms (%s%.2fx normal%s)\n", 
+                label().c_str(), reset().c_str(), avg_lat / 1e6, crit().c_str(), final_amp, reset().c_str());
+    std::printf("%s============================================================%s\n\n", frame().c_str(), reset().c_str());
+    std::fflush(stdout);
 }
 
 }  // namespace qos_harness

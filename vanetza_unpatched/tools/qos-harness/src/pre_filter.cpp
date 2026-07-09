@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <x86intrin.h>
 
 AdaptiveFilterFSM::AdaptiveFilterFSM()
     : current_budget(MAX_BUDGET), rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {}
@@ -127,6 +128,9 @@ int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
  * @return true if the packet was flagged as anomalous and should be dropped, false otherwise.
  */
 bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
+    last_inspected_ = false;
+    last_latency_ticks_ = 0;
+
     // Fast path: Packets smaller than the window size cannot contain recursive recursion bombs
     if (buf.size() < static_cast<size_t>(WINDOW_SIZE)) {
         current_budget = std::min(MAX_BUDGET, current_budget + RECOVERY_RATE);
@@ -157,7 +161,12 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
 
     // Run sliding window inspection if selected by the sampling gate
     if (inspect) {
+        last_inspected_ = true;
+        uint64_t start_ticks = __rdtsc();
         max_sum_sq = calculate_max_sum_sq(buf);
+        uint64_t end_ticks = __rdtsc();
+        last_latency_ticks_ = (end_ticks >= start_ticks) ? (end_ticks - start_ticks) : 0;
+        
         is_anomalous = (max_sum_sq > SQ_THRESHOLD);
     }
 

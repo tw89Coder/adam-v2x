@@ -23,6 +23,8 @@ public:
      * @brief Composes and returns the list of available ASN.1 workload amplification strategies.
      */
     static std::vector<std::pair<std::string, FloodStrategy>> makeStrategies();
+    static int getLastGeneratedDepth();
+    static vanetza::ByteBuffer floodStructuralNested(size_t n);
 
 private:
     static vanetza::ByteBuffer floodFlat02(size_t n);
@@ -32,6 +34,8 @@ private:
     static vanetza::ByteBuffer floodLargeIntegers(size_t n);
     static vanetza::ByteBuffer floodSequenceOfIntegers(size_t n);
     static vanetza::ByteBuffer floodDeepNested(size_t n);
+
+    static int s_last_depth;
 };
 
 } // namespace qos_harness
