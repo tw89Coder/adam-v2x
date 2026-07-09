@@ -25,13 +25,13 @@ import torch
 import argparse
 
 from src.config import MAX_PACKET_SIZE, MAX_F2_SQ, C_INFO, C_SUCCESS, C_WARN, C_ERROR, C_RESET, RAW_CFG, ONLINE_BRAIN_PATH
-from src.models.policy_net import DefencePolicyNet
-from src.agents.v2x_agent import V2XAgent
 from src.utils.network_io import NetworkIOHelper
+from src.envs.translators import DqnActionTranslator, PpoActionTranslator
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="V2X DRL Production Serving Console")
     parser.add_argument("-m", "--model", type=str, default=None, help="Target optimized brain checkpoint path")
+    parser.add_argument("-a", "--algorithm", type=str, default=None, choices=["dqn", "ppo"], help="DRL algorithm selection")
     return parser.parse_args()
 
 def main():
@@ -84,23 +84,56 @@ def main():
                 print(f"\n      {C_INFO}(No other .pth checkpoint files found in '{checkpoint_dir}' directory){C_RESET}")
         sys.exit(1)
 
-    # Construct network topology and map structural parameters
-    model = DefencePolicyNet()
+    # 1. Load the checkpoint weights dict to inspect the model's architecture
     try:
-        model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
     except Exception as load_err:
-        print(f"{C_ERROR}[FATAL] Failed to load checkpoint binary weights!{C_RESET}")
-        print(f"  ├── {C_INFO}Target File Path{C_RESET} : {os.path.abspath(checkpoint_path)}")
-        print(f"  ├── {C_INFO}Error Message{C_RESET}    : {load_err}")
-        print(f"  └── {C_WARN}[SUGGESTION] This size/key mismatch usually occurs when your config/ppo_agent.yaml structure")
-        print(f"      (e.g., hidden_layers or active action space dimensions) does not match the loaded checkpoint.")
-        print(f"      Please either train a new model to overwrite it, delete the old file, or point to a new checkpoint.")
+        print(f"{C_ERROR}[FATAL] Failed to read checkpoint weights file: {load_err}{C_RESET}")
         sys.exit(1)
+
+    # 2. Inspect keys to dynamically auto-detect architecture specs (PPO vs. DQN)
+    is_dqn = 'net.0.weight' in checkpoint
+    is_ppo = 'shared_layer.0.weight' in checkpoint
+
+    if is_dqn:
+        try:
+            input_dim = checkpoint['net.0.weight'].shape[1]
+            hidden_dim = checkpoint['net.0.weight'].shape[0]
+            action_dim = checkpoint['net.4.weight'].shape[0]
+            print(f"  ├── {C_INFO}Detected DQN Model{C_RESET}     : Inputs={input_dim} | Actions={action_dim} | Hidden={hidden_dim}")
+        except KeyError as key_err:
+            print(f"{C_ERROR}[FATAL] DQN Checkpoint missing standard key: {key_err}{C_RESET}")
+            sys.exit(1)
+            
+        from src.models.dqn_net import DQNNet
+        model = DQNNet(state_dim=input_dim, action_dim=action_dim, hidden_dim=hidden_dim)
+        model.load_state_dict(checkpoint)
+        model.eval()
         
-    # Force evaluation mode to deactivate stochastic exploration noise
-    model.eval() 
-    agent = V2XAgent(model)
-    print(f"  ├── {C_INFO}Asset Status{C_RESET}  : Optimized Brain verified and locked in production mode.")
+        translator = DqnActionTranslator()
+        print(f"  ├── {C_INFO}Asset Status{C_RESET}  : DQN model loaded and locked in production mode.")
+
+    elif is_ppo:
+        try:
+            input_dim = checkpoint['shared_layer.0.weight'].shape[1]
+            hidden_dim = checkpoint['shared_layer.0.weight'].shape[0]
+            action_dim = checkpoint['actor_head.0.weight'].shape[0]
+            has_two_shared_layers = 'shared_layer.2.weight' in checkpoint
+            print(f"  ├── {C_INFO}Detected PPO Model{C_RESET}     : Inputs={input_dim} | Actions={action_dim} | Double Shared Layer={has_two_shared_layers}")
+        except KeyError as key_err:
+            print(f"{C_ERROR}[FATAL] PPO Checkpoint missing standard key: {key_err}{C_RESET}")
+            sys.exit(1)
+
+        from src.models.policy_net import DefencePolicyNet
+        model = DefencePolicyNet()
+        model.load_state_dict(checkpoint)
+        model.eval()
+
+        translator = PpoActionTranslator()
+        print(f"  ├── {C_INFO}Asset Status{C_RESET}  : PPO model loaded and locked in production mode.")
+    else:
+        print(f"{C_ERROR}[FATAL] Unknown network weight architecture layout inside checkpoint!{C_RESET}")
+        sys.exit(1)
 
     # Instantiate loopback IPv4 TCP socket infrastructure
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -120,8 +153,8 @@ def main():
         while True:
             client_socket, _ = server_socket.accept()
             try:
-                raw_data = client_socket.recv(1024).decode('utf-8')
-                metrics = NetworkIOHelper.parse_telemetry(raw_data)
+                raw_bytes = client_socket.recv(40)
+                metrics = NetworkIOHelper.parse_telemetry(raw_bytes)
                 if metrics is None:
                     client_socket.close()
                     continue
@@ -134,11 +167,14 @@ def main():
                 
                 # Execute deterministic inference without exploration variance
                 with torch.no_grad():
-                    action_mean, _ = model(state_tensor)
+                    if is_dqn:
+                        q_values = model(state_tensor.unsqueeze(0))
+                        action_idx = q_values.argmax(dim=-1).item()
+                        safe_actions = translator.translate(action_idx, metrics["instant_sampling_rate"])
+                    else:
+                        action_mean, _ = model(state_tensor)
+                        safe_actions = translator.translate(action_mean.tolist(), metrics["instant_sampling_rate"])
                 
-                # Use the dynamic Action Adapter to scale, map, and enforce safety boundaries
-                raw_actions, safe_actions = agent.map_actions_to_environment(action_mean)
-
                 # Serialize payload and respond to C++ FSM gate
                 response = NetworkIOHelper.serialize_policy(safe_actions)
                 client_socket.send(response)

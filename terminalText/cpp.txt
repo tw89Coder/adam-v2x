@@ -1,0 +1,532 @@
+Environment for 'omnetpp-6.1' in directory '/home/ken4506/simulation/omnetpp-6.1' is ready.
+(base) ken4506@netprod1:~$ conda activate vanetza
+(vanetza) ken4506@netprod1:~$ cd /shared/CSE625_QoS/
+(vanetza) ken4506@netprod1:/shared/CSE625_QoS$ bash run_experiments.sh unpatched --train-rl -r "10.0 5.0 1.0 0.75 0.5 0.25 0.1"
+[NOTICE] Initializing Collaborative DRL Core Infrastructure Server Connection...
+[STAGE] Task Lock Active: Target=unpatched | Modes=0 1 2 | Automation Flags=--rl (Core: 9)
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=10.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 10% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 20094   |  2  [*] Monit   [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 90020   |   [*] Monitoring Execution Loop:  950000/1000000  |  Malware   [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 99928   |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 99928 vectors
+  ├── True Positives (Blocked) : 99928  (Control Secure)
+  ├── True Negatives (Passed)  : 900072 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 0      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_10.0_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=5.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 2477    |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 5021    |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 7506    |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 9949    |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 12379   |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 14883   |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 17359   |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 19800   |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 22408   |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 24804   |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 27297   |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 29774   |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 32234   |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 34830   |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 37320   |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 39831   |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 42363   |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 44830   |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 47297   |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 49706   |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 49706 vectors
+  ├── True Positives (Blocked) : 49706  (Control Secure)
+  ├── True Negatives (Passed)  : 950294 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 0      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_5.0_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=1.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 513     |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 1032    |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 1547    |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 2047    |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 2528    |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 3044    |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 3556    |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 4053    |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 4577    |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 5052    |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 5549    |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 6045    |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 6545    |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 7046    |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 7538    |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 8038    |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 8507    |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 8998    |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 9486    |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 9991    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 9991 vectors
+  ├── True Positives (Blocked) : 9991   (Control Secure)
+  ├── True Negatives (Passed)  : 990009 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 0      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_1.0_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=0.75%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 0.75% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 368     |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 775     |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 1167    |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 1540    |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 1906    |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 2292    |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 2672    |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 3053    |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 3452    |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 3796    |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 4167    |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 4543    |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 4903    |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 5280    |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 5651    |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 6023    |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 6361    |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 6736    |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 7105    |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 7467    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 7467 vectors
+  ├── True Positives (Blocked) : 7464   (Control Secure)
+  ├── True Negatives (Passed)  : 992533 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 3      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.0401768%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.8_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=0.5%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 0.5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 246     |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 514     |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 779     |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 1024    |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 1267    |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 1520    |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 1779    |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 2033    |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 2305    |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 2542    |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 2796    |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 3041    |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 3291    |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 3554    |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 3799    |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 4052    |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 4289    |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 4549    |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 4787    |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 5021    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 5021 vectors
+  ├── True Positives (Blocked) : 5010   (Control Secure)
+  ├── True Negatives (Passed)  : 994979 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 11     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.21908%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.5_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=0.25%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 0.25% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 114     |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 238     |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 367     |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 482     |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 605     |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 730     |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 870     |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 997     |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 1121    |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 1240    |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 1368    |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 1495    |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 1607    |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 1736    |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 1851    |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 1965    |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 2092    |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 2221    |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 2338    |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 2464    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 2464 vectors
+  ├── True Positives (Blocked) : 2403   (Control Secure)
+  ├── True Negatives (Passed)  : 997536 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 61     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 2.47565%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.2_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=0, rate=0.1%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 0 | Rate: 0.1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 44      |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 96      |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 146     |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 196     |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 242     |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 298     |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 350     |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 402     |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 453     |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 501     |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 553     |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 597     |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 632     |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 680     |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 724     |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 774     |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 823     |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 879     |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 930     |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 989     |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 989 vectors
+  ├── True Positives (Blocked) : 948    (Control Secure)
+  ├── True Negatives (Passed)  : 999011 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 41     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 4.1456%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.1_mode0_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=10.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 10% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 0       |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 5027    |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 9964    |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count: 15146   |  [*] Monitoring Execution Loop:  500000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  550000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  600000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  650000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  700000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  750000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  800000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  850000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  900000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  950000/1000000  |  Malware Count: 20051   |  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 20051   |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 20051 vectors
+  ├── True Positives (Blocked) : 20003  (Control Secure)
+  ├── True Negatives (Passed)  : 979949 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 48     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.23939%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_10.0_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=5.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  0/1000000  |  Malware Count: 0       |  0.0  [*] Monitoring Execution Loop:  50000/1000000  |  Malware Count: 0       |   [*] Monitoring Execution Loop:  100000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  150000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  200000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  250000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  300000/1000000  |  Malware Count: 0       |  [*] Monitoring Execution Loop:  350000/1000000  |  Malware Count: 2476    |  [*] Monitoring Execution Loop:  400000/1000000  |  Malware Count: 4917    |  [*] Monitoring Execution Loop:  450000/1000000  |  Malware Count:  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 9921    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 9921 vectors
+  ├── True Positives (Blocked) : 9893   (Control Secure)
+  ├── True Negatives (Passed)  : 990079 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 28     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.28223%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_5.0_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=1.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 2008    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 2008 vectors
+  ├── True Positives (Blocked) : 2008   (Control Secure)
+  ├── True Negatives (Passed)  : 997992 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 0      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_1.0_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=0.75%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 0.75% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 1504    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 1504 vectors
+  ├── True Positives (Blocked) : 1497   (Control Secure)
+  ├── True Negatives (Passed)  : 998496 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 7      (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.465426%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.8_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=0.5%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 0.5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 1022    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 1022 vectors
+  ├── True Positives (Blocked) : 1000   (Control Secure)
+  ├── True Negatives (Passed)  : 998978 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 22     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 2.15264%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.5_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=0.25%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 0.25% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 510     |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 510 vectors
+  ├── True Positives (Blocked) : 466    (Control Secure)
+  ├── True Negatives (Passed)  : 999490 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 44     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 8.62745%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.2_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=1, rate=0.1%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 1 | Rate: 0.1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 203     |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 203 vectors
+  ├── True Positives (Blocked) : 190    (Control Secure)
+  ├── True Negatives (Passed)  : 999797 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 13     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 6.40394%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.1_mode1_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=10.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 10% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 50077   |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 50077 vectors
+  ├── True Positives (Blocked) : 50044  (Control Secure)
+  ├── True Negatives (Passed)  : 949923 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 33     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.0658985%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_10.0_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=5.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 24692   |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 24692 vectors
+  ├── True Positives (Blocked) : 24619  (Control Secure)
+  ├── True Negatives (Passed)  : 975308 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 73     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.295642%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_5.0_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=1.0%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 5002    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 5002 vectors
+  ├── True Positives (Blocked) : 4978   (Control Secure)
+  ├── True Negatives (Passed)  : 994998 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 24     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 0.479808%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_1.0_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=0.75%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 0.75% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 3747    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 3747 vectors
+  ├── True Positives (Blocked) : 3694   (Control Secure)
+  ├── True Negatives (Passed)  : 996253 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 53     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 1.41446%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.8_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=0.5%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 0.5% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 2492    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 2492 vectors
+  ├── True Positives (Blocked) : 2429   (Control Secure)
+  ├── True Negatives (Passed)  : 997508 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 63     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 2.52809%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.5_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=0.25%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 0.25% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 1238    |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 1238 vectors
+  ├── True Positives (Blocked) : 1179   (Control Secure)
+  ├── True Negatives (Passed)  : 998762 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 59     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 4.76575%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.2_mode2_rl.csv
+----------------------------------------------------------------------
+[EXEC] Pushing dynamic training trace trajectory: mode=2, rate=0.1%...
+[*] Loaded base normal packet: 325 bytes
+[*] Loaded 1001 attack packet variants from /shared/CSE625_QoS/inputs/attack_vectors/malware/
+[*] Loaded 1 normal packet variants from /shared/CSE625_QoS/inputs/base_packets/
+[*] Mode: 2 | Rate: 0.1% | Filter: ON | ONNX: OFF
+[*] Starting QoS Measurement...
+  [*] Monitoring Execution Loop:  999999/1000000  |  Malware Count: 504     |  100.0%
+
+[*] Simulation complete. Writing data to disk...
+
+┌──────────────────────────────────────────────────────────────┐
+│               AdaptiveFilterFSM SECURITY MONITOR REPORT      │
+└──────────────────────────────────────────────────────────────┘
+  ├── Total Traffic Audited    : 1000000 frames
+  ├── Exploit Injections Found : 504 vectors
+  ├── True Positives (Blocked) : 420    (Control Secure)
+  ├── True Negatives (Passed)  : 999496 (Nominal Safe)
+  ├── False Positives (SelfDoS): 0      (Service Disruption)
+  └── False Negatives (Missed) : 84     (Latency Overflow Risk)
+  ├── False Positive Rate (FPR) : 0.00%
+  └── False Negative Rate (FNR) : 16.6667%
+  ──────────────────────────────────────────────────────────────
+
+[+] Saved to /shared/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_0.1_mode2_rl.csv
+----------------------------------------------------------------------
+[SUCCESS] Interactive RL training pipeline execution complete. Telemetry converged.

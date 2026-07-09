@@ -17,7 +17,7 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
     """
     Offline Environment simulating V2X co-simulation telemetry streams using historical CSV datasets.
     """
-    def __init__(self, raw_data: pd.DataFrame):
+    def __init__(self, raw_data: pd.DataFrame, action_translator: Any = None, reward_strategy: Any = None):
         self.raw_data = raw_data
         self.total_packets = len(raw_data)
         self.num_windows = self.total_packets // WINDOW_SIZE
@@ -29,46 +29,47 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
         self.sensitivity_threshold = r_cfg["anomaly_sensitivity_threshold"]
         self.w_active = r_cfg["active_attack_weights"]
         self.w_nominal = r_cfg["nominal_traffic_weights"]
+        
+        # Strategy Pattern initialization
+        from src.envs.translators import PpoActionTranslator
+        from src.envs.rewards import PpoSurrogateReward
+        
+        self.action_translator = action_translator or PpoActionTranslator()
+        self.reward_strategy = reward_strategy or PpoSurrogateReward(
+            self.sensitivity_threshold, self.w_active, self.w_nominal
+        )
+        self.action_space = self.action_translator.get_action_space()
 
-    def build_state_tensor(self, avg_size: float, avg_sq: float, anomaly_rate: float) -> torch.Tensor:
+    def build_state_tensor(self, current_rate: float, avg_sq: float, anomaly_rate: float) -> torch.Tensor:
         """
         Constructs normalized 3-dimensional state Tensor.
         """
-        norm_size = avg_size / MAX_PACKET_SIZE
+        import numpy as np
+        # Defensive validation against corrupt or out-of-bound dataset entries
+        current_rate = float(np.clip(current_rate, 0.0, 1.0)) if np.isfinite(current_rate) else 0.05
+        avg_sq = float(np.clip(avg_sq, 0.0, MAX_F2_SQ)) if np.isfinite(avg_sq) else 0.0
+        anomaly_rate = float(np.clip(anomaly_rate, 0.0, 1.0)) if np.isfinite(anomaly_rate) else 0.0
+
         norm_sq = avg_sq / MAX_F2_SQ
-        return torch.tensor([norm_size, norm_sq, anomaly_rate], dtype=torch.float32)
+        return torch.tensor([current_rate, norm_sq, anomaly_rate], dtype=torch.float32)
 
     def extract_state_from_df(self, df_slice: pd.DataFrame) -> torch.Tensor:
         """
         Parses packet lists from window slices into normalized states.
         """
-        avg_size = df_slice["packet_size"].mean()
         avg_sq = df_slice["max_sum_sq"].mean()
         anomaly_rate = df_slice["is_anomalous"].mean()
-        return self.build_state_tensor(avg_size, avg_sq, anomaly_rate)
-
-    def compute_surrogate_reward(self, serialized_actions: list, anomaly_rate: float, current_budget: float) -> float:
-        """
-        Calculates environmental surrogate multi-objective reward matching the online formula.
-        """
-        pred_recovery = serialized_actions[0]
-        pred_penalty = serialized_actions[1]
-        pred_sq_thresh = serialized_actions[2]
-        pred_base_sampling = serialized_actions[3]
         
-        if anomaly_rate > self.sensitivity_threshold:
-            reward = (
-                (pred_penalty * self.w_active["penalty_scale"]) + 
-                (600.0 - pred_sq_thresh) * self.w_active["sq_thresh_scale"] - 
-                (1.0 - current_budget / 100.0) * self.w_active["budget_violation_scale"]
-            )
-        else:
-            reward = (
-                (pred_recovery * self.w_nominal["recovery_scale"]) + 
-                (pred_sq_thresh - 600.0) * self.w_nominal["sq_overhead_scale"] -
-                (pred_base_sampling * self.w_nominal["overhead_penalty_scale"])
-            )
-        return float(reward)
+        # Extract budget and convert to rate to match online socket env
+        current_budget = df_slice["current_budget"].mean()
+        import numpy as np
+        if not np.isfinite(current_budget) or current_budget < 0.0 or current_budget > 100.0:
+            current_budget = float(np.clip(current_budget, 0.0, 100.0))
+            if not np.isfinite(current_budget):
+                current_budget = 100.0
+        current_rate = current_budget / 100.0
+        
+        return self.build_state_tensor(current_rate, avg_sq, anomaly_rate)
 
     def reset(self) -> torch.Tensor:
         """
@@ -78,7 +79,7 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
         window_slice = self.raw_data.iloc[0 : WINDOW_SIZE]
         return self.extract_state_from_df(window_slice)
 
-    def step(self, action: list) -> Tuple[torch.Tensor, float, bool, Dict[str, Any]]:
+    def step(self, action: Any) -> Tuple[torch.Tensor, float, bool, Dict[str, Any]]:
         """
         Performs observation sliding window evaluation step.
         """
@@ -94,15 +95,37 @@ class V2XOfflineDatasetEnv(BaseV2XEnv):
         anomaly_rate = window_slice["is_anomalous"].mean()
         current_budget = window_slice["current_budget"].mean()
         
-        # Calculate rewards
-        reward = self.compute_surrogate_reward(action, anomaly_rate, current_budget)
+        # Defensive validation: clamp budget to valid range [0.0, 100.0] and handle underflow garbage values
+        import numpy as np
+        if not np.isfinite(current_budget) or current_budget < 0.0 or current_budget > 100.0:
+            current_budget = float(np.clip(current_budget, 0.0, 100.0))
+            if not np.isfinite(current_budget):
+                current_budget = 100.0 # Default fallback to full budget
+                
+        current_rate = current_budget / 100.0  # Scale budget to [0.0, 1.0] for translation
+        
+        # Translate the action to C++ FSM 4D policy parameters using the strategy
+        action_policy = self.action_translator.translate(action, current_rate)
+        
+        # Compute reward using the reward strategy
+        # Prepare metrics dictionary matching online socket structure
+        metrics = {
+            "anomaly_rate": anomaly_rate,
+            "true_anomaly_rate": anomaly_rate,
+            "leakage_rate": 0.0,
+            "instant_sampling_rate": current_rate,
+            "avg_budget": current_rate
+        }
+        
+        # Calculate reward using the strategy
+        reward = self.reward_strategy.compute(metrics, action_policy)
         
         self.current_window += 1
         done = (self.current_window >= self.num_windows - 1)
         
         info = {
             "window_index": w,
-            "actions_sent": action
+            "actions_sent": action_policy
         }
         
         return next_state, reward, done, info
