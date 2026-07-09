@@ -45,7 +45,16 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     buffer = {
         "states": [], "actions": [], "log_probs": [],
         "rewards": [], "values": [], "next_states": [], "dones": [],
-        "leakage_rates": []
+        "leakage_rates": [],
+        "inspection_rates": [],
+        "target_sampling_rates": [],
+        "attack_intensities": [],
+        "fprs": [],
+        "fnrs": [],
+        "tp_counts": [],
+        "tn_counts": [],
+        "fp_counts": [],
+        "fn_counts": []
     }
     
     # Initialize CSV logger for recording convergence metrics
@@ -55,7 +64,27 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     log_path = os.path.join(CHECKPOINT_DIR, "training_progress.csv")
     log_file = open(log_path, mode="w", newline="", encoding="utf-8")
     log_writer = csv.writer(log_file)
-    log_writer.writerow(["update", "reward", "loss", "mean_q"])
+    log_writer.writerow([
+        "update",
+        "step",
+        "reward",
+        "batch_mean_reward",
+        "loss",
+        "mean_q",
+        "mean_target_q",
+        "avg_leakage_rate",
+        "lambda_penalty",
+        "replay_size",
+        "avg_inspection_rate",
+        "avg_target_sampling_rate",
+        "avg_attack_intensity",
+        "avg_fpr",
+        "avg_fnr",
+        "tp",
+        "tn",
+        "fp",
+        "fn",
+    ])
 
     # Initialize CSV logger for step-by-step training telemetry curves
     telemetry_path = os.path.join(CHECKPOINT_DIR, "online_training_telemetry.csv")
@@ -101,9 +130,29 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             buffer["dones"].append(torch.tensor([float(done)], dtype=torch.float32))
             # Store leakage rate for Lagrangian penalty update
             if "metrics" in info:
-                buffer["leakage_rates"].append(
-                    info["metrics"].get("leakage_rate", 0.0)
-                )
+                m = info["metrics"]
+
+                tp = m.get("tp_count", 0)
+                tn = m.get("tn_count", 0)
+                fp = m.get("fp_count", 0)
+                fn = m.get("fn_count", 0)
+
+                tot = tp + tn + fp + fn
+                if tot == 0:
+                    tot = 1
+
+                actual_insp = m.get("inspected_count", 0) / tot
+
+                buffer["leakage_rates"].append(m.get("leakage_rate", 0.0))
+                buffer["inspection_rates"].append(actual_insp)
+                buffer["target_sampling_rates"].append(m.get("instant_sampling_rate", 0.0))
+                buffer["attack_intensities"].append(m.get("true_anomaly_rate", 0.0))
+                buffer["fprs"].append(m.get("fpr", 0.0))
+                buffer["fnrs"].append(m.get("fnr", 0.0))
+                buffer["tp_counts"].append(tp)
+                buffer["tn_counts"].append(tn)
+                buffer["fp_counts"].append(fp)
+                buffer["fn_counts"].append(fn)
 
             
             state = next_state
@@ -114,6 +163,24 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 
                 # Run optimization step on learner
                 metrics = learner.update(buffer)
+
+                def safe_mean(xs):
+                    return sum(xs) / len(xs) if len(xs) > 0 else 0.0
+
+                batch_mean_reward = safe_mean([r.item() for r in buffer["rewards"]])
+
+                avg_inspection_rate = safe_mean(buffer["inspection_rates"])
+                avg_target_sampling_rate = safe_mean(buffer["target_sampling_rates"])
+                avg_attack_intensity = safe_mean(buffer["attack_intensities"])
+                avg_fpr = safe_mean(buffer["fprs"])
+                avg_fnr = safe_mean(buffer["fnrs"])
+
+                sum_tp = sum(buffer["tp_counts"])
+                sum_tn = sum(buffer["tn_counts"])
+                sum_fp = sum(buffer["fp_counts"])
+                sum_fn = sum(buffer["fn_counts"])
+
+                
                 
                 # Update Lagrangian multiplier for constrained DQN reward
                 if hasattr(env.reward_strategy, "update_lambda") and len(buffer["leakage_rates"]) > 0:
@@ -127,7 +194,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 if "q_loss" in metrics:
                     print(
                         f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
-                        f"Mean Reward: {C_SUCCESS if reward >= 0 else C_ERROR}{reward:+6.2f}{C_RESET} | "
+                        f"Batch Reward: {C_SUCCESS if batch_mean_reward >= 0 else C_ERROR}{batch_mean_reward:+6.2f}{C_RESET} | "
                         f"Q Loss: {C_BOLD}{metrics['q_loss']:+.5f}{C_RESET} | "
                         f"Mean Q: {C_BOLD}{metrics['mean_q']:+.5f}{C_RESET} | "
                         f"Target Q: {C_BOLD}{metrics.get('mean_target_q', 0.0):+.5f}{C_RESET} | "
@@ -135,7 +202,28 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Lambda: {C_BOLD}{metrics.get('lambda_penalty', 0.0):.3f}{C_RESET} | "
                         f"Replay: {int(metrics.get('replay_size', 0))}"
                     )
-                    log_writer.writerow([update_count, reward, metrics['q_loss'], metrics['mean_q']])
+
+                    log_writer.writerow([
+                        update_count,
+                        step_count,
+                        reward,
+                        batch_mean_reward,
+                        metrics.get("q_loss", 0.0),
+                        metrics.get("mean_q", 0.0),
+                        metrics.get("mean_target_q", 0.0),
+                        metrics.get("avg_leakage_rate", 0.0),
+                        metrics.get("lambda_penalty", 0.0),
+                        metrics.get("replay_size", 0.0),
+                        avg_inspection_rate,
+                        avg_target_sampling_rate,
+                        avg_attack_intensity,
+                        avg_fpr,
+                        avg_fnr,
+                        sum_tp,
+                        sum_tn,
+                        sum_fp,
+                        sum_fn,
+                    ])
                 else:
                     print(
                         f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
