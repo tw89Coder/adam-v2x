@@ -125,9 +125,12 @@ class QoSPlotter(BasePlotter):
                 scenarios = [
                     ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',   False),
                     ('unpatched', f'qos_attack_{rate}_mode{mode}{suffix}',      'Unpatched Filtered', True),
-                    ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',     False),
-                    ('patched',   f'qos_attack_{rate}_mode{mode}{suffix}',      'Patched Filtered',   True),
                 ]
+                if not self.use_onnx:
+                    scenarios.extend([
+                        ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',     False),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}{suffix}',      'Patched Filtered',   True),
+                    ])
                 for env, filename, label, is_filt in scenarios:
                     df = self._resolve_dataframe(env, filename)
                     res = self._compute_stats(df, is_filtered=is_filt)
@@ -160,16 +163,19 @@ class QoSPlotter(BasePlotter):
         df_b   = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
         df_un  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
         df_unf = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
-        df_p   = self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_pf  = self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
+        df_p   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_pf  = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
             ("Baseline",           df_b,   '#2ca02c', '-',  1),
             ("Unpatched Native",   df_un,  '#d62728', '-',  2),
             ("Unpatched Filtered", df_unf, '#ff7f0e', ':',  3),
-            ("Patched Native",     df_p,   '#9467bd', '--', 4),
-            ("Patched Filtered",   df_pf,  '#1f77b4', '-.', 5),
         ]
+        if not self.use_onnx:
+            series_map.extend([
+                ("Patched Native",     df_p,   '#9467bd', '--', 4),
+                ("Patched Filtered",   df_pf,  '#1f77b4', '-.', 5),
+            ])
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         WINDOW_LIMIT = 500
@@ -420,7 +426,7 @@ class QoSPlotter(BasePlotter):
         filename = f"window_trace_{target_rate}_mode{target_mode}_{suffix}.csv"
         
         # Load data for the configured environments
-        df_patched = self._resolve_window_dataframe("patched", filename)
+        df_patched = None if self.use_onnx else self._resolve_window_dataframe("patched", filename)
         df_unpatched = self._resolve_window_dataframe("unpatched", filename)
         
         # Fallback to direct root if environment folders are not separated
