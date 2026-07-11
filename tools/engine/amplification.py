@@ -63,6 +63,9 @@ class AmplificationPlotter(BasePlotter):
         for col in df_merged.columns:
             df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce')
         df_merged = df_merged.dropna().reset_index(drop=True)
+        
+        # Deduplicate and aggregate multiple runs to eliminate line overlap issues
+        df_merged = df_merged.groupby('total_size_bytes', as_index=False).mean()
 
         if 'median_latency_ns_un' in df_merged.columns:
             df_merged['median_latency_us_un'] = df_merged['median_latency_ns_un'] / 1000.0
@@ -75,36 +78,41 @@ class AmplificationPlotter(BasePlotter):
 
         df_merged['mitigation_gain'] = df_merged['median_latency_us_un'] / df_merged['median_latency_us_pa']
 
-        COLOR_UNPATCHED = '#A51C30' 
-        COLOR_PATCHED = '#003366'   
-        COLOR_GAIN = '#00665E'      
+        COLOR_UNPATCHED = '#E31A1C' # Bright academic red
+        COLOR_PATCHED = '#1F78B4'   # Bright academic blue
+        COLOR_GAIN = '#33A02C'      # Bright academic green
         comma_formatter = ticker.StrMethodFormatter('{x:,.0f}')
 
-        # Plot 1: Absolute Parse Latency Comparison
-        fig1, ax1 = plt.subplots(figsize=(6, 4.5))
-        ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_un'], 
-                 marker='o', linestyle='-', color=COLOR_UNPATCHED, label='Unpatched')
-        ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_pa'], 
-                 marker='s', linestyle='--', color=COLOR_PATCHED, label='Patched (Mitigated)')
+        # Combined Plot: Absolute Latency & Mitigation Gain (Dual Y-Axis)
+        fig, ax1 = plt.subplots(figsize=(6, 4.2))
+        
+        # Left Y-Axis: Latency (Unpatched vs Patched)
+        ln1 = ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_un'], 
+                       marker='o', linestyle='-', color=COLOR_UNPATCHED, label='Unpatched Latency')
+        ln2 = ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_pa'], 
+                       marker='s', linestyle='--', color=COLOR_PATCHED, label='Patched Latency')
         ax1.set_xlabel('Packet Size (Bytes)')
-        ax1.set_ylabel('Median Parse Latency (us)')
-        ax1.set_title('Parse Latency vs. Packet Size')
+        ax1.set_ylabel('Median Parse Latency ($\mu$s)', color='black')
+        ax1.tick_params(axis='y', labelcolor='black')
         ax1.xaxis.set_major_formatter(comma_formatter)
-        ax1.legend(loc='upper left')
-        self.export_figure(fig1, "amplification", "parse_latency_comparison")
-        plt.close(fig1)
-
-        # Plot 2: Performance Mitigation Gain Profile
-        fig2, ax2 = plt.subplots(figsize=(6, 4.5))
-        ax2.plot(df_merged['total_size_bytes'], df_merged['mitigation_gain'], 
-                 marker='D', linestyle='-', color=COLOR_GAIN, label='Latency Reduction Gain')
-        ax2.set_xlabel('Packet Size (Bytes)')
-        ax2.set_ylabel('Gain Factor (Unpatched / Patched)')
-        ax2.set_title('Performance Gain Post-Mitigation')
-        ax2.xaxis.set_major_formatter(comma_formatter)
-        ax2.legend(loc='upper left')
-        self.export_figure(fig2, "amplification", "mitigation_performance_gain")
-        plt.close(fig2)
+        ax1.grid(True, linestyle=':', alpha=0.6)
+        
+        # Right Y-Axis: Performance Gain Ratio
+        ax2 = ax1.twinx()
+        ln3 = ax2.plot(df_merged['total_size_bytes'], df_merged['mitigation_gain'], 
+                       marker='D', linestyle='-.', color=COLOR_GAIN, label='Mitigation Gain')
+        ax2.set_ylabel('Gain Ratio (Unpatched / Patched)', color=COLOR_GAIN)
+        ax2.tick_params(axis='y', labelcolor=COLOR_GAIN)
+        
+        # Consolidate legends from both axes
+        lns = ln1 + ln2 + ln3
+        labs = [l.get_label() for l in lns]
+        ax1.legend(lns, labs, loc='upper left')
+        plt.tight_layout()
+        
+        # Export the combined figure
+        self.export_figure(fig, "amplification", "parse_latency_and_gain")
+        plt.close(fig)
 
         # Algorithmic Complexity Modeling Execution
         x = df_merged['total_size_bytes'].values

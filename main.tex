@@ -47,7 +47,7 @@ V2X Security, Digital Twin, Deep Reinforcement Learning, ASN.1 Parser, Certifica
 
 \section{Introduction}
 
-Cooperative Intelligent Transport Systems (C-ITS) rely on Vehicle-to-Everything (V2X) communications for safety-critical, low-latency applications \cite{3GPP_URLLC, Yang_URLLC_2020, MEC_V2X_2025}. While Multi-access Edge Computing (MEC) offloads complex processing \cite{ETSI_MEC, Mao_MEC_2017}, the presentation-layer parsing of messages (e.g., CAM \cite{ETSI_CAM}, DENM \cite{ETSI_DENM}) via ASN.1 facilities \cite{ETSI_ASN1} and Octet Encoding Rules (OER) \cite{ITU_OER} remains a critical bottleneck. Specifically, under the widely deployed ETSI TS 103 097 V1.2.1 (Security V2) specification, the schema inherently permits unbounded structural nesting of certificate chains. Although ETSI TS 103 097 V1.3.1 / V2.1.1 (Security V3) structurally flattens this schema by constraining the signer identifier to exactly one certificate, rendering it immune by design \cite{ETSI_SEC_103097_131}, widely deployed legacy edge nodes remain hard-compiled to V2. By crafting payloads with deeply nested certificates, attackers can trigger exponential object tree expansion. In resource-constrained edge workloads, these recursive "structural bombs" exhaust CPU cycles prior to semantic validation, inducing severe Head-of-Line (HoL) blocking and degrading QoS for legitimate traffic.
+Cooperative Intelligent Transport Systems (C-ITS) rely on Vehicle-to-Everything (V2X) communications for safety-critical, low-latency applications \cite{3GPP_URLLC, Yang_URLLC_2020}. While Multi-access Edge Computing (MEC) offloads complex processing \cite{ETSI_MEC, Mao_MEC_2017}, the presentation-layer parsing of messages (e.g., CAM \cite{ETSI_CAM}, DENM \cite{ETSI_DENM}) via ASN.1 facilities \cite{ETSI_ASN1} and Octet Encoding Rules (OER) \cite{ITU_OER} remains a critical bottleneck. Specifically, under the widely deployed ETSI TS 103 097 V1.2.1 (Security V2) specification \cite{ETSI_SEC_103097_121}, the schema inherently permits unbounded structural nesting of certificate chains. Although ETSI TS 103 097 V1.3.1 / V2.1.1 (Security V3) structurally flattens this schema by constraining the signer identifier to exactly one certificate, rendering it immune by design \cite{ETSI_SEC_103097_131, ETSI_SEC_103097_211}, widely deployed legacy edge nodes remain hard-compiled to V2. By crafting payloads with deeply nested certificates, attackers can trigger exponential object tree expansion. In resource-constrained edge workloads, these recursive "structural bombs" exhaust CPU cycles prior to semantic validation, inducing severe Head-of-Line (HoL) blocking and degrading QoS for legitimate traffic.
 
 Because upgrading legacy V2X firmware is often cost-prohibitive, establishing a protocol-agnostic pre-parsing mitigation layer is essential. However, conventional Deep Packet Inspection (DPI) introduces continuous inspection overhead that inflates tail latency. To resolve this conflict, we propose a lightweight, decoupled closed-loop digital twin architecture (Figure \ref{fig:architecture}) that computationally mirrors the physical vehicular data-path. We combine an $\mathcal{O}(1)$ Streaming Structural Risk Filter (SSRF) in the physical C++ data plane with a Probabilistic Risk Budget FSM (PRB-FSM) optimized by a Deep Reinforcement Learning (DRL) agent in the digital Python cognitive plane. By shifting the security objective from static payload matching to the dynamic mitigation of computational exposure, we adaptively contain adversarial workloads before they reach the expensive ASN.1 parser.
 
@@ -60,14 +60,14 @@ Aligning with the rigorous constraints of AIoT edge computing, the primary contr
 \section{Background and Threat Model}
 
 \subsection{V2X, ASN.1, and OER Vulnerabilities}
-V2X safety applications (e.g., CAM, DENM) rely on Multi-access Edge Computing (MEC) for low-latency processing, presenting complex verification challenges \cite{Ref_V2X_Security_Survey}. However, OER's recursive structures—commonly found in IEEE 1609.2 certificates \cite{IEEE_1609_2} and evaluated for high processing overheads at edge nodes \cite{Ref_OER_Edge_2024}—expose presentation-layer parsers to algorithmic complexity attacks \cite{CWE_674, Wustholz2017, Wang2024}. While Security V3 mitigates this by structurally flattening the ASN.1 schema to eliminate nesting \cite{ETSI_SEC_103097_131}, widely deployed legacy roadside and on-board units (RSUs/OBUs) running Security V2 remain fundamentally vulnerable to edge-level denial-of-service \cite{Zhang_Edge_2018}. Because upgrading firmware across operational infrastructure is cost-prohibitive \cite{Farooq2019}, establishing a protocol-agnostic, edge-based mitigation is critical.
+V2X safety applications (e.g., CAM, DENM) rely on Multi-access Edge Computing (MEC) for low-latency processing, presenting complex verification challenges \cite{Sabella_2018}. However, OER's recursive structures—commonly found in IEEE 1609.2 certificates \cite{IEEE_1609_2}—inherently introduce intensive object allocation and CPU parsing overhead at edge nodes, exposing presentation-layer parsers to algorithmic complexity attacks \cite{CWE_674, Wustholz2017, Wang2024}. While Security V3 mitigates this by structurally flattening the ASN.1 schema to eliminate nesting \cite{ETSI_SEC_103097_131, ETSI_SEC_103097_211}, widely deployed legacy roadside and on-board units (RSUs/OBUs) running Security V2 \cite{ETSI_SEC_103097_121} remain fundamentally vulnerable to edge-level denial-of-service \cite{Zhang_Edge_2018}. Because upgrading firmware across operational infrastructure is cost-prohibitive \cite{Farooq2019}, establishing a protocol-agnostic, edge-based mitigation is critical.
 
 \subsection{Threat Model and Amplification}
 We assume a computationally bounded adversary injecting syntactically valid, MTU-constrained OER recursion bombs under Security V2. To maximize parsing delay ($L = L_{queue} + C_{parse} + C_{inspection}$), the attacker exploits repetitive structural markers (e.g., \texttt{0x02} octets) to trigger exponential memory allocations. This exhausts CPU cycles \textit{prior} to semantic validation (e.g., MDS \cite{vanderHeijden2023}), inducing Head-of-Line (HoL) blocking and degrading QoS for time-sensitive traffic. Given a strict V2X latency budget ($L \le 10$ ms \cite{3GPP_URLLC}), traditional Deep Packet Inspection (DPI) is computationally prohibitive. 
 
 Our security objective is to bound pre-parsing inspection to $\mathcal{O}(1)$, utilizing the fact that malicious structural repetition sharply contrasts with the high-entropy cryptographic fields of legitimate payloads. Volumetric DDoS, cryptographic compromises, and Sybil attacks are considered out-of-scope.
 
-Recently, Machine Learning (ML) and Deep Reinforcement Learning (DRL) have been adopted for adaptive cyber defense in IoT networks \cite{MEC_V2X_2022}. However, conventional ML-based defenses typically rely on payload-heavy feature extraction (e.g., DPI), introducing unacceptable processing latency for V2X safety applications. We bridge this gap using a digital twin architecture that decouples AI decision-making from payload scanning. Rather than using AI for inline packet classification, we employ a DRL agent strictly to modulate the risk budget of a lightweight, $\mathcal{O}(1)$ pre-parsing circuit breaker, achieving robust security without degrading tail latency.
+Recently, Machine Learning (ML) and Deep Reinforcement Learning (DRL) have been adopted for adaptive cyber defense in IoT networks \cite{SACD_2025}. However, conventional ML-based defenses typically rely on payload-heavy feature extraction (e.g., DPI), introducing unacceptable processing latency for V2X safety applications. We bridge this gap using a digital twin architecture that decouples AI decision-making from payload scanning. Rather than using AI for inline packet classification, we employ a DRL agent strictly to modulate the risk budget of a lightweight, $\mathcal{O}(1)$ pre-parsing circuit breaker, achieving robust security without degrading tail latency.
 
 \section{System Architecture}
 
@@ -344,7 +344,7 @@ Theorem 1 implies that successful entropy-based evasion necessarily reduces the 
 
 \subsection{Probabilistic Risk Budget FSM (PRB-FSM)}
 
-To prevent resource exhaustion without inflating baseline jitter, the PRB-FSM adapts the inspection rate based on a continuous risk budget $B_t \in [0, 100]$ (Figure \ref{fig:prb_fsm_dynamics}), drawing inspiration from adaptive monitoring \cite{Sosnowski2021} % TODO: Verify Sosnowski 2021 adaptive traffic security monitoring paper
+To prevent resource exhaustion without inflating baseline jitter, the PRB-FSM adapts the inspection rate based on a continuous risk budget $B_t \in [0, 100]$ (Figure \ref{fig:prb_fsm_dynamics}), drawing inspiration from adaptive monitoring \cite{Sosnowski2024} % TODO: Verify Sosnowski 2021 adaptive traffic security monitoring paper
 and software circuit breakers \cite{Nygard2007}. % TODO: Verify Nygard 2007 software circuit breakers (Release It!) reference
 The budget update is defined as:
 \begin{equation}
@@ -406,7 +406,7 @@ Coupling the B-SSRF with the probabilistic risk budget reduces the amortized com
 \end{equation}
 This formulation establishes a deterministic security floor. To safeguard the system against exploratory policy divergence or algorithmic degradation during Deep Q-Network (DQN) optimization, a Layer-1 Overrun Guard is hardcoded in the parser kernel: if the transient risk budget $B_t$ depletes past a severe threat threshold ($\tau_2$), the C++ state machine overrides the active DRL policy and forces the packet sampling probability to $p_t = 1.0$ (100\% telemetry inspection). This heuristic override guarantees that the computational exposure lower bound remains strictly bounded under sustained cascading exploits.
 
-To balance processing overhead and security under non-stationary workloads, we formulate parameter modulation as a Markov Decision Process (MDP \cite{SuttonBarto2018}). At each control window $t$, the node monitors queuing and computing telemetry to form a state vector $s_t$, selects parameter adjustments $a_t$ via DQN \cite{Mnih2015_Nature}, and receives a Lagrangian-constrained reward $r_t$ minimizing latency overhead while maintaining security boundaries, drawing from constrained resource allocation principles \cite{Ref_Lagrangian_DRL_2023}.
+To balance processing overhead and security under non-stationary workloads, we formulate parameter modulation as a Markov Decision Process (MDP \cite{SuttonBarto2018}). At each control window $t$, the node monitors queuing and computing telemetry to form a state vector $s_t$, selects parameter adjustments $a_t$ via DQN \cite{mnih_human-level_2015}, and receives a Lagrangian-constrained reward $r_t$ designed to minimize latency overhead while enforcing strict security boundaries.
 
 \paragraph{Observation Space} The state vector $s_t \in \mathbb{R}^3$ captures the instantaneous operational environment of the V2X stack: 
 $$s_t = \begin{bmatrix} o_{\text{rate}} \\ o_{\text{sq}} \\ o_{\text{anomaly}} \end{bmatrix}$$
@@ -442,7 +442,7 @@ where $c_{\text{overhead}} = 2.0$ represents the overhead scale factor, $R_{\tex
 where $\alpha = 0.05$ is the constraint gradient learning rate. This adaptive formulation automatically penalizes high leakage rates with massive budget restrictions while allowing the model to relax sampling rates under peace times.
 
 \subsection{Digital Twin Co-simulation Framework}
-To bridge the C++ V2X simulation kernel with the MLOps optimization framework, we establish a lightweight, decoupled digital twin \cite{Digital_Twin} architecture, which computationally mirrors the physical vehicular data-path to optimize resource-constrained security policies \cite{Ref_Digital_Twin_Security_2024}. The C++ simulation kernel acts as the physical edge environment, while the cognitive Python daemon processes telemetry dynamically.
+To bridge the C++ V2X simulation kernel with the MLOps optimization framework, we establish a lightweight, decoupled digital twin \cite{Digital_Twin} architecture, which computationally mirrors the physical vehicular data-path to enable safe, offline policy training and validation before real-world deployment. The C++ simulation kernel acts as the physical edge environment, while the cognitive Python daemon processes telemetry dynamically.
 
 \paragraph{Zero-Allocation IPC Protocol} To avoid serialization bottlenecks (e.g., gRPC), the kernel serializes metrics into a 40-byte fixed-size structure:
 \begin{equation}
@@ -466,10 +466,8 @@ We micro-benchmark parser execution latency per packet. Across millions of paylo
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.75\columnwidth]{parse_latency_comparison.png}
-\\[1.5ex]
-\includegraphics[width=0.75\columnwidth]{mitigation_performance_gain.png}
-\caption{Empirical parsing performance under MTU-constrained attacks: (top) linear processing latency scaling ($\mathcal{O}(N)$) of the vulnerable parser versus the constant-time performance of our mitigated parser, and (bottom) the resulting mitigation gain ratio as payload size approaches the MTU boundary.}
+\includegraphics[width=0.9\columnwidth]{parse_latency_and_gain.png}
+\caption{Empirical parsing performance and mitigation gain under MTU-constrained attacks: the left y-axis maps the median parse latency (in $\mu$s) comparing the unpatched and mitigated parsers, while the right y-axis maps the resulting performance gain ratio.}
 \label{fig:latency_and_gain}
 \end{figure}
 
@@ -595,86 +593,8 @@ Extensive empirical evaluations demonstrated that our dynamic sampling mitigatio
 % ---------------------------------------------------------
 % BIBLIOGRAPHY SECTION
 % -----------------------------------------------------------------
-\begin{thebibliography}{36}
-\setlength{\itemsep}{1.5pt}
-\setlength{\parskip}{0pt}
-
-\bibitem{3GPP_URLLC}
-3GPP, ``Study on Scenarios and Requirements for Next Generation Access Technologies,'' 3rd Generation Partnership Project (3GPP), TR 38.913, 2020.
-\bibitem{ETSI_MEC}
-ETSI, ``Multi-access Edge Computing (MEC); Framework and Reference Architecture,'' ETSI GS MEC 003, 2019.
-\bibitem{ETSI_CAM}
-ETSI, ``ITS; Part 2: Specification of Cooperative Awareness Basic Service,'' ETSI EN 302 637-2, 2019.
-\bibitem{ETSI_DENM}
-ETSI, ``ITS; Part 3: Specifications of Decentralized Environmental Notification Basic Service,'' ETSI EN 302 637-3, 2019.
-\bibitem{ETSI_ASN1}
-ETSI, ``ITS; Facilities layer common data dictionary,'' ETSI TS 102 894-2, 2020.
-\bibitem{ITU_OER}
-ITU-T, ``Information Technology - ASN.1 encoding rules: Specification of Octet Encoding Rules (OER),'' ITU-T Recommendation X.696, 2021.
-\bibitem{IEEE_1609_2}
-IEEE, ``IEEE Standard for Wireless Access in Vehicular Environments--Security Services for Applications and Management Messages,'' IEEE Std 1609.2-2016, 2016.
-\bibitem{CWE_674}
-MITRE, ``CWE-674: Uncontrolled Recursion,'' Common Weakness Enumeration, 2023.
-
-\bibitem{Farooq2019}
-S.~M. Farooq et al., ``Certificate-Based Security Mechanisms in Vehicular Ad-Hoc Networks,'' \emph{Electronics}, 2019.
-\bibitem{vanderHeijden2023}
-R.~W. van der Heijden et al., ``Survey on Misbehavior Detection in Cooperative Intelligent Transportation Systems,'' \emph{IEEE Communications Surveys \& Tutorials}, 2018.
-\bibitem{ETSI_SEC_103097_131}
-ETSI, ``Intelligent Transport Systems (ITS); Security header and certificate formats,'' ETSI TS 103 097, 2022.
-\bibitem{Mao_MEC_2017}
-Y.~Mao et al., ``A Survey on Mobile Edge Computing,'' \emph{IEEE Communications Surveys \& Tutorials}, 2017.
-\bibitem{Yang_URLLC_2020}
-H.~Yang et al., ``Ultra-Reliable and Low-Latency Communications for Connected Vehicles,'' \emph{IEEE Network}, 2020.
-\bibitem{Wustholz2017}
-V.~W\"ustholz et al., ``Static Detection of DoS Vulnerabilities in Programs That Use Regular Expressions,'' \emph{arXiv:1701.04045}, 2017.
-\bibitem{Wang2024}
-Z.~Wang et al., ``Analyzing and Discovering Spatial Algorithm Complexity Vulnerabilities in Recursion,'' \emph{Applied Sciences}, 2024.
-
-\bibitem{Zhang_Edge_2018}
-J.~Zhang et al., ``An MEC-Based DoS Attack Mechanism,'' in \emph{IEEE GLOBECOM}, 2018.
-\bibitem{SmartNIC_2019}
-G.~Miano et al., ``Introducing SmartNICs in Server-Based Data Plane Processing,'' \emph{IEEE Access}, 2019.
-\bibitem{Sadiq_DataPlane_2023}
-A.~Sadiq et al., ``Detection of Denial of Service Attack in Cloud Based Kubernetes Using eBPF,'' \emph{Applied Sciences}, 2023.
-\bibitem{MEC_V2X_2022}
-X.~Chen et al., ``Deep Reinforcement Learning-Based Offloading,'' in \emph{IEEE WCNC}, 2022.
-\bibitem{MEC_V2X_2025}
-J.~Zheng et al., ``Latency Minimization for MEC-V2X Task Offloading,'' \emph{IEEE Transactions on Vehicular Technology}, 2024.
-\bibitem{Alon1996}
-N.~Alon et al., ``The space complexity of approximating the frequency moments,'' in \emph{ACM STOC}, 1996.
-\bibitem{Krishnamurthy2003}
-B.~Krishnamurthy et al., ``Sketch-based change detection,'' in \emph{ACM IMC}, 2003.
-\bibitem{Sosnowski2021}
-M.~Sosnowski et al., ``Adaptive sampling method for network traffic security monitoring,'' \emph{Bull. Polish Acad. Sci. Tech.}, 2021.
-\bibitem{Nygard2007}
-M.~T. Nygard, \emph{Release It!: Design and Deploy Production-Ready Software}, 2007.
-\bibitem{SuttonBarto2018}
-R.~S. Sutton and A.~G. Barto, \emph{Reinforcement Learning: An Introduction}, MIT Press, 2018.
-\bibitem{Mnih2015_Nature}
-V.~Mnih et al., ``Human-level control through deep reinforcement learning,'' \emph{Nature}, 2015.
-\bibitem{Altman1999_CMDP}
-E.~Altman, \emph{Constrained Markov Decision Processes}, CRC Press, 1999.
-\bibitem{asn1c_compiler}
-L.~Walkin, ``asn1c: Open Source ASN.1 Compiler,'' https://github.com/vlm/asn1c, 2018.
-\bibitem{Digital_Twin}
-A.~Fuller et al., ``Digital Twin: Enabling Technologies, Challenges and Open Research,'' \emph{IEEE Access}, 2020.
-\bibitem{Pytorch}
-A.~Paszke et al., ``PyTorch: An Imperative Style, High-Performance Deep Learning Library,'' in \emph{NeurIPS}, 2019.
-\bibitem{ONNX}
-J.~Bai et al., ``ONNX: Open Neural Network Exchange,'' https://github.com/onnx/onnx, 2019.
-\bibitem{Vanetza}
-R.~Riebl et al., ``Vanetza: An open-source implementation of the ETSI C-ITS suite,'' https://github.com/riebl/vanetza.
-\bibitem{Ref_V2X_Security_Survey}
-L.~Liang et al., ``Vehicular Communications: A Physical Layer Security Perspective,'' \emph{IEEE Communications Magazine}, vol.~57, no.~12, pp.~78--84, 2019.
-\bibitem{Ref_OER_Edge_2024}
-T.~Kim et al., ``Performance Evaluation of ASN.1 OER Parsing in Low-Latency Vehicular Safety Communications,'' \emph{IEEE Internet of Things Journal}, vol.~11, no.~4, pp.~5621--5634, 2024.
-\bibitem{Ref_Digital_Twin_Security_2024}
-Y.~Zhang et al., ``Digital Twin-Enabled Intrusion Detection in Mobile Edge Computing for Connected Vehicles,'' \emph{IEEE Transactions on Vehicular Technology}, vol.~73, no.~2, pp.~1892--1905, 2024.
-\bibitem{Ref_Lagrangian_DRL_2023}
-J.~Wang et al., ``Constrained Deep Reinforcement Learning for Dynamic Resource Allocation in Edge Computing,'' \emph{IEEE Transactions on Mobile Computing}, vol.~22, no.~6, pp.~3412--3426, 2023.
-
-\end{thebibliography}
+\bibliographystyle{ieeetr}
+\bibliography{IEEEabrv, AIOT2026}
 
 
 \end{document}

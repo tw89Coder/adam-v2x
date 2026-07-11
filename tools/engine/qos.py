@@ -189,7 +189,6 @@ class QoSPlotter(BasePlotter):
         ax1.set_ylim(0, 0.45)
         ax1.set_xlabel('Packet ID (Post Warm-up)')
         ax1.set_ylabel('Processing Latency (ms)')
-        ax1.set_title(f'Latency Jitter Distribution (Mode {target_mode} @ {target_rate}%)')
         ax1.grid(True, linestyle=':', alpha=0.7)
         ax1.legend(loc='upper right', fontsize=10)
 
@@ -212,7 +211,6 @@ class QoSPlotter(BasePlotter):
         ax2.set_xlim(1e-4, 10.0)
         ax2.set_xlabel('Processing Latency (ms) [Log Scale]')
         ax2.set_ylabel('CDF Probability')
-        ax2.set_title('CDF Profiles with 99th Percentile Reference Lines')
         ax2.grid(True, which="both", linestyle=':', alpha=0.7)
         ax2.legend(loc='lower right', fontsize=10)
 
@@ -240,15 +238,15 @@ class QoSPlotter(BasePlotter):
         fig, ax = plt.subplots(figsize=(14, 6))
         ax.plot(df_nat_zoom['packet_id'], df_nat_zoom['latency_ms'], 
                 label='Unpatched Native (No Defense)', color='#d62728', linewidth=1.0, alpha=0.5)
+        filter_label = 'Proposed Filter (ONNX)' if self.use_onnx else 'Proposed Filter (FSM)'
         ax.plot(df_fil_zoom['packet_id'], df_fil_zoom['latency_ms'], 
-                label='Proposed FSM Filter', color='#1f77b4', linewidth=1.2, alpha=0.9)
+                label=filter_label, color='#1f77b4', linewidth=1.2, alpha=0.9)
 
         ax.axvspan(start_attack, end_attack, color='gray', alpha=0.2, label='Pulse Attack Window')
         ax.set_ylim(0, 0.45) 
         ax.set_xlim(window_start, window_end)
         ax.set_xlabel('Packet ID (Chronological Order)')
         ax.set_ylabel('Processing Latency (ms)')
-        ax.set_title('Dynamic Resilience: System Recovery Under Pulse Attack')
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
 
@@ -274,8 +272,9 @@ class QoSPlotter(BasePlotter):
         ax.plot(df_filter['packet_id'], df_filter['latency_ms'], color='#1f77b4', linewidth=0.5, alpha=0.1, zorder=1)
         ax.plot(df_native['packet_id'], df_native['latency_ms'], color='#d62728', linewidth=0.5, alpha=0.1, zorder=2)
 
+        filter_label = 'Proposed Filter (ONNX, Smoothed)' if self.use_onnx else 'Proposed Filter (FSM, Smoothed)'
         ax.plot(df_filter['packet_id'], df_filter['smoothed_latency'], 
-                label='Proposed FSM Filter (Smoothed)', color='#1f77b4', linewidth=1.5, alpha=0.9, zorder=3)
+                label=filter_label, color='#1f77b4', linewidth=1.5, alpha=0.9, zorder=3)
         ax.plot(df_native['packet_id'], df_native['smoothed_latency'], 
                 label='Unpatched Native (Smoothed)', color='#d62728', linewidth=1.5, alpha=0.9, zorder=4)
 
@@ -297,7 +296,6 @@ class QoSPlotter(BasePlotter):
         ax.set_xlim(0, total_packet_indices)
         ax.set_xlabel('Packet ID (Chronological Order)')
         ax.set_ylabel('Processing Latency (ms)')
-        ax.set_title('State Flapping Resilience: System Stability Under Periodic Attacks')
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
 
