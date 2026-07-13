@@ -179,15 +179,33 @@ class QoSPlotter(BasePlotter):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         WINDOW_LIMIT = 500
+        start_idx = 0
+        ref_df = df_un if df_un is not None and not df_un.empty else df_b
+        if ref_df is not None and not ref_df.empty:
+            total_len = len(ref_df)
+            if target_mode == 1:
+                start_idx = int(total_len * 0.3) - 100
+            elif target_mode == 2:
+                start_idx = int(total_len * 0.1) - 100
+            elif target_mode == 3:
+                start_idx = int(total_len * 0.2) - 100
+            start_idx = max(0, min(start_idx, total_len - WINDOW_LIMIT))
+        
+        end_idx = start_idx + WINDOW_LIMIT
 
         # Subplot 1: Jitter Time Series
+        max_y = 0.45
         for label, df, color, ls, z in series_map:
             if df is not None and not df.empty:
-                ax1.plot(df['packet_id'][:WINDOW_LIMIT], df['latency_ms'][:WINDOW_LIMIT],
+                plot_df = df.iloc[start_idx:end_idx]
+                ax1.plot(plot_df['packet_id'], plot_df['latency_ms'],
                          label=label, color=color, linestyle=ls, linewidth=1.5, alpha=0.8, zorder=z)
+                local_max = plot_df['latency_ms'].max()
+                if local_max > max_y:
+                    max_y = local_max
 
-        ax1.set_ylim(0, 0.45)
-        ax1.set_xlabel('Packet ID (Post Warm-up)')
+        ax1.set_ylim(0, max_y * 1.1)
+        ax1.set_xlabel('Packet ID (Around Attack Onset)')
         ax1.set_ylabel('Processing Latency (ms)')
         ax1.grid(True, linestyle=':', alpha=0.7)
         ax1.legend(loc='upper right', fontsize=10)

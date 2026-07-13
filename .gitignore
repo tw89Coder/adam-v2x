@@ -45,3 +45,11 @@ outputs/**/*
 !outputs/csv_raw/**/fsm_trace_rate_5.0_mode*.csv
 !outputs/csv_raw/**/fsm_trace_rate_1.0_mode*.csv
 !outputs/csv_raw/**/amplification_profile.csv
+
+# ==============================================================================
+# RWTH Aachen V2AIX Dataset Exclusions (Compliance with academic non-distribution license)
+# ==============================================================================
+*v2aix*
+inputs/v2aix*
+inputs/base_packets/v2aix*
+json/

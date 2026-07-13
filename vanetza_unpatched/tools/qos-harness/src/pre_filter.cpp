@@ -110,7 +110,9 @@ int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
         if (items_in_window == WINDOW_SIZE) {
             int sum_sq = 0;
             for (int k = 0; k < n_active; ++k) {
-                int c = histogram[active_vals[k]];
+                uint8_t val = active_vals[k];
+                if (val == 0) continue; // Skip zero-padding noise (non-semantic padding)
+                int c = histogram[val];
                 sum_sq += c * c;
                 if (sum_sq > SQ_THRESHOLD) return sum_sq;  // Malware detected: exit immediately to save cycles
             }
