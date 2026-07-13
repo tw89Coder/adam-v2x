@@ -5,6 +5,10 @@
 #include <string>
 #include <deque>
 #include <vector>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 #include "qos_harness/pre_filter.hpp"
 
@@ -163,6 +167,29 @@ private:
 
     void write_csv_header();
     bool handshake_with_agent(const WindowTelemetryPayload& payload, FilterPolicy& out_policy);
+
+    // Multi-threaded ONNX background worker variables
+    std::thread onnx_thread_;
+    std::mutex onnx_mutex_;
+    std::condition_variable onnx_cv_;
+    std::atomic<bool> stop_onnx_thread_{false};
+    std::atomic<bool> new_telemetry_available_{false};
+    std::atomic<bool> new_policy_available_{false};
+
+    // Shared communication buffers
+    WindowTelemetry shared_telemetry_;
+    FilterPolicy shared_policy_;
+
+    /**
+     * @brief Worker loop function executed by the background ONNX inference thread.
+     */
+    void onnx_worker_loop();
+
+    /**
+     * @brief Retrieves the list of CPU core indices assigned to this process.
+     * @return Vector of allowed core IDs.
+     */
+    std::vector<int> get_allowed_cores();
 };
 
 }  // namespace qos_harness

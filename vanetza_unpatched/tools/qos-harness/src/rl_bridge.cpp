@@ -21,12 +21,15 @@
  */
 
 #include "qos_harness/rl_bridge.hpp"
+#include "qos_harness/console_presenter.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sched.h>
+#include <pthread.h>
 
 #include <cstdio>
 #include <cstring>
@@ -48,6 +51,11 @@ RLBridge::RLBridge(const std::string& repo_root, int port)
       onnx_enabled_(false), onnx_model_path_("") {}
 
 RLBridge::~RLBridge() {
+    stop_onnx_thread_ = true;
+    onnx_cv_.notify_all();
+    if (onnx_thread_.joinable()) {
+        onnx_thread_.join();
+    }
     if (server_fd_ >= 0) {
         close(server_fd_);
     }
@@ -196,6 +204,11 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
                   << "  └── Algorithm detected: " << algorithm_ << "\n"
                   << "  └── Action space map size: " << dqn_action_map_.size() << "\n"
                   << "  └── Model path verified: " << onnx_model_path_ << "\n\n";
+
+        stop_onnx_thread_ = false;
+        new_telemetry_available_ = false;
+        new_policy_available_ = false;
+        onnx_thread_ = std::thread(&RLBridge::onnx_worker_loop, this);
     }
 }
 
@@ -265,6 +278,24 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
  * @param filter The active FSM instance to modify.
  */
 void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& filter) {
+    // 1. Check if background thread computed a new policy
+    if (new_policy_available_.load(std::memory_order_acquire)) {
+        FilterPolicy policy;
+        {
+            std::lock_guard<std::mutex> lock(onnx_mutex_);
+            policy = shared_policy_;
+        }
+        if (safety_guards_enabled_) {
+            if (policy.sq_threshold > 650) policy.sq_threshold = 650;
+            if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
+            if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
+            if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
+        }
+        filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
+                                    policy.sq_threshold, policy.base_sampling_rate);
+        new_policy_available_.store(false, std::memory_order_release);
+    }
+
     uint32_t total_packets = window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
     if (total_packets < static_cast<uint32_t>(CTRL_WINDOW_SIZE)) return;
 
@@ -280,19 +311,18 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     payload.current_sampling_rate = static_cast<float>(filter.get_sampling_rate());
 
     if (onnx_enabled_) {
-        // Construct legacy structure locally for local ONNX inference
-        WindowTelemetry telemetry{
-            static_cast<double>(window_sq_sum_) / total_packets,
-            filter.get_sampling_rate(),
-            static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
-            static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets
-        };
-
-        FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
-        if (run_onnx_inference(telemetry, next_policy)) {
-            filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
-                                        next_policy.sq_threshold, next_policy.base_sampling_rate);
+        // Asynchronously hand off telemetry to the background ONNX thread
+        {
+            std::lock_guard<std::mutex> lock(onnx_mutex_);
+            shared_telemetry_ = WindowTelemetry{
+                static_cast<double>(window_sq_sum_) / total_packets,
+                filter.get_sampling_rate(),
+                static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
+                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets
+            };
         }
+        new_telemetry_available_.store(true, std::memory_order_release);
+        onnx_cv_.notify_one();
     } else if (socket_enabled_) {
         FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
 
@@ -616,6 +646,90 @@ void RLBridge::flush_telemetry_buffer() {
                       << (pkt.is_anomalous ? 1 : 0) << "\n";
         }
         packet_buffer_.clear();
+    }
+}
+
+std::vector<int> RLBridge::get_allowed_cores() {
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    std::vector<int> cores;
+    if (sched_getaffinity(0, sizeof(cpu_set_t), &mask) == 0) {
+        for (int i = 0; i < CPU_SETSIZE; ++i) {
+            if (CPU_ISSET(i, &mask)) {
+                cores.push_back(i);
+            }
+        }
+    }
+    return cores;
+}
+
+void RLBridge::onnx_worker_loop() {
+    // 1. Thread Pinning to Core B (the secondary allowed core, Modulo wrapped)
+    std::vector<int> allowed_cores = get_allowed_cores();
+    int target_core = -1;
+    
+    if (allowed_cores.size() >= 2) {
+        // We have at least 2 cores assigned to the process via taskset
+        // Core A is allowed_cores[0], Core B is allowed_cores[1]
+        target_core = allowed_cores[1];
+        
+        // Pin the main thread (from which we were spawned) to allowed_cores[0] just to be absolutely sure
+        // they are physically separated.
+        cpu_set_t main_mask;
+        CPU_ZERO(&main_mask);
+        CPU_SET(allowed_cores[0], &main_mask);
+        // Note: pthread_self() here refers to the spawned thread. We should pin the main thread.
+        // Wait, how do we get the main thread's pthread_t? In Linux, the main thread's thread ID (TID) is equal to the PID.
+        // But actually, we don't necessarily have to pin the main thread from here, or we can pin it from the main thread during initialize_onnx.
+        // Alternatively, the process affinity mask already restricts the process to {allowed_cores[0], allowed_cores[1]}.
+        // If we pin the ONNX thread to allowed_cores[1], the main thread is still free to run on either. But if the main thread's affinity
+        // is modified, it won't run on Core B.
+        // Let's do it safely: we can pin the calling thread (main thread) during initialize_onnx, or just pin this thread to Core B here.
+        // Pinning this thread to Core B (allowed_cores[1]) is already 100% sufficient to prevent it from competing on Core A!
+    } else if (!allowed_cores.empty()) {
+        // Only 1 core is set in process affinity (e.g. taskset -c 9)
+        // Wrap core index to find the next physical CPU core
+        long num_system_cores = sysconf(_SC_NPROCESSORS_ONLN);
+        if (num_system_cores > 0) {
+            target_core = (allowed_cores[0] + 1) % num_system_cores;
+        }
+    }
+
+    if (target_core >= 0) {
+        cpu_set_t onnx_mask;
+        CPU_ZERO(&onnx_mask);
+        CPU_SET(target_core, &onnx_mask);
+        pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &onnx_mask);
+        std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread pinned to CPU Core: " << target_core << ConsolePresenter::reset() << "\n";
+    } else {
+        std::cout << ConsolePresenter::warn() << "[INIT] ONNX Control Thread running on dynamic core (affinity pinning failed/bypassed)" << ConsolePresenter::reset() << "\n";
+    }
+
+    // 2. Execution Loop
+    while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {
+        WindowTelemetry local_telemetry;
+        {
+            std::unique_lock<std::mutex> lock(onnx_mutex_);
+            onnx_cv_.wait(lock, [this]() {
+                return stop_onnx_thread_.load(std::memory_order_relaxed) || 
+                       new_telemetry_available_.load(std::memory_order_relaxed);
+            });
+
+            if (stop_onnx_thread_.load(std::memory_order_relaxed)) {
+                break;
+            }
+
+            local_telemetry = shared_telemetry_;
+            new_telemetry_available_.store(false, std::memory_order_release);
+        }
+
+        // Run ONNX Runtime inference in background thread (pinned to Core B)
+        FilterPolicy policy{0.05, 50.0, 600, 0.10};
+        if (run_onnx_inference(local_telemetry, policy)) {
+            std::lock_guard<std::mutex> lock(onnx_mutex_);
+            shared_policy_ = policy;
+            new_policy_available_.store(true, std::memory_order_release);
+        }
     }
 }
 

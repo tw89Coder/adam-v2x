@@ -325,7 +325,14 @@ fi
 # Helper execution engine bypassing taskset if USE_TASKSET is set to false
 execute_cmd() {
     if [ "$USE_TASKSET" = true ]; then
-        taskset -c "$PIN_CORE" "$@"
+        if [ "$RUN_ONNX" = true ]; then
+            local num_cores
+            num_cores=$(nproc)
+            local onnx_core=$(( (PIN_CORE + 1) % num_cores ))
+            taskset -c "${PIN_CORE},${onnx_core}" "$@"
+        else
+            taskset -c "$PIN_CORE" "$@"
+        fi
     else
         "$@"
     fi
@@ -366,7 +373,14 @@ run_training_pair() {
 # Resolve lock status representation for console logs
 get_core_info() {
     if [ "$USE_TASKSET" = true ]; then
-        echo "Core: ${PIN_CORE}"
+        if [ "$RUN_ONNX" = true ]; then
+            local num_cores
+            num_cores=$(nproc)
+            local onnx_core=$(( (PIN_CORE + 1) % num_cores ))
+            echo "Cores: ${PIN_CORE},${onnx_core}"
+        else
+            echo "Core: ${PIN_CORE}"
+        fi
     else
         echo "Core: Dynamic (OS-scheduled)"
     fi
