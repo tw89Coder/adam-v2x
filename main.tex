@@ -26,6 +26,8 @@
 \setlength{\abovecaptionskip}{3pt}
 \setlength{\belowcaptionskip}{3pt}
 
+\linespread{0.98}
+
 \begin{document}
 
 \title{ADAM: A DRL-Driven Digital Twin for Mitigating Parser Amplification in V2X Edge Nodes\thanks{This work was partially supported by the National Science and Technology Council (NSTC) of Taiwan under Grants 112-2221-E-110-023, 115-2221-E-110-056 and 114-2634-F-110-001-MBK, and in part by the Information Security Research Center, National Sun Yat-sen University, Taiwan.}}
@@ -38,7 +40,7 @@ Emails: yhl.secworks@gmail.com, andy.yiu8@gmail.com, rkaliski@ieee.org (Correspo
 \maketitle
 
 \begin{abstract}
-Vehicle-to-Everything (V2X) communications and edge AIoT applications rely on strictly bounded, low-latency processing. However, resource-constrained edge nodes are highly vulnerable to presentation-layer resource exhaustion, where recursive payload structures trigger algorithmic complexity attacks that cause severe Head-of-Line (HoL) blocking. To satisfy real-time safety constraints without inflating continuous inspection overhead, this paper proposes a lightweight, closed-loop digital twin architecture that computationally mirrors the physical V2X data-path and decouples the physical fast-path C++ data plane from a Python cognitive plane. We introduce a Bounded Streaming Structural Risk Filter (B-SSRF), an ultra-lightweight $\mathcal{O}(1)$ anomaly detector leveraging information-theoretic frequency moments (AMS Sketch/$F_2$) to identify malformed payloads prior to expensive deserialization. To optimize this filter dynamically, we model the traffic adaptation problem as a Constrained Markov Decision Process (CMDP). A Deep Q-Network (DQN) agent utilizes a Lagrangian-constrained reward function to modulate a Probabilistic Risk Budget Finite State Machine (PRB-FSM), effectively balancing edge resource utilization with security constraints. Extensive evaluations demonstrate that our mitigation strategy reduces P99 tail latency from 0.3478 ms to 0.0503 ms under high-intensity attacks, achieving microsecond-level edge inference and successfully containing the computational amplification surface.
+Vehicle-to-Everything (V2X) communications and edge AIoT applications rely on strictly bounded, low-latency processing. However, resource-constrained edge nodes are highly vulnerable to presentation-layer resource exhaustion, where recursive payload structures trigger algorithmic complexity attacks that cause severe Head-of-Line (HoL) blocking. To satisfy real-time safety constraints without inflating continuous inspection overhead, this paper proposes a lightweight, closed-loop digital twin architecture that computationally mirrors the physical V2X data-path and decouples the physical fast-path C++ data plane from a Python cognitive plane. We introduce a Bounded Streaming Structural Risk Filter (B-SSRF), an ultra-lightweight $\mathcal{O}(1)$ anomaly detector leveraging information-theoretic frequency moments (AMS Sketch/$F_2$) to identify malformed payloads prior to expensive deserialization. To dynamically optimize this filter, we model the traffic adaptation problem as a Constrained Markov Decision Process (CMDP). A Deep Q-Network (DQN) agent utilizes a Lagrangian-constrained reward function to modulate a Probabilistic Risk Budget Finite State Machine (PRB-FSM), effectively balancing edge resource utilization with security constraints. Extensive evaluations demonstrate that our mitigation strategy reduces P99 tail latency from 0.2229 ms to 0.0035 ms under high-intensity attacks, achieving microsecond-level edge inference and successfully containing the computational amplification surface.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -47,9 +49,9 @@ V2X Security, Digital Twin, Deep Reinforcement Learning, ASN.1 Parser, Certifica
 
 \section{Introduction}
 
-Cooperative Intelligent Transport Systems (C-ITS) rely on Vehicle-to-Everything (V2X) communications for safety-critical, low-latency applications \cite{3GPP_URLLC, Yang_URLLC_2020}. While Multi-access Edge Computing (MEC) offloads complex processing \cite{ETSI_MEC, Mao_MEC_2017}, the presentation-layer parsing of messages (e.g., CAM \cite{ETSI_CAM}, DENM \cite{ETSI_DENM}) via ASN.1 facilities \cite{ETSI_ASN1} and Octet Encoding Rules (OER) \cite{ITU_OER} remains a critical bottleneck. Specifically, under the widely deployed ETSI TS 103 097 V1.2.1 (Security V2) specification \cite{ETSI_SEC_103097_121}, the schema inherently permits unbounded structural nesting of certificate chains. Although ETSI TS 103 097 V1.3.1 / V2.1.1 (Security V3) structurally flattens this schema by constraining the signer identifier to exactly one certificate, rendering it immune by design \cite{ETSI_SEC_103097_131, ETSI_SEC_103097_211}, widely deployed legacy edge nodes remain hard-compiled to V2. By crafting payloads with deeply nested certificates, attackers can trigger exponential object tree expansion. In resource-constrained edge workloads, these recursive "structural bombs" exhaust CPU cycles prior to semantic validation, inducing severe Head-of-Line (HoL) blocking and degrading QoS for legitimate traffic.
+Cooperative Intelligent Transport Systems (C-ITS) rely on Vehicle-to-Everything (V2X) communications for safety-critical, low-latency applications \cite{3GPP_URLLC, Yang_URLLC_2020}. While Multi-access Edge Computing (MEC) offloads complex processing \cite{ETSI_MEC, Mao_MEC_2017}, the presentation-layer parsing of messages (e.g., CAM \cite{ETSI_CAM}, DENM \cite{ETSI_DENM}) via ASN.1 facilities \cite{ETSI_ASN1} and Octet Encoding Rules (OER) \cite{ITU_OER} remains a critical bottleneck. Specifically, under the widely deployed ETSI TS 103 097 V1.2.1 (Security V2) specification \cite{ETSI_SEC_103097_121}, the schema inherently permits unbounded structural nesting of certificate chains. Although ETSI TS 103 097 V1.3.1 / V2.1.1 (Security V3) structurally flattens this schema by constraining the signer identifier to exactly one certificate, rendering it immune by design \cite{ETSI_SEC_103097_131, ETSI_SEC_103097_211}, widely deployed legacy edge nodes remain hard-compiled to V2. By crafting payloads with deeply nested certificates, attackers can trigger exponential expansion of the object tree. In resource-constrained edge workloads, these recursive "structural bombs" exhaust CPU cycles prior to semantic validation, inducing severe Head-of-Line (HoL) blocking and degrading QoS for legitimate traffic.
 
-Because upgrading legacy V2X firmware is often cost-prohibitive, establishing a protocol-agnostic pre-parsing mitigation layer is essential. However, conventional Deep Packet Inspection (DPI) introduces continuous inspection overhead that inflates tail latency. To resolve this conflict, we propose a lightweight, decoupled closed-loop digital twin architecture (Figure \ref{fig:architecture}) that computationally mirrors the physical vehicular data-path. We combine an $\mathcal{O}(1)$ Streaming Structural Risk Filter (SSRF) in the physical C++ data plane with a Probabilistic Risk Budget FSM (PRB-FSM) optimized by a Deep Reinforcement Learning (DRL) agent in the digital Python cognitive plane. By shifting the security objective from static payload matching to the dynamic mitigation of computational exposure, we adaptively contain adversarial workloads before they reach the expensive ASN.1 parser.
+Because upgrading legacy V2X firmware is often cost-prohibitive, establishing a protocol-agnostic pre-parsing mitigation layer is essential. However, conventional Deep Packet Inspection (DPI) incurs continuous inspection overhead, inflating tail latency. To resolve this conflict, we propose a lightweight, decoupled, closed-loop digital twin architecture (Figure \ref{fig:architecture}) that computationally mirrors the physical vehicular data path. We combine an $\mathcal{O}(1)$ Streaming Structural Risk Filter (SSRF) in the physical C++ data plane with a Probabilistic Risk Budget FSM (PRB-FSM) optimized by a Deep Reinforcement Learning (DRL) agent in the digital Python cognitive plane. By shifting the security objective from static payload matching to the dynamic mitigation of computational exposure, we adaptively contain adversarial workloads before they reach the expensive ASN.1 parser.
 
 Aligning with the rigorous constraints of AIoT edge computing, the primary contributions of this paper are threefold:
 (1) \textbf{Lightweight Algorithmic Anomaly Detection (B-SSRF):} We propose an $\mathcal{O}(1)$ bounded-cost anomaly detector leveraging information-theoretic frequency moments (AMS Sketch/$F_2$). This enables protocol-agnostic identification of structurally anomalous certificate chains without invoking expensive deserialization processes.
@@ -65,7 +67,7 @@ V2X safety applications (e.g., CAM, DENM) rely on Multi-access Edge Computing (M
 \subsection{Threat Model and Amplification}
 We assume a computationally bounded adversary injecting syntactically valid, MTU-constrained OER recursion bombs under Security V2. To maximize parsing delay ($L = L_{queue} + C_{parse} + C_{inspection}$), the attacker exploits repetitive structural markers (e.g., \texttt{0x02} octets) to trigger exponential memory allocations. This exhausts CPU cycles \textit{prior} to semantic validation (e.g., MDS \cite{vanderHeijden2023}), inducing Head-of-Line (HoL) blocking and degrading QoS for time-sensitive traffic. Given a strict V2X latency budget ($L \le 10$ ms \cite{3GPP_URLLC}), traditional Deep Packet Inspection (DPI) is computationally prohibitive. 
 
-Our security objective is to bound pre-parsing inspection to $\mathcal{O}(1)$, utilizing the fact that malicious structural repetition sharply contrasts with the high-entropy cryptographic fields of legitimate payloads. Volumetric DDoS, cryptographic compromises, and Sybil attacks are considered out-of-scope.
+Our security objective is to bound pre-parsing inspection to $\mathcal{O}(1)$, utilizing the fact that malicious structural repetition sharply contrasts with the high-entropy cryptographic fields of legitimate payloads. Volumetric DDoS, cryptographic compromises, and Sybil attacks are considered out of scope.
 
 Recently, Machine Learning (ML) and Deep Reinforcement Learning (DRL) have been adopted for adaptive cyber defense in IoT networks \cite{SACD_2025}. However, conventional ML-based defenses typically rely on payload-heavy feature extraction (e.g., DPI), introducing unacceptable processing latency for V2X safety applications. We bridge this gap using a digital twin architecture that decouples AI decision-making from payload scanning. Rather than using AI for inline packet classification, we employ a DRL agent strictly to modulate the risk budget of a lightweight, $\mathcal{O}(1)$ pre-parsing circuit breaker, achieving robust security without degrading tail latency.
 
@@ -216,7 +218,7 @@ D_{\max} = \left\lfloor \frac{1400}{2 + S_{\mathrm{entropy}}} \right\rfloor .
 \]
 For representative padding budgets:
 \[
-\begin{aligned}1S_{\mathrm{entropy}} = 0\text{ B} &\Rightarrow D_{\max} = 700 \\
+\begin{aligned}S_{\mathrm{entropy}} = 0\text{ B} &\Rightarrow D_{\max} = 700 \\
 S_{\mathrm{entropy}} = 32\text{ B} &\Rightarrow D_{\max} = 41 \\
 S_{\mathrm{entropy}} = 64\text{ B} &\Rightarrow D_{\max} = 21 \\
 S_{\mathrm{entropy}} = 128\text{ B} &\Rightarrow D_{\max} = 11.
@@ -440,7 +442,6 @@ where $c_{\text{overhead}} = 2.0$ represents the overhead scale factor, $R_{\tex
 \lambda_{t+1} = \max\left(0, \lambda_t + \alpha \cdot \left(R_{\text{leakage\_avg}} - \epsilon_{\text{target}}\right)\right)
 \end{equation}
 where $\alpha = 0.05$ is the constraint gradient learning rate. This adaptive formulation automatically penalizes high leakage rates with massive budget restrictions while allowing the model to relax sampling rates under peace times.
-
 \subsection{Digital Twin Co-simulation Framework}
 To bridge the C++ V2X simulation kernel with the MLOps optimization framework, we establish a lightweight, decoupled digital twin \cite{Digital_Twin} architecture, which computationally mirrors the physical vehicular data-path to enable safe, offline policy training and validation before real-world deployment. The C++ simulation kernel acts as the physical edge environment, while the cognitive Python daemon processes telemetry dynamically.
 
@@ -455,26 +456,29 @@ Raw memory offsets allow $\mathcal{O}(1)$ binary decoding under sub-microsecond 
 \section{Experimental Setup}
 
 \subsection{Experimental Testbed and Traffic Modalities}
-The testbed utilizes a 12th Gen Intel i7-12700H and 16 GB of RAM running Ubuntu 22.04 LTS. To accurately simulate the resource constraints of a typical MEC edge server or Roadside Unit (RSU) rather than high-performance parallel computing hosts, all C++ simulation and Python daemon processes are pinned to a single physical CPU core (using \texttt{taskset}). The software is based on Vanetza \cite{Vanetza}, an open-source ETSI C-ITS suite processing CAM/DENM payloads via the \texttt{asn1c} compiler \cite{asn1c_compiler}. We integrated a custom QoS evaluation framework into the ingress pipeline to measure presentation-layer latency. Crucially, although the evaluation runs on an x86 platform, the $\mathcal{O}(1)$ algorithmic complexity and zero-allocation memory design of the B-SSRF mathematically guarantee that its relative efficiency gains and tail-latency reduction ratios (e.g., the 85.5\% reduction) scale proportionally to low-power, ARM-based AIoT edge devices. 
+The testbed utilizes a 12th Gen Intel i7-12700H and 16 GB of RAM running Ubuntu 22.04 LTS. To accurately simulate the resource constraints of a typical MEC edge server or Roadside Unit (RSU) rather than high-performance parallel computing hosts, all C++ simulation and Python daemon processes are pinned to a single physical CPU core (using \texttt{taskset}). The software is based on Vanetza \cite{Vanetza}, an open-source ETSI C-ITS suite processing CAM/DENM payloads via the \texttt{asn1c} compiler \cite{asn1c_compiler}. We integrated a custom QoS evaluation framework into the ingress pipeline to measure presentation-layer latency. Crucially, although the evaluation runs on an x86 platform, the $\mathcal{O}(1)$ algorithmic complexity and zero-allocation memory design of the B-SSRF mathematically guarantee that its relative efficiency gains and tail-latency reduction ratios (e.g., the \% reduction) scale proportionally to low-power, ARM-based AIoT edge devices. 
 
-We interleaved compliant CAM/DENM traffic with malicious recursion payloads across multi-scale injection rates ranging from 0.1\% to 10\% (specifically 0.1\%, 0.5\%, 1.0\%, 5.0\%, and 10.0\%). To guarantee reproducibility, we evaluated two distinct baselines tracked by git commit hashes: (1) the \textbf{Unpatched Baseline} (\texttt{3a18193}), representing the native vulnerable parser; and (2) the \textbf{Patched Baseline} (\texttt{2daa68f}), representing the official static recursion limit. The system was evaluated under four scheduling configurations: Mode 0 (Continuous Uniform), Mode 1 (Single Strong Pulse), Mode 2 (Periodic Pulsing).
+To establish a realistic, standards-compliant vehicular network baseline, we extract nominal V2X background traffic from the V2AIX dataset \cite{10920150}, a multi-modal real-world repository of ETSI ITS V2X messages recorded in public road traffic. Specifically, we ingest 844 raw V2X messages (primarily Cooperative Awareness Messages, CAM) from the Aachen urban traffic scenario to capture nominal packet sizes, field structures, and byte distributions. We interleave this real-world traffic with 1,000 mutated recursive malicious payloads across multi-scale injection rates ranging from 0.1\% to 10.0\% (specifically 0.1\%, 0.5\%, 1.0\%, 5.0\%, and 10.0\%). To guarantee reproducibility, we evaluate two distinct baselines tracked by git commit hashes: (1) the \textbf{Unpatched Baseline} (\texttt{3a18193}), representing the native vulnerable parser; and (2) the \textbf{Patched Baseline} (\texttt{2daa68f}), representing the official static recursion limit. The system is evaluated under four scheduling configurations: Mode 0 (Continuous Uniform), Mode 1 (Single Strong Pulse), Mode 2 (Periodic Pulsing).
 
 \subsection{Metrics and Calibration}
-We micro-benchmark parser execution latency per packet. Across millions of payloads, we measure the Mean, Median, P99, and Max Latency to quantify queue delay and Head-of-Line (HoL) blocking. To handle sparse 1\% threats, we calibrated the PRB-FSM thresholds with a clean streak threshold of 1,000 packets and a 10\% base sampling rate. Measurements were aggregated over 30 runs to marginalize OS scheduler noise.
+We micro-benchmark parser execution latency per packet. Across millions of payloads, we measure the Mean, Median, P99, and Max Latency to quantify queue delay and Head-of-Line (HoL) blocking. To handle sparse 1\% threats, we calibrated the PRB-FSM thresholds using a clean-streak threshold of 1,000 packets and a 10\% base sampling rate. Measurements were aggregated over 30 runs to marginalize OS scheduler noise.
 
 \section{Evaluation}
 
 \begin{figure}[tbp]
 \centering
 \includegraphics[width=0.9\columnwidth]{parse_latency_and_gain.png}
-\caption{Empirical parsing performance and mitigation gain under MTU-constrained attacks: the left y-axis maps the median parse latency (in $\mu$s) comparing the unpatched and mitigated parsers, while the right y-axis maps the resulting performance gain ratio.}
 \label{fig:latency_and_gain}
 \end{figure}
 
 \subsection{Edge Workload Amplification \& Lightweight Profiling}
 To quantify the vulnerability of legacy V2X edge nodes, we profiled the unpatched ASN.1 parser under MTU-constrained structural attacks (Fig. \ref{fig:latency_and_gain}). The parsing latency exhibits a near-perfect linear growth ($\mathcal{O}(N)$) relative to recursive depth ($y = 0.7029x - 22.7646, R^2 > 0.99$). A single 1400-byte exploit payload triggers a 27.78$\times$ amplification factor, consuming 960.41 $\mu$s of CPU time. In real-time AIoT networks, such localized processing stalls instantly induce Head-of-Line (HoL) blocking, degrading the QoS of subsequent safety messages.
 
-To counter this without deep packet inspection, our B-SSRF profiles the localized $F_2$ moment ($SQ$) over a 64-byte sliding window. Normal V2X traffic (e.g., CAM) inherently scatters byte distributions via cryptographic fields, yielding a peak $SQ$ of 286. Conversely, recursive bombs rely on highly concentrated structural markers, maxing out the theoretical $SQ$ limit at 4096 ($64^2$). This $>14\times$ signal gap enables definitive anomaly detection. Crucially, this boundary relies strictly on \textbf{fixed parameter constraints ($w=64$)}, providing an immutable mathematical foundation that guarantees the deterministic filtering behavior of the subsequent heuristic FSM. Operating with $\mathcal{O}(1)$ space complexity, the algorithm utilizes a fixed-size frequency array to achieve true zero-allocation filtering, completely avoiding dynamic memory fragmentation.
+To counter this without deep packet inspection, our B-SSRF profiles the localized $F_2$ moment ($SQ$) over a 64-byte sliding window. In ETSI ITS communications, ASN.1 encoded messages (e.g., UPER or OER) naturally exhibit a high density of \texttt{0x00} bytes due to unpopulated optional fields and byte-alignment padding. This inherent sparsity can artificially inflate the $SQ$ score, risking false positives.
+
+To resolve this, the $SQ$ calculation explicitly excludes the \texttt{0x00} state. This exclusion is fundamentally secure due to the parsing semantics of ETSI ITS structures: triggering a CWE-674 uncontrolled recursion inherently requires non-zero structural markers---such as active presence bitmasks, choice indices, or container lengths---to force the parser into deeply nested loops. Conversely, a continuous stream of \texttt{0x00} merely indicates absent optional fields, which the ASN.1 parser processes flatly without increasing recursion depth. 
+
+By isolating the detector to non-zero structural frequencies, we effectively eliminate non-semantic padding noise. This maintains a normal traffic $SQ$ peak of 286, while recursive bombs reliably spike to 2719 ($>9\times$ signal gap), yielding a 0.00\% FPR. Anchored by fixed parameter constraints ($w=64$) and an $\mathcal{O}(1)$ space array, the algorithm achieves deterministic, zero-allocation filtering without dynamic memory fragmentation.
 
 \begin{table}[t]
 \caption{System-Wide QoS Comparison for Unpatched Parser under Multi-Scale Attack Rates (in ms)}
@@ -486,19 +490,19 @@ To counter this without deep packet inspection, our B-SSRF profiles the localize
 \toprule
 \textbf{Scenario} & \textbf{Mean} & \textbf{Median} & \textbf{P99} & \textbf{P99.9} & \textbf{Max} \\
 \midrule
-Baseline & 0.0159 & 0.0151 & 0.0327 & 0.1173 & 2.2136 \\
+Baseline & 0.0015 & 0.0013 & 0.0025 & 0.0133 & 0.3060 \\
 \midrule
 \multicolumn{6}{l}{\textbf{1.0\% Attack Rate}} \\
-Native & 0.0265 & 0.0220 & 0.2383 & 0.3624 & 4.6168 \\
-Pre-filter & 0.0262 & 0.0248 & 0.0485 & 0.1478 & 4.8722 \\
+Native & 0.0034 & 0.0014 & 0.0698 & 0.2254 & 2.2817 \\
+Pre-filter & 0.0024 & 0.0022 & 0.0041 & 0.0300 & 4.0475 \\
 \midrule
 \multicolumn{6}{l}{\textbf{5.0\% Attack Rate}} \\
-Native & 0.0386 & 0.0222 & 0.3309 & 0.4621 & 4.7434 \\
-Pre-filter & 0.0267 & 0.0249 & 0.0513 & 0.1621 & 4.4035 \\
+Native & 0.0110 & 0.0015 & 0.2033 & 0.2979 & 1.4132 \\
+Pre-filter & 0.0023 & 0.0021 & 0.0038 & 0.0170 & 0.8743 \\
 \midrule
 \multicolumn{6}{l}{\textbf{10.0\% Attack Rate}} \\
-Native & 0.0530 & 0.0223 & 0.3478 & 0.5309 & 4.9001 \\
-Pre-filter & 0.0263 & 0.0247 & 0.0503 & 0.1500 & 4.5438 \\
+Native & 0.0210 & 0.0016 & 0.2229 & 0.3473 & 0.8167 \\
+Pre-filter & 0.0022 & 0.0020 & 0.0035 & 0.0159 & 4.0452 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -511,14 +515,14 @@ Pre-filter & 0.0263 & 0.0247 & 0.0503 & 0.1500 & 4.5438 \\
 \end{figure*}
 
 \subsection{Tail Latency Mitigation \& Digital Twin Edge Inference}
-By shifting threat detection to this lightweight data plane, our architecture successfully neutralizes QoS degradation. As shown in Table \ref{tab:master}, under a severe 10.0\% attack rate, the unpatched parser's P99 latency deteriorates to 0.3478 ms. The B-SSRF guided by the ONNX pre-filter compresses this P99 latency down to 0.0503 ms (an 85.5\% reduction), returning the performance distribution to near-pristine levels (Fig. \ref{fig:master_comparison}).
+By shifting threat detection to this lightweight data plane, our architecture successfully neutralizes QoS degradation. As shown in Table \ref{tab:master}, under a severe 10.0% attack rate, the unpatched parser’s P99 latency deteriorates to 0.2229 ms. The B-SSRF guided by the ONNX pre-filter compresses this P99 latency down to 0.0035 ms (a 98.4% reduction), returning the performance distribution to near-pristine levels (Fig. \ref{fig:master_comparison}).
 
-To guarantee deployment viability, the DRL agent operates via a closed-loop digital twin. Python handles the MLOps training asynchronously, while the C++ ONNX Runtime executes the policy forward-pass directly on the edge. This bypasses the Python Global Interpreter Lock (GIL), achieving deterministic microsecond inference. Consequently, the mean processing latency under intense attacks (0.0263 ms) remains strictly comparable to the baseline (0.0159 ms).
+To guarantee deployment viability, the DRL agent operates via a closed-loop digital twin. Python handles MLOps training asynchronously, while the C++ ONNX Runtime executes the policy's forward pass directly at the edge. This bypasses the Python Global Interpreter Lock (GIL), achieving deterministic microsecond inference. Consequently, the mean processing latency under intense attacks (0.0022 ms) remains strictly comparable to the baseline (0.0015 ms).
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\columnwidth]{convergence_curve.png}
-\caption{Convergence of the DQN agent during the interactive digital twin co-simulation. The episodic reward stabilizes as the agent learns to optimize the Lagrangian-constrained risk budget, effectively minimizing latency overhead while strictly adhering to the maximum tolerable exploit leakage bound ($\epsilon_{\text{target}}$).}
+\caption{Convergence of the DQN agent during the interactive digital twin co-simulation. The episodic reward stabilizes as the agent learns to optimize the Lagrangian-constrained risk budget, thereby minimizing latency overhead while strictly adhering to the maximum tolerable exploit-leakage bound ($\epsilon_{\text{target}}$).}
 \label{fig:rl_convergence}
 \end{figure}
 
@@ -537,10 +541,9 @@ To guarantee deployment viability, the DRL agent operates via a closed-loop digi
 \end{figure}
 
 \subsection{Adaptive Shedding \& First-Miss Tolerance}
-Probabilistic sampling systems inherently face a "First-Miss Penalty," producing the transient Max Latency spikes (e.g., $\sim$4.5 ms) observed in Table \ref{tab:master}. To safeguard the edge node against exploratory policy divergence or algorithmic degradation of the AI framework, our architecture enforces a \textbf{two-tier deterministic guarantee}. A hardcoded \textbf{Layer-1 Overrun Guard (heuristic FSM)} is embedded in the C++ parser kernel; if the transient risk budget depletes past a severe threat threshold, the C++ state machine immediately \textbf{overrides the active DRL policy} and forces the packet sampling probability to 1.0 (100\% full telemetry inspection). 
+Probabilistic sampling systems inherently face a “First-Miss Penalty,” producing the transient Max Latency spikes (e.g., $\sim$4.0 ms) observed in Table \ref{tab:master}. To safeguard the edge node against exploratory policy divergence or algorithmic degradation of the AI framework, our architecture enforces a \textbf{two-tier deterministic guarantee}. A hardcoded \textbf{Layer-1 Overrun Guard (heuristic FSM)} is embedded in the C++ parser kernel; if the transient risk budget depletes past a severe threat threshold, the C++ state machine immediately \textbf{overrides the active DRL policy} and forces the packet sampling probability to 1.0 (100% full telemetry inspection).
 
-Within this hard safety ceiling, the DQN agent (converging reliably during co-simulation, Fig. \ref{fig:rl_convergence}) learns a Lagrangian-constrained policy that dynamically optimizes the sampling risk budget during nominal operations. Upon detecting structural instability, the PRB-FSM instantaneously transitions to the quarantine state, strictly bounding the HoL impact. Furthermore, as illustrated in Fig. \ref{fig:periodic_timeline} and \ref{fig:pulse_timeline}, the accelerated recovery mechanism ensures millisecond-level budget replenishment once threats dissipate, preventing long-term inspection overhead lock-in and minimizing the host CPU footprint during peace times.
-
+Within this hard safety ceiling, the DQN agent (converging reliably during co-simulation, Fig. \ref{fig:rl_convergence}) learns a Lagrangian-constrained policy that dynamically optimizes the sampling risk budget during nominal operations. Upon detecting structural instability, the PRB-FSM instantaneously transitions to the quarantine state, strictly bounding the HoL impact. Furthermore, as illustrated in Fig. \ref{fig:periodic_timeline} and \ref{fig:pulse_timeline}, the accelerated recovery mechanism ensures millisecond-level budget replenishment once threats dissipate, preventing long-term inspection overhead lock-in and minimizing the host CPU footprint during peacetime.
 
 \section{Discussion}
 
@@ -550,31 +553,30 @@ Within this hard safety ceiling, the DQN agent (converging reliably during co-si
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4.5pt}
-\begin{tabular}{@{}p{2.5cm}ccccc@{}}
+\begin{tabular}{@{}p{2.7cm}ccccc@{}}
 \toprule
 \textbf{Scenario / Mode} & \textbf{0.1\%} & \textbf{0.5\%} & \textbf{1.0\%} & \textbf{5.0\%} & \textbf{10.0\%} \\
 \midrule
 \textbf{Mode 0 (Continuous)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 4.9505 & 0.2450 & 0.0000 & 0.0000 & 0.0000 \\
+~~FNR (\%) & 4.2574 & 0.1021 & 0.0000 & 0.0000 & 0.0000 \\
 \midrule
 \textbf{Mode 1 (Pulse)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 3.5242 & 0.3074 & 0.0508 & 0.0000 & 0.0000 \\
+~~FNR (\%) & 3.0837 & 0.8197 & 0.1017 & 0.3000 & 0.0849 \\
 \midrule
 \textbf{Mode 2 (Periodic)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 3.2653 & 0.4108 & 0.1025 & 0.0000 & 0.0020 \\
+~~FNR (\%) & 5.7143 & 0.7806 & 0.0205 & 0.0562 & 0.0180 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 A robust AIoT edge defense demands an optimal balance between latency stability and detection accuracy. Traditional deep packet inspection (DPI) introduces constant parsing overhead and severe jitter, which is unacceptable for safety-critical V2X applications. In contrast, our digital twin framework utilizes a DRL-driven FSM to dynamically adapt probabilistic sampling. During nominal periods ($S_0$), the system operates at a minimal base sampling rate, restricting processing complexity to $\mathcal{O}(R_{\text{sample}} \times w)$. By exploiting the high entropy of legitimate signed OER messages, this self-adaptive stance achieves a 0.00\% false positive rate (FPR) across all evaluated modalities (Table~\ref{tab:fpr_fnr}), preserving cooperative awareness without disrupting standard vehicular communications.
 
-The empirical accuracy profile reveals an intrinsic systems-security trade-off under sparse threat models. As documented in Table~\ref{tab:fpr_fnr}, the false negative rate (FNR) scales down as the attack intensity increases. Under high-intensity workloads ($\ge 1.0\%$), the filter maintains a tight FNR boundary ($\le 0.11\%$). However, under extremely sparse threat scenarios ($\le 0.5\%$), the FNR elevates up to 4.95\% (Mode 0). This variance represents a classic "First-Miss Penalty" before the transient risk budget depletes past the quarantine threshold. From an AIoT resource optimization perspective, this is an intentional, cost-effective trade-off: the system actively tolerates minor initial leakages to protect edge CPU resources from continuous inspection fatigue during low-threat windows, relying on static application-layer limits to catch residual bypassed frames.
+The empirical accuracy profile reveals an intrinsic systems-security trade-off under sparse threat models. As documented in Table~\ref{tab:fpr_fnr}, the false negative rate (FNR) scales down as the attack intensity increases. Under high-intensity workloads ($\ge 1.0\%$), the filter maintains a tight FNR boundary ($\le 0.30\%$). However, under extremely sparse threat scenarios ($\le 0.5\%$), the FNR elevates up to 5.71\% (Mode 2). This variance represents a classic “First-Miss Penalty” before the transient risk budget depletes past the quarantine threshold. From an AIoT resource optimization perspective, this is an intentional, cost-effective trade-off: the system actively tolerates minor initial leakages to protect edge CPU resources from continuous inspection fatigue during low-threat windows, relying on static application-layer limits to catch residual bypassed frames.
 
 Faced with stateful adversaries executing low-frequency pulsing exploits to induce persistent inspection lock-in, the framework maintains robust systemic containment. Because the underlying B-SSRF operates with strict $\mathcal{O}(1)$ complexity, forcing the data plane into continuous inspection shifts the baseline processing time negligibly without triggering localized Head-of-Line blocking. The zero-allocation IPC and decoupled digital twin design ensure that the runtime execution path remains deterministic. Policy validity is rigorously enforced by Lagrangian reward shaping rather than fragile heuristic parameter tuning, demonstrating highly generalized operational resilience across heterogeneous, resource-constrained V2X infrastructures.
-
 \section{Limitations and Future Work}
 
 While our two-tier framework successfully establishes a deterministic physical bound on presentation-layer resource exhaustion, the current evaluation isolates the dynamic mitigation to a single MEC edge node. In dense Cooperative Intelligent Transport Systems (C-ITS), vehicular mobility and fluctuating traffic densities dynamically alter the spatial distribution of structural threats. Future research must expand the closed-loop digital twin into a multi-node federated architecture (e.g., via ns-3 network-level simulations). By sharing the DRL agent's episodic rewards and risk budget policies across distributed Roadside Units (RSUs), the network can proactively establish intersection-wide threat containment and cooperative load-shedding before localized HoL blocking cascades into neighboring zones.
@@ -587,14 +589,14 @@ The deep integration of MEC into V2X networks introduces critical presentation-l
 
 To secure resource-constrained AIoT edge infrastructure without resorting to cost-prohibitive firmware upgrades or heavy continuous inspection, this paper presented a DRL-driven Parser-Layer Circuit Breaker. By decoupling a fast-path C++ data plane from a cognitive Python slow path, we engineered a closed-loop digital twin bridged by zero-allocation IPC. At its core, the architecture enforces a rigorous two-tier deterministic guarantee: an $\mathcal{O}(1)$ B-SSRF utilizes fixed mathematical boundaries ($w=64$) to lock in a heuristic probabilistic risk budget, which in turn acts as a hard Layer-1 Overrun Guard to constrain the Deep Q-Network's exploratory policy. 
 
-Extensive empirical evaluations demonstrated that our dynamic sampling mitigation reduces P99 tail latency by 85.5\% (from 0.3478 ms down to 0.0503 ms) under high-intensity attacks. By transforming the security objective from static payload signature matching into dynamic computational exposure management, our framework delivers microsecond-level adaptive threat containment, successfully preserving critical V2X cooperative awareness under intense adversarial workloads.
+Extensive empirical evaluations demonstrated that our dynamic sampling mitigation reduces P99 tail latency by 98.4\% (from 0.2229 ms down to 0.0035 ms) under high-intensity attacks. By transforming the security objective from static payload signature matching to dynamic computational exposure management, our framework delivers microsecond-level adaptive threat containment while successfully preserving critical V2X cooperative awareness under intense adversarial workloads.
 
 
 % ---------------------------------------------------------
 % BIBLIOGRAPHY SECTION
 % -----------------------------------------------------------------
 \bibliographystyle{ieeetr}
-\bibliography{IEEEabrv, AIOT2026}
+\bibliography{IEEEabrv, refs}
 
 
 \end{document}
