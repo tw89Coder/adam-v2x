@@ -17,10 +17,11 @@ class QoSPlotter(BasePlotter):
     MODES = [0, 1, 2]
     RATES = [1.0, 5.0, 10.0]
 
-    def __init__(self, root_output_dir="outputs", use_onnx=False):
+    def __init__(self, root_output_dir="outputs", use_onnx=False, no_patched=False):
         super().__init__(root_output_dir)
         self.raw_dir = os.path.join(root_output_dir, "csv_raw")
         self.use_onnx = use_onnx
+        self.no_patched = no_patched
         self._discover_modes_and_rates()
 
     def _discover_modes_and_rates(self):
@@ -126,7 +127,7 @@ class QoSPlotter(BasePlotter):
                     ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',   False),
                     ('unpatched', f'qos_attack_{rate}_mode{mode}{suffix}',      'Unpatched Filtered', True),
                 ]
-                if not self.use_onnx:
+                if not self.use_onnx and not self.no_patched:
                     scenarios.extend([
                         ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',     False),
                         ('patched',   f'qos_attack_{rate}_mode{mode}{suffix}',      'Patched Filtered',   True),
@@ -167,17 +168,16 @@ class QoSPlotter(BasePlotter):
         df_pf  = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
-            ("Baseline",           df_b,   '#2ca02c', '-',  1),
-            ("Unpatched Native",   df_un,  '#d62728', '-',  2),
-            ("Unpatched Filtered", df_unf, '#ff7f0e', ':',  3),
+            ("Baseline",           df_b,   '#55a868', '-',  3),  # Drawn on top (zorder=3)
+            ("Unpatched Native",   df_un,  '#c44e52', '-',  1),  # Drawn at the bottom (zorder=1)
+            ("Unpatched Filtered", df_unf, '#4c72b0', ':',  2),  # Drawn in middle (zorder=2) - High contrast blue
         ]
-        if not self.use_onnx:
+        if not self.use_onnx and not self.no_patched:
             series_map.extend([
-                ("Patched Native",     df_p,   '#9467bd', '--', 4),
-                ("Patched Filtered",   df_pf,  '#1f77b4', '-.', 5),
+                ("Patched Native",     df_p,   '#8172b2', '--', 1),
+                ("Patched Filtered",   df_pf,  '#64b5cd', '-.', 2),  # Distinct Cyan
             ])
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         WINDOW_LIMIT = 500
         start_idx = 0
         ref_df = df_un if df_un is not None and not df_un.empty else df_b
@@ -193,7 +193,10 @@ class QoSPlotter(BasePlotter):
         
         end_idx = start_idx + WINDOW_LIMIT
 
-        # Subplot 1: Jitter Time Series
+        # ---------------------------------------------------------------------
+        # Figure 1: Jitter Time Series
+        # ---------------------------------------------------------------------
+        fig1, ax1 = plt.subplots(figsize=(5.0, 3.0))
         max_y = 0.45
         for label, df, color, ls, z in series_map:
             if df is not None and not df.empty:
@@ -204,37 +207,65 @@ class QoSPlotter(BasePlotter):
                 if local_max > max_y:
                     max_y = local_max
 
-        ax1.set_ylim(0, max_y * 1.1)
-        ax1.set_xlabel('Packet ID (Around Attack Onset)')
-        ax1.set_ylabel('Processing Latency (ms)')
+        ax1.set_ylim(-0.015, max_y * 1.1)
+        ax1.set_xlabel('Packet ID (Around Attack Onset)', fontsize=11)
+        ax1.set_ylabel('Processing Latency (ms)', fontsize=11)
         ax1.grid(True, linestyle=':', alpha=0.7)
-        ax1.legend(loc='upper right', fontsize=10)
+        ax1.legend(loc='upper right', fontsize=8.5, frameon=True, edgecolor='#cccccc', framealpha=0.9)
+        ax1.tick_params(axis='both', labelsize=9.5)
+        
+        # Despine top and right borders (Classic Seaborn look)
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        
+        fig1.tight_layout()
+        out_suffix = "_onnx" if self.use_onnx else ""
+        self.export_figure(fig1, "qos/master", f"jitter_mode{target_mode}_{target_rate}pct{out_suffix}")
+        plt.close(fig1)
 
-        # Subplot 2: Cumulative Distribution Metrics
+        # ---------------------------------------------------------------------
+        # Figure 2: Cumulative Distribution Function (CDF)
+        # ---------------------------------------------------------------------
+        fig2, ax2 = plt.subplots(figsize=(5.0, 3.0))
         for label, df, color, ls, z in series_map:
             if df is not None and not df.empty:
                 sorted_lat = np.sort(df['latency_ms'])
                 probabilities = np.arange(len(sorted_lat)) / float(len(sorted_lat) - 1)
                 ax2.plot(sorted_lat, probabilities, label=label, color=color, linestyle=ls, linewidth=1.5, alpha=0.9, zorder=z)
 
+        # Draw the 99th percentile horizontal guideline
         ax2.axhline(y=0.99, color='black', linestyle='-', alpha=0.2, linewidth=1.0)
         
+        # Restore the P99 vertical lines and their text annotations (clean non-overlapping layout)
         for idx, (label, df, color, ls, z) in enumerate(series_map):
             if df is not None and not df.empty:
                 p99 = df['latency_ms'].quantile(0.99)
                 ax2.plot([p99, p99], [0, 0.99], color=color, linestyle=ls, linewidth=1.2, alpha=0.7)
-                ax2.text(p99 * 1.05, 0.15 + idx * 0.12, f'{p99:.3f} ms', color=color, fontsize=10)
+                
+                # Prevent text collisions on the log scale by distributing y-coordinates dynamically
+                y_pos = 0.15 + idx * 0.12
+                if label == "Baseline":
+                    ax2.text(p99 / 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='right', va='center')
+                else:
+                    ax2.text(p99 * 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='left', va='center')
 
         ax2.set_xscale('log')
         ax2.set_xlim(1e-4, 10.0)
-        ax2.set_xlabel('Processing Latency (ms) [Log Scale]')
-        ax2.set_ylabel('CDF Probability')
+        ax2.set_xlabel('Latency (ms) [Log Scale]', fontsize=11)
+        ax2.set_ylabel('CDF Probability', fontsize=11)
         ax2.grid(True, which="both", linestyle=':', alpha=0.7)
-        ax2.legend(loc='lower right', fontsize=10)
+        ax2.legend(loc='lower right', fontsize=8.5, frameon=True, edgecolor='#cccccc', framealpha=0.9)
+        ax2.tick_params(axis='both', labelsize=9.5)
 
-        out_suffix = "_onnx" if self.use_onnx else ""
-        self.export_figure(fig, "qos/master", f"comparison_mode{target_mode}_{target_rate}pct{out_suffix}")
-        plt.close(fig)
+        # Despine top and right borders
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+
+        fig2.tight_layout()
+        self.export_figure(fig2, "qos/master", f"cdf_mode{target_mode}_{target_rate}pct{out_suffix}")
+        plt.close(fig2)
+
+
 
     def plot_pulse_timeline(self):
         LogStyle.log_stage("Generating Pulse Attack Mitigation Timeline (Mode 1)...")

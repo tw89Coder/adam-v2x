@@ -9,6 +9,7 @@ from engine.base import BasePlotter
 from engine.amplification import AmplificationPlotter
 from engine.qos import QoSPlotter
 from engine.convergence import ConvergencePlotter
+from engine.pareto import ParetoPlotter
 
 # Explicitly define public API exports for this module package
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     'BasePlotter',
     'AmplificationPlotter',
     'QoSPlotter',
-    'ConvergencePlotter'
+    'ConvergencePlotter',
+    'ParetoPlotter'
 ]

@@ -172,6 +172,7 @@ RUN_ONNX=false
 ONNX_MODEL_PATH=""
 DISABLE_SAFETY=false
 RUN_TRACE=false
+LAMBDA_PPS=""
 
 
 # Chi-AN : experiment data flow control  parameters 
@@ -289,6 +290,15 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
 
+        -l|--lambda)
+            if [[ -n "$2" && "$2" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                LAMBDA_PPS="$2"
+                shift 2
+            else
+                echo -e "${C_ERROR}[ERROR] -l/--lambda demands a numeric rate.${C_RESET}"
+                exit 1
+            fi
+            ;;
         -N|--packets)
             if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
                 TOTAL_PACKETS="$2"
@@ -325,13 +335,14 @@ fi
 # Helper execution engine bypassing taskset if USE_TASKSET is set to false
 execute_cmd() {
     if [ "$USE_TASKSET" = true ]; then
+        local num_cores
+        num_cores=$(nproc)
+        local pin_core_wrapped=$(( PIN_CORE % num_cores ))
         if [ "$RUN_ONNX" = true ]; then
-            local num_cores
-            num_cores=$(nproc)
-            local onnx_core=$(( (PIN_CORE + 1) % num_cores ))
-            taskset -c "${PIN_CORE},${onnx_core}" "$@"
+            local onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+            taskset -c "${pin_core_wrapped},${onnx_core}" "$@"
         else
-            taskset -c "$PIN_CORE" "$@"
+            taskset -c "$pin_core_wrapped" "$@"
         fi
     else
         "$@"
@@ -353,6 +364,9 @@ run_training_pair() {
     echo -e "${C_INFO}[EXEC] RL trajectory: target=${tgt}, mode=${mode}, rate=${rate}%, packets=${TOTAL_PACKETS}${C_RESET}"
 
     local train_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "--rl")
+    if [ -n "$LAMBDA_PPS" ]; then
+        train_args+=("--lambda" "$LAMBDA_PPS")
+    fi
 
     if [ "$DISABLE_SAFETY" = true ]; then
         train_args+=("--disable-safety")
@@ -373,13 +387,14 @@ run_training_pair() {
 # Resolve lock status representation for console logs
 get_core_info() {
     if [ "$USE_TASKSET" = true ]; then
+        local num_cores
+        num_cores=$(nproc)
+        local pin_core_wrapped=$(( PIN_CORE % num_cores ))
         if [ "$RUN_ONNX" = true ]; then
-            local num_cores
-            num_cores=$(nproc)
-            local onnx_core=$(( (PIN_CORE + 1) % num_cores ))
-            echo "Cores: ${PIN_CORE},${onnx_core}"
+            local onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+            echo "Cores: ${pin_core_wrapped},${onnx_core}"
         else
-            echo "Core: ${PIN_CORE}"
+            echo "Core: ${pin_core_wrapped}"
         fi
     else
         echo "Core: Dynamic (OS-scheduled)"
@@ -494,7 +509,11 @@ execute_matrix_sweep() {
             # Conditionally execute the unhardened raw baseline telemetry flow node
             if [ "$RUN_FILTER_OFF" = true ]; then
                 echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=OFF | ONNX=OFF ($(get_core_info))${C_RESET}"
-                execute_cmd "$exec_bin" -t $TOTAL_PACKETS -p "$rate" -m "$mode"
+                local sweep_args_off=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode")
+                if [ -n "$LAMBDA_PPS" ]; then
+                    sweep_args_off+=("--lambda" "$LAMBDA_PPS")
+                fi
+                execute_cmd "$exec_bin" "${sweep_args_off[@]}"
             fi
 
             # Conditionally execute the circuit-breaker state-machine hardened flow node
@@ -502,6 +521,9 @@ execute_matrix_sweep() {
                 local onnx_status="OFF"; if [ "$RUN_ONNX" = true ]; then onnx_status="ON"; fi
                 echo -e "${C_INFO}[STAGE] Node Init: Target=${tgt} | Rate=${rate}% | Mode=${mode} | Filter=ON  | ONNX=${onnx_status} ($(get_core_info))${C_RESET}"
                 local sweep_args=("-t" "$TOTAL_PACKETS" "-p" "$rate" "-m" "$mode" "-f")
+                if [ -n "$LAMBDA_PPS" ]; then
+                    sweep_args+=("--lambda" "$LAMBDA_PPS")
+                fi
                 if [ "$RUN_ONNX" = true ]; then
                     sweep_args+=("--onnx" "$ONNX_MODEL_PATH")
                 fi

@@ -24,21 +24,23 @@ def main():
                f"  {LogStyle.STAGE}debug{LogStyle.RESET}       : Diagnostics diagnostic log output checks\n"
                f"  {LogStyle.STAGE}budget{LogStyle.RESET}      : Resource depletion threshold boundaries under mitigations\n"
                f"  {LogStyle.STAGE}convergence{LogStyle.RESET} : DRL offline/online training Episode-Reward convergence metrics\n"
-               f"  {LogStyle.STAGE}window{LogStyle.RESET}      : Dynamic timeline curves of window-level sampling, attack, and leakage rates"
+               f"  {LogStyle.STAGE}window{LogStyle.RESET}      : Dynamic timeline curves of window-level sampling, attack, and leakage rates\n"
+               f"  {LogStyle.STAGE}pareto{LogStyle.RESET}      : Analytical Pareto frontier of entropy-depth security tradeoff"
     )
     
     parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
-    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence', 'window'], 
+    parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence', 'window', 'pareto'], 
                         help="Isolate target execution pipelines (see type details below).")
     parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
     parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
     parser.add_argument('--onnx', action='store_true', help="Use ONNX actual deployment results instead of heuristic FSM filtered results for QoS plots.")
+    parser.add_argument('--no-patched', action='store_true', help="Exclude Patched Native and Patched Filtered curves from QoS plots.")
 
     args = parser.parse_args()
 
     # Deferred initialization pass to prevent heavy library load overhead on help flags
-    from engine import AmplificationPlotter, QoSPlotter, ConvergencePlotter
+    from engine import AmplificationPlotter, QoSPlotter, ConvergencePlotter, ParetoPlotter
 
     # Enforce absolute path casting on final target boundary
     base_dir = os.path.abspath(args.output_dir)
@@ -53,8 +55,9 @@ def main():
         sys.exit(1)
  
     amp_engine = AmplificationPlotter(root_output_dir=base_dir)
-    qos_engine = QoSPlotter(root_output_dir=base_dir, use_onnx=args.onnx)
+    qos_engine = QoSPlotter(root_output_dir=base_dir, use_onnx=args.onnx, no_patched=args.no_patched)
     conv_engine = ConvergencePlotter(root_output_dir=base_dir)
+    pareto_engine = ParetoPlotter(root_output_dir=base_dir)
 
     try:
         if args.all:
@@ -72,6 +75,9 @@ def main():
             # Auto-run convergence plot if training logs exist
             csv_path = os.path.join(project_root, "checkpoints", "training_progress.csv")
             conv_engine.execute(csv_path)
+
+            # Auto-run Pareto frontier plot
+            pareto_engine.execute()
             
             LogStyle.log_success("Comprehensive analytical evaluation cycle finished cleanly without failures.")
             return
@@ -109,6 +115,9 @@ def main():
             qos_engine.plot_online_training_telemetry()
             # 2. Auto-scan outputs/rl_env and plot all existing deployment window traces
             qos_engine.plot_all_existing_window_metrics()
+
+        elif args.type == 'pareto':
+            pareto_engine.execute()
 
     except KeyboardInterrupt:
         print(f"\n{LogStyle.WARN}[SIGINT DETECTED] Processing loop gracefully aborted by user event link.{LogStyle.RESET}\n")

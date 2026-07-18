@@ -41,7 +41,7 @@ class ConvergencePlotter(BasePlotter):
         # Standard academic paper aspect ratio (8 x 4.5 inches)
         fig, ax1 = plt.subplots(figsize=(8, 4.5))
 
-        color_reward = "#1f77b4"
+        color_reward = "#4c72b0"
         ax1.set_xlabel("Training Updates (Batches)", fontweight="normal")
         ax1.set_ylabel("Mean Reward", color=color_reward, fontweight="normal")
 
@@ -57,7 +57,8 @@ class ConvergencePlotter(BasePlotter):
 
         # Secondary Y axis for loss metrics
         ax2 = ax1.twinx()
-        color_loss = "#d62728"
+        ax2.spines['right'].set_visible(True)  # Re-enable the twin spine that was globally despined
+        color_loss = "#c44e52"
         ax2.set_ylabel("Training Loss", color=color_loss, fontweight="normal")
 
         smoothed_loss = loss.rolling(window=window, min_periods=1).mean()

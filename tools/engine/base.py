@@ -18,8 +18,13 @@ class BasePlotter:
 
     def _apply_academic_style(self):
         """
-        Enforces top-tier IEEE/ACM venue formatting standards across all subplots.
+        Enforces top-tier IEEE/ACM venue formatting standards across all subplots,
+        leveraging a clean Seaborn-ticks aesthetic.
         """
+        # Apply the built-in Seaborn ticks style
+        plt.style.use('seaborn-v0_8-ticks')
+
+        # Override with publication-grade font and layout specifications
         plt.rcParams.update({
             'font.family': 'serif',
             'font.serif': ['Times New Roman', 'DejaVu Serif'],
@@ -28,19 +33,18 @@ class BasePlotter:
             'axes.titlesize': 14,
             'axes.titleweight': 'bold',
             'axes.linewidth': 1.2,
+            'axes.spines.top': False,
+            'axes.spines.right': False,
             'legend.fontsize': 11,
             'legend.frameon': True,
             'legend.edgecolor': 'black',
-            'legend.framealpha': 1.0,
+            'legend.framealpha': 0.9,
             'xtick.labelsize': 11,
             'ytick.labelsize': 11,
-            'xtick.direction': 'in',
-            'ytick.direction': 'in',
+            'xtick.direction': 'out',
+            'ytick.direction': 'out',
             'xtick.major.size': 5,
             'ytick.major.size': 5,
-            'axes.grid': True,
-            'grid.alpha': 0.4,
-            'grid.linestyle': ':',
             'lines.linewidth': 2.5,
             'lines.markersize': 8,
             'figure.dpi': 300,

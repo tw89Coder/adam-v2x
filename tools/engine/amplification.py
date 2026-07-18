@@ -78,9 +78,9 @@ class AmplificationPlotter(BasePlotter):
 
         df_merged['mitigation_gain'] = df_merged['median_latency_us_un'] / df_merged['median_latency_us_pa']
 
-        COLOR_UNPATCHED = '#E31A1C' # Bright academic red
-        COLOR_PATCHED = '#1F78B4'   # Bright academic blue
-        COLOR_GAIN = '#33A02C'      # Bright academic green
+        COLOR_UNPATCHED = '#c44e52' # Seaborn soft red
+        COLOR_PATCHED = '#4c72b0'   # Seaborn soft blue
+        COLOR_GAIN = '#55a868'      # Seaborn soft green
         comma_formatter = ticker.StrMethodFormatter('{x:,.0f}')
 
         # Combined Plot: Absolute Latency & Mitigation Gain (Dual Y-Axis)
@@ -90,21 +90,28 @@ class AmplificationPlotter(BasePlotter):
         ln1 = ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_un'], 
                        marker='o', linestyle='-', color=COLOR_UNPATCHED, label='Unpatched Latency')
         ln2 = ax1.plot(df_merged['total_size_bytes'], df_merged['median_latency_us_pa'], 
-                       marker='s', linestyle='--', color=COLOR_PATCHED, label='Patched Latency')
+                       marker='o', linestyle='--', color=COLOR_PATCHED, label='Patched Latency')
         ax1.set_xlabel('Packet Size (Bytes)')
         ax1.set_ylabel('Median Parse Latency ($\mu$s)', color='black')
         ax1.tick_params(axis='y', labelcolor='black')
         ax1.xaxis.set_major_formatter(comma_formatter)
         ax1.grid(True, linestyle=':', alpha=0.6)
         
+        # Add a secondary top X-axis representing the corresponding recursion depth
+        # Since S_syn = 2 bytes, Depth = Size / 2.0
+        ax_top = ax1.secondary_xaxis('top', functions=(lambda x: x / 2.0, lambda x: x * 2.0))
+        ax_top.set_xlabel('Exploit Recursion Depth ($D$)', fontsize=11, labelpad=6)
+        ax_top.tick_params(axis='x', labelsize=9.5)
+        
         # Right Y-Axis: Performance Gain Ratio
         ax2 = ax1.twinx()
+        ax2.spines['right'].set_visible(True)  # Re-enable the twin spine that was globally despined
         ln3 = ax2.plot(df_merged['total_size_bytes'], df_merged['mitigation_gain'], 
                        marker='D', linestyle='-.', color=COLOR_GAIN, label='Mitigation Gain')
         ax2.set_ylabel('Gain Ratio (Unpatched / Patched)', color=COLOR_GAIN)
         ax2.tick_params(axis='y', labelcolor=COLOR_GAIN)
         
-        # Consolidate legends from both axes
+        # Consolidate legends from both axes (position adjusted to not block lines)
         lns = ln1 + ln2 + ln3
         labs = [l.get_label() for l in lns]
         ax1.legend(lns, labs, loc='upper left')
