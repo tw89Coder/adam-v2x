@@ -39,7 +39,7 @@ def parse_arguments():
     parser.add_argument("-p", "--port", type=int, default=8080, help="Loopback server port assignment")
     parser.add_argument("-b", "--batch", type=int, default=32, help="Rollout batch optimization threshold")
     parser.add_argument("-l", "--lr", type=float, default=0.0003, help="Actor-Critic / Q-Network learning speed")
-    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
+    parser.add_argument("-a", "--algo", type=str, choices=["ppo", "discrete_ppo", "sac", "dqn"], default="dqn", help="RL algorithm to use")
     parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     return parser.parse_args()
 

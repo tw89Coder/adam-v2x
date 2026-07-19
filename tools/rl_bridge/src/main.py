@@ -61,7 +61,14 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     import csv
     import os
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    log_path = os.path.join(CHECKPOINT_DIR, "training_progress.csv")
+    algorithm_name = getattr(agent, "algorithm_name", None)
+    log_suffix = f"_{algorithm_name}" if algorithm_name else ""
+    checkpoint_path = (
+        os.path.join(CHECKPOINT_DIR, f"v2x_online_brain_{algorithm_name}.pth")
+        if algorithm_name
+        else ONLINE_BRAIN_PATH
+    )
+    log_path = os.path.join(CHECKPOINT_DIR, f"training_progress{log_suffix}.csv")
     log_file = open(log_path, mode="w", newline="", encoding="utf-8")
     log_writer = csv.writer(log_file)
     log_writer.writerow([
@@ -87,7 +94,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     ])
 
     # Initialize CSV logger for step-by-step training telemetry curves
-    telemetry_path = os.path.join(CHECKPOINT_DIR, "online_training_telemetry.csv")
+    telemetry_path = os.path.join(CHECKPOINT_DIR, f"online_training_telemetry{log_suffix}.csv")
     telemetry_file = open(telemetry_path, mode="w", newline="", encoding="utf-8")
     telemetry_writer = csv.writer(telemetry_file)
     telemetry_writer.writerow([
@@ -248,14 +255,14 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 # Serialize checkpoints periodically
                 if update_count % 10 == 0:
                     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-                    torch.save(agent.model.state_dict(), ONLINE_BRAIN_PATH)
-                    print(f"  └── {C_SUCCESS}[SUCCESS] Brain weights checkpoint saved -> {ONLINE_BRAIN_PATH}{C_RESET}")
+                    torch.save(agent.model.state_dict(), checkpoint_path)
+                    print(f"  └── {C_SUCCESS}[SUCCESS] Brain weights checkpoint saved -> {checkpoint_path}{C_RESET}")
                     
     except KeyboardInterrupt:
-        print(f"\n{C_WARN}[*] Interrupted by user. Saving final weights checkpoint to: {ONLINE_BRAIN_PATH}{C_RESET}")
+        print(f"\n{C_WARN}[*] Interrupted by user. Saving final weights checkpoint to: {checkpoint_path}{C_RESET}")
         try:
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-            torch.save(agent.model.state_dict(), ONLINE_BRAIN_PATH)
+            torch.save(agent.model.state_dict(), checkpoint_path)
             print(f"  └── {C_SUCCESS}[SUCCESS] Final weights successfully saved!{C_RESET}")
         except Exception as save_err:
             print(f"  └── {C_ERROR}[ERROR] Failed to save final weights: {save_err}{C_RESET}")
@@ -337,7 +344,7 @@ def main():
     parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
     parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     parser.add_argument("--fresh", action="store_true", help="Start training from scratch, ignoring existing checkpoints")
-    parser.add_argument("-a", "--algo", "--algorithm", dest="algo", type=str, choices=["ppo", "sac", "dqn"], default=None,
+    parser.add_argument("-a", "--algo", "--algorithm", dest="algo", type=str, choices=["ppo", "discrete_ppo", "sac", "dqn"], default=None,
                         help="RL algorithm to use (defaults to config/agent.yaml)")
     args = parser.parse_args()
 
@@ -361,14 +368,19 @@ def main():
         frame_stack=frame_stack
     )
     model = agent.model
+    selected_online_brain_path = (
+        os.path.join(CHECKPOINT_DIR, f"v2x_online_brain_{algo_name}.pth")
+        if algo_name == "discrete_ppo"
+        else ONLINE_BRAIN_PATH
+    )
 
     # 2. Instantiate and run environment wrappers dynamically
     if args.mode == "online":
         # Load weights if available
-        if not args.fresh and os.path.exists(ONLINE_BRAIN_PATH):
+        if not args.fresh and os.path.exists(selected_online_brain_path):
             try:
-                model.load_state_dict(torch.load(ONLINE_BRAIN_PATH, map_location="cpu"))
-                print(f"  └── {C_SUCCESS}[INIT] Loaded existing online model weights from {ONLINE_BRAIN_PATH}{C_RESET}")
+                model.load_state_dict(torch.load(selected_online_brain_path, map_location="cpu"))
+                print(f"  └── {C_SUCCESS}[INIT] Loaded existing online model weights from {selected_online_brain_path}{C_RESET}")
             except Exception as e:
                 print(f"  └── {C_WARN}[INIT] Cannot load online model weights: {e}. Starting fresh...{C_RESET}")
         else:
@@ -378,7 +390,9 @@ def main():
         if args.host:
             env.host = args.host
             
-        batch_size = RAW_CFG["hyperparameters"]["batch_size"]
+        batch_size = RAW_CFG.get(algo_name, {}).get(
+            "rollout_steps", RAW_CFG["hyperparameters"]["batch_size"]
+        )
         run_online(env, agent, learner, batch_size)
     else:
         # Load weights if available

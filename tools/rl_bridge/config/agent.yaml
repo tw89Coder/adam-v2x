@@ -146,3 +146,18 @@ dqn:
     lambda_lr: 0.05
     leakage_target: 0.01
     overhead_scale: 2.0
+
+# ------------------------------------------------------------------------------
+# 9. DQN-aligned Discrete PPO (same state/action/reward, different learner)
+# ------------------------------------------------------------------------------
+discrete_ppo:
+  hidden_dim: 128
+  rollout_steps: 1024
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_eps: 0.2
+  update_epochs: 10
+  minibatch_size: 64
+  value_coef: 0.5
+  entropy_coef: 0.01
+  max_grad_norm: 0.5
