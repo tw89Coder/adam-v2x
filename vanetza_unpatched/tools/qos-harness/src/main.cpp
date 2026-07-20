@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -401,6 +402,22 @@ int main(int argc, char* argv[]) {
     if (enable_filter) {
         qos_harness::ConsolePresenter::printSecurityReport(total_packets, malware_so_far, true_positives,
                                                            true_negatives, false_positives, false_negatives);
+        
+        // Export summary metrics for automated evaluation scripts
+        std::string summary_filename = out_filename;
+        size_t dot_pos = summary_filename.find_last_of('.');
+        if (dot_pos != std::string::npos) {
+            summary_filename.insert(dot_pos, "_summary");
+        } else {
+            summary_filename += "_summary.csv";
+        }
+        std::ofstream summary_csv(summary_filename);
+        if (summary_csv.is_open()) {
+            summary_csv << "total_packets,malware,tp,tn,fp,fn,total_inspected\n";
+            summary_csv << total_packets << "," << malware_so_far << "," << true_positives << "," 
+                        << true_negatives << "," << false_positives << "," << false_negatives << "," << total_inspected << "\n";
+            summary_csv.close();
+        }
     }
 
     std::cout << qos_harness::ConsolePresenter::green() << "[+] Saved to " << out_filename
