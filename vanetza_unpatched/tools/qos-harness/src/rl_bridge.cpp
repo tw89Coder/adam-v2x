@@ -532,9 +532,16 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         const char* input_names[] = {input_name};
         const char* output_names[] = {output_name};
         
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
         auto output_tensors = session.Run(
             Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1
         );
+        
+        auto end_time = std::chrono::high_resolution_clock::now();
+        uint64_t elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+        total_inference_time_us_ += elapsed_us;
+        inference_count_++;
 
         // Retrieve raw floating point outputs from the output tensor.
         float* float_output = output_tensors.front().GetTensorMutableData<float>();

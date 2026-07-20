@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 
 namespace qos_harness {
@@ -365,6 +366,14 @@ void ConsolePresenter::printDatasetHeader(long long normal_lat, long long base_p
                 label().c_str(), reset().c_str(), static_cast<double>(base_poc_lat) / normal_lat);
     std::printf("%s------------------------------------------------------------%s\n", frame().c_str(), reset().c_str());
     std::fflush(stdout);
+}
+
+void ConsolePresenter::printAblationMetrics(const std::string& config_name, double fnr, double avg_sampling, const std::string& cost_str) {
+    std::cout << yellow() << "\n[ABLATION METRICS] " << config_name 
+              << " | FNR: " << std::fixed << std::setprecision(2) << fnr 
+              << "% | Sampling: " << std::fixed << std::setprecision(2) << avg_sampling 
+              << "% | Overhead: " << cost_str 
+              << reset() << "\n";
 }
 
 void ConsolePresenter::printHillClimbStep(int generated, int target, int attempt, int gen, int total_gens, 

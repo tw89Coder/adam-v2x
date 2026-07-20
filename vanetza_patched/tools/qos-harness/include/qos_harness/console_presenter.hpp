@@ -71,6 +71,7 @@ public:
     static void printDiagnosisEndBox();
     static void printProfilerEndBox(size_t limit, const std::string& csv, const std::string& bin);
     static void printSecurityReport(int total, int malware, int tp, int tn, int fp, int fn);
+    static void printAblationMetrics(const std::string& config_name, double fnr, double avg_sampling, const std::string& cost_str);
 };
 
 }  // namespace qos_harness
