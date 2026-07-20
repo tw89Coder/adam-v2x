@@ -28,7 +28,9 @@
 #include <x86intrin.h>
 
 AdaptiveFilterFSM::AdaptiveFilterFSM()
-    : current_budget(MAX_BUDGET), rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {}
+    : rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {
+    current_budget = MAX_BUDGET;
+}
 
 /**
  * @brief Maps the current virtual CPU budget to a discrete system state.

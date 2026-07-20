@@ -23,26 +23,6 @@ const std::string REPO_ROOT_STR = REPO_ROOT;
 const std::string NORMAL_FOLDER = REPO_ROOT_STR + "/inputs/base_packets";
 const std::string ATTACK_FOLDER = REPO_ROOT_STR + "/inputs/attack_vectors/malware";
 
-#include <unistd.h>
-#include <fstream>
-
-/**
- * @brief Retrieves the Peak Resident Set Size (RSS) in MB from /proc/self/status
- */
-long get_peak_rss_mb() {
-    std::ifstream status("/proc/self/status");
-    std::string line;
-    while (std::getline(status, line)) {
-        if (line.compare(0, 6, "VmHWM:") == 0) {
-            long kb = 0;
-            if (sscanf(line.c_str(), "VmHWM: %ld kB", &kb) == 1) {
-                return kb / 1024;
-            }
-        }
-    }
-    return 0;
-}
-
 /**
  * @brief Prints CLI instructions mapping available parameter sweep arguments.
  */
@@ -56,13 +36,12 @@ void printHelp(const char* progName) {
               << "                     2 = Periodic On-Off (5 attack waves)\n"
               << "                     3 = Integrated Multi-Scenario Mix (RL Training Profile)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
-              << "  --rl             Enable Interactive RL Training Mode (Sync via Socket)\n"
+              << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
               << "  --recovery       Override FSM Recovery Rate (AI/Custom)\n"
               << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
               << "  --sq-thresh      Override FSM SQ Threshold (AI/Custom)\n"
               << "  --build-dataset  Generate and validate attack packet dataset\n"
-              << "  --lambda         Arrival rate in packets per second (Default: 3000.0)\n"
               << "  --profile-amp    Run MTU-constrained amplification profiling\n"
               << "  --diagnose-flood Run flood region parse contribution test\n";
 }
@@ -118,7 +97,7 @@ int main(int argc, char* argv[]) {
     bool has_custom_policy = false;
     bool enable_trace = false;
     unsigned int seed = 42;
-    double lambda_pps = 3000.0;
+    double lambda_pps = -1.0;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -146,8 +125,6 @@ int main(int argc, char* argv[]) {
             enable_filter = true;
         } else if (arg == "--disable-safety") {
             disable_safety = true;
-        } else if (arg == "--lambda" && i + 1 < argc) {
-            lambda_pps = std::atof(argv[++i]);
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -169,6 +146,8 @@ int main(int argc, char* argv[]) {
             enable_trace = true;
         } else if (arg == "--seed" && i + 1 < argc) {
             seed = std::atoi(argv[++i]);
+        } else if (arg == "--lambda" && i + 1 < argc) {
+            lambda_pps = std::atof(argv[++i]);
         }
     }
     
@@ -277,6 +256,15 @@ int main(int argc, char* argv[]) {
     // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
 
+    // In online training, PPO must be the sole authority over the sampling
+    // rate. Keep anomaly detection and budget telemetry active, but prevent
+    // the FSM from changing the effective rate behind the policy's back.
+    if (rl_train_mode) {
+        filter_fsm.set_adaptive_sampling_enabled(false);
+        std::cout << "[+] PPO-only training active: FSM sampling override disabled; "
+                     "detector and budget telemetry remain enabled.\n";
+    }
+
     // Apply custom parameters if CLI override flags were provided
     if (has_custom_policy) {
         filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, 0.10);
@@ -314,12 +302,8 @@ int main(int argc, char* argv[]) {
     // Ensures sub-1.0% pollution rates (e.g. 0.1%, 0.5%) map to accurate integer ranges
     unsigned int target_basis_threshold = static_cast<unsigned int>(pollution_rate * 100.0);
 
-    // Queue Simulator implementation
-    qos_harness::QueueSimulator simulator(lambda_pps, total_packets);
-
-    std::cout << "[*] Starting Multi-Threaded Queue Simulator with lambda = " << lambda_pps << " pps...\n";
-
-    auto producer_func = [&](int i) -> std::pair<bool, vanetza::ByteBuffer> {
+    // Main packet generation and processing iteration loop
+    auto producer = [&](int i) -> std::pair<bool, vanetza::ByteBuffer> {
         bool is_malware = false;
         if (attack_mode == 0) {
             is_malware = (sequence[i] % 10000) < target_basis_threshold;
@@ -341,17 +325,12 @@ int main(int argc, char* argv[]) {
                 if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
             }
         }
-        
-        vanetza::ByteBuffer buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
-                                             : normal_packets[sequence[i] % normal_packets.size()];
+        const vanetza::ByteBuffer& buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
+                                                    : normal_packets[sequence[i] % normal_packets.size()];
         return {is_malware, buf};
     };
 
-    auto consumer_func = [&](const qos_harness::QueuePacket& pkt) {
-        int i = pkt.id;
-        bool is_malware = pkt.is_malware;
-        const vanetza::ByteBuffer& buf = pkt.buffer;
-
+    auto consumer = [&](int i, bool is_malware, const vanetza::ByteBuffer& buf) {
         if (i % print_interval == 0 || i == total_packets - 1) {
             double actual_avg_rate = (i > 0) ? (static_cast<double>(total_inspected) / i) * 100.0 : 0.0;
             double current_target_rate = enable_filter ? filter_fsm.get_sampling_rate() * 100.0 : 0.0;
@@ -363,6 +342,7 @@ int main(int argc, char* argv[]) {
 
         if (is_malware) malware_so_far++;
 
+        auto start = std::chrono::high_resolution_clock::now();
         bool drop_packet = enable_filter ? filter_fsm.process_packet(buf) : false;
 
         if (enable_filter && filter_fsm.was_inspected()) {
@@ -370,26 +350,24 @@ int main(int argc, char* argv[]) {
         }
 
         if (drop_packet) {
-            if (is_malware)
-                true_positives++;
-            else
-                false_positives++;
+            if (is_malware) true_positives++;
+            else false_positives++;
         } else {
-            if (is_malware)
-                false_negatives++;
-            else
-                true_negatives++;
+            if (is_malware) false_negatives++;
+            else true_negatives++;
             vanetza::ByteBuffer buf_copy = buf;
             context.indicate(std::move(buf_copy));
         }
-
         auto end = std::chrono::high_resolution_clock::now();
-        long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - pkt.arrival_time).count();
+        long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
+        // Log packet results
         collector.recordPacket(i, is_malware, drop_packet, latency_ns);
 
+        // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
             if (enable_trace || rl_train_mode || enable_onnx) {
+                // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet, is_malware,
                                                    filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
@@ -400,8 +378,22 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    simulator.start(producer_func, consumer_func);
-    simulator.wait_until_done();
+    if (lambda_pps > 0) {
+        std::cout << "[*] Starting Multi-Threaded Queue Simulator with lambda = " << lambda_pps << " pps...\n";
+        qos_harness::QueueSimulator simulator(lambda_pps, total_packets);
+        simulator.start(
+            producer,
+            [&](const qos_harness::QueuePacket& packet) {
+                consumer(packet.id, packet.is_malware, packet.buffer);
+            }
+        );
+        simulator.wait_until_done();
+    } else {
+        for (int i = 0; i < total_packets; ++i) {
+            auto payload = producer(i);
+            consumer(i, payload.first, payload.second);
+        }
+    }
 
     std::cout << "\n[*] Simulation complete. Writing data to disk...\n";
     collector.exportToCSV(out_filename);
@@ -413,61 +405,5 @@ int main(int argc, char* argv[]) {
 
     std::cout << qos_harness::ConsolePresenter::green() << "[+] Saved to " << out_filename
               << qos_harness::ConsolePresenter::reset() << "\n";
-
-    // Write to ablation_metrics.csv
-    std::string config_name = "Static (100%)";
-    if (enable_filter) {
-        if (enable_onnx) {
-            std::string algo = rl_bridge.get_active_algorithm();
-            for (char &c : algo) c = std::toupper(c);
-            config_name = "FSM + " + algo;
-        } else {
-            config_name = "FSM Only";
-        }
-    }
-
-    double fnr = malware_so_far > 0 ? (static_cast<double>(false_negatives) / malware_so_far) * 100.0 : 0.0;
-    double avg_sampling = total_packets > 0 ? (static_cast<double>(total_inspected) / total_packets) * 100.0 : 0.0;
-    if (!enable_filter) {
-        avg_sampling = 100.0;
-        fnr = 0.0; // Static 100% means the heavy ASN.1 parser catches everything.
-    }
-    
-    long peak_rss = get_peak_rss_mb();
-    double inference_time = enable_onnx ? rl_bridge.get_avg_inference_time_ms() : 0.0;
-
-    std::string ablation_csv = csv_base_dir + "/ablation_metrics.csv";
-    std::ofstream ofs(ablation_csv, std::ios::app);
-    
-    char cost_str[64];
-    if (enable_onnx) {
-        std::snprintf(cost_str, sizeof(cost_str), "%ldMB / %.2fms", peak_rss, inference_time);
-    } else if (enable_filter) {
-        std::snprintf(cost_str, sizeof(cost_str), "%ldMB / N/A", peak_rss);
-    } else {
-        std::snprintf(cost_str, sizeof(cost_str), "N/A");
-    }
-
-    if (ofs.is_open()) {
-        ofs.seekp(0, std::ios::end);
-        if (ofs.tellp() == 0) {
-            ofs << "Configuration,Rate,P99,Avg_Sampling,FNR,Memory_MB,Inference_ms\n";
-        }
-        
-        long out_mem = enable_filter ? peak_rss : -1;
-        double out_inf = enable_onnx ? inference_time : -1.0;
-        
-        ofs << config_name << "," 
-            << pollution_rate << "," 
-            << "-," 
-            << avg_sampling << "," 
-            << fnr << "," 
-            << out_mem << "," 
-            << out_inf << "\n";
-    }
-
-    // Print to console using the centralized ConsolePresenter
-    qos_harness::ConsolePresenter::printAblationMetrics(config_name, fnr, avg_sampling, cost_str);
-
     return 0;
 }

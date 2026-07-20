@@ -25,11 +25,21 @@ public:
         BASE_SAMPLING_RATE = base_sampling;
     }
 
+    // Online RL training must attribute each observed outcome to the PPO action.
+    // When disabled, the detector and its budget telemetry remain active, but
+    // the FSM budget is not allowed to override PPO's base sampling rate.
+    void set_adaptive_sampling_enabled(bool enabled) {
+        adaptive_sampling_enabled_ = enabled;
+    }
+
     int get_last_sq() const {
         return last_max_sum_sq_;
     }
 
     double get_sampling_rate() const {
+        if (!adaptive_sampling_enabled_) {
+            return BASE_SAMPLING_RATE;
+        }
         if (current_budget <= TAU_2) {
             return 1.0;
         } else if (current_budget <= TAU_1) {
@@ -65,6 +75,7 @@ private:
     double PENALTY_MULTIPLIER = 50.0;
     int SQ_THRESHOLD = 600;
     double BASE_SAMPLING_RATE = 0.10;
+    bool adaptive_sampling_enabled_ = true;
     int last_max_sum_sq_ = 0;
     // scan_limit is NOT a member — it's computed inside calculate_max_sum_sq
     // using buf.size() at call time:

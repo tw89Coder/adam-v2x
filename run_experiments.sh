@@ -227,6 +227,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        -l|--lambda)
+            if [[ -n "$2" && ! "$2" =~ ^- ]]; then
+                LAMBDA_PPS="$2"
+                shift 2
+            else
+                LAMBDA_PPS="3000"
+                shift 1
+            fi
+            ;;
         -r|--rates|--rate)
             if [[ -n "$2" ]]; then
                 # Safe Boundary Check: "mix" is invalid for C++ targets
