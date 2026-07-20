@@ -576,9 +576,12 @@ class QoSPlotter(BasePlotter):
         """
         Plots a high-quality visualization of the step-by-step telemetry recorded during online training.
         """
-        csv_path = os.path.join(os.path.dirname(self.root_output_dir), "checkpoints", "online_training_telemetry.csv")
+        checkpoint_dir = os.path.join(os.path.dirname(self.root_output_dir), "checkpoints")
+        discrete_path = os.path.join(checkpoint_dir, "online_training_telemetry_discrete_ppo.csv")
+        legacy_path = os.path.join(checkpoint_dir, "online_training_telemetry.csv")
+        csv_path = discrete_path if os.path.exists(discrete_path) else legacy_path
         if not os.path.exists(csv_path):
-            LogStyle.log_warn("Aborting Online Telemetry Plot: Missing 'checkpoints/online_training_telemetry.csv'.")
+            LogStyle.log_warn("Aborting Online Telemetry Plot: no online training telemetry CSV found.")
             return
             
         df = self._load_csv_file(csv_path)
@@ -591,14 +594,16 @@ class QoSPlotter(BasePlotter):
         # Smooth curves slightly for readability over long training runs
         # Use a rolling window of 50 steps
         WINDOW = min(50, len(df))
+        attack_column = 'attack_rate' if 'attack_rate' in df.columns else 'attack_intensity'
+        target_column = 'sampling_rate_after' if 'sampling_rate_after' in df.columns else 'target_sampling_rate'
         if WINDOW > 1:
-            smoothed_attack = df['attack_intensity'].rolling(WINDOW, min_periods=1).mean() * 100.0
-            smoothed_target = df['target_sampling_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_attack = df[attack_column].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_target = df[target_column].rolling(WINDOW, min_periods=1).mean() * 100.0
             smoothed_actual = df['actual_inspection_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
             smoothed_fnr = df['fnr'].rolling(WINDOW, min_periods=1).mean() * 100.0
         else:
-            smoothed_attack = df['attack_intensity'] * 100.0
-            smoothed_target = df['target_sampling_rate'] * 100.0
+            smoothed_attack = df[attack_column] * 100.0
+            smoothed_target = df[target_column] * 100.0
             smoothed_actual = df['actual_inspection_rate'] * 100.0
             smoothed_fnr = df['fnr'] * 100.0
 

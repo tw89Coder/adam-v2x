@@ -51,6 +51,10 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         "attack_intensities": [],
         "fprs": [],
         "fnrs": [],
+        "inspected_counts": [],
+        "total_packets": [],
+        "total_sq": [],
+        "total_latency_ticks": [],
         "tp_counts": [],
         "tn_counts": [],
         "fp_counts": [],
@@ -70,39 +74,41 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     )
     log_path = os.path.join(CHECKPOINT_DIR, f"training_progress{log_suffix}.csv")
     log_file = open(log_path, mode="w", newline="", encoding="utf-8")
-    log_writer = csv.writer(log_file)
-    log_writer.writerow([
-        "update",
-        "step",
-        "reward",
-        "batch_mean_reward",
-        "loss",
-        "mean_q",
-        "mean_target_q",
-        "avg_leakage_rate",
-        "lambda_penalty",
-        "replay_size",
-        "avg_inspection_rate",
-        "avg_target_sampling_rate",
-        "avg_attack_intensity",
-        "avg_fpr",
-        "avg_fnr",
-        "tp",
-        "tn",
-        "fp",
-        "fn",
-    ])
+    progress_fields = [
+        "update", "step", "rollout_steps",
+        "reward_mean", "reward_std", "reward_min", "reward_max",
+        "actor_loss", "critic_loss", "total_loss", "entropy",
+        "approx_kl", "clip_fraction", "explained_variance", "grad_norm",
+        "value_mean", "return_mean", "advantage_mean", "advantage_std",
+        "learning_rate", "lambda_penalty", "leakage_target",
+        "packet_count", "malware_count", "inspected_count",
+        "inspection_rate", "target_sampling_rate_mean", "attack_rate",
+        "detected_anomaly_rate", "fpr", "fnr", "precision", "recall",
+        "avg_sq", "avg_processing_latency_ticks",
+        "tp", "tn", "fp", "fn",
+        "action_0_count", "action_1_count", "action_2_count", "action_3_count", "action_4_count",
+        "action_0_fraction", "action_1_fraction", "action_2_fraction", "action_3_fraction", "action_4_fraction",
+    ]
+    log_writer = csv.DictWriter(log_file, fieldnames=progress_fields)
+    log_writer.writeheader()
 
     # Initialize CSV logger for step-by-step training telemetry curves
     telemetry_path = os.path.join(CHECKPOINT_DIR, f"online_training_telemetry{log_suffix}.csv")
     telemetry_file = open(telemetry_path, mode="w", newline="", encoding="utf-8")
-    telemetry_writer = csv.writer(telemetry_file)
-    telemetry_writer.writerow([
-        "step", "reward", "actual_inspection_rate", "target_sampling_rate",
-        "attack_intensity", "fpr", "fnr", "avg_sq", "tp", "tn", "fp", "fn"
-    ])
+    telemetry_fields = [
+        "step", "update", "rollout_step", "reward",
+        "action_index", "action_delta", "sampling_rate_before", "sampling_rate_after",
+        "action_log_prob", "chosen_action_probability", "state_value",
+        "packet_count", "malware_count", "benign_count", "inspected_count",
+        "actual_inspection_rate", "attack_rate", "detected_anomaly_rate",
+        "leakage_rate", "fpr", "fnr", "precision", "recall",
+        "avg_sq", "total_sq", "avg_processing_latency_ticks", "total_latency_ticks",
+        "tp", "tn", "fp", "fn",
+    ]
+    telemetry_writer = csv.DictWriter(telemetry_file, fieldnames=telemetry_fields)
+    telemetry_writer.writeheader()
 
-    print(f"  └── {C_SUCCESS}[ACTIVE]{C_RESET} Step-by-step training telemetry logging -> {C_BOLD}checkpoints/online_training_telemetry.csv{C_RESET}")
+    print(f"  └── {C_SUCCESS}[ACTIVE]{C_RESET} Step-by-step training telemetry logging -> {C_BOLD}{telemetry_path}{C_RESET}")
     step_count = 0
     
     try:
@@ -118,14 +124,52 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             # Record step telemetry to CSV file
             if "metrics" in info:
                 m = info["metrics"]
-                tot = m.get("tp_count", 0) + m.get("tn_count", 0) + m.get("fp_count", 0) + m.get("fn_count", 0)
-                if tot == 0: tot = 1
-                actual_insp = m.get("inspected_count", 0) / tot
-                telemetry_writer.writerow([
-                    step_count, reward, actual_insp, m.get("instant_sampling_rate", 0.0),
-                    m.get("true_anomaly_rate", 0.0), m.get("fpr", 0.0), m.get("fnr", 0.0), m.get("avg_sq", 0.0),
-                    m.get("tp_count", 0), m.get("tn_count", 0), m.get("fp_count", 0), m.get("fn_count", 0)
-                ])
+                tp, tn = m.get("tp_count", 0), m.get("tn_count", 0)
+                fp, fn = m.get("fp_count", 0), m.get("fn_count", 0)
+                tot = tp + tn + fp + fn
+                safe_tot = max(tot, 1)
+                inspected = m.get("inspected_count", 0)
+                malware, benign = tp + fn, tn + fp
+                action_map = getattr(agent.action_translator, "action_map", None)
+                if action_map is not None and action.numel() == 1:
+                    action_index = int(action.item())
+                    action_delta = action_map[action_index]
+                else:
+                    action_index = ""
+                    action_delta = ""
+                sent_policy = info.get("actions_sent", [])
+                sampling_after = sent_policy[3] if len(sent_policy) > 3 else float("nan")
+                sampling_before = float(state[-3].item()) if state.numel() >= 3 else float("nan")
+                telemetry_writer.writerow({
+                    "step": step_count,
+                    "update": update_count,
+                    "rollout_step": len(buffer["states"]) + 1,
+                    "reward": reward,
+                    "action_index": action_index,
+                    "action_delta": action_delta,
+                    "sampling_rate_before": sampling_before,
+                    "sampling_rate_after": sampling_after,
+                    "action_log_prob": float(log_prob.item()),
+                    "chosen_action_probability": float(torch.exp(log_prob).item()),
+                    "state_value": float(state_value.item()),
+                    "packet_count": tot,
+                    "malware_count": malware,
+                    "benign_count": benign,
+                    "inspected_count": inspected,
+                    "actual_inspection_rate": inspected / safe_tot,
+                    "attack_rate": malware / safe_tot,
+                    "detected_anomaly_rate": (tp + fp) / safe_tot,
+                    "leakage_rate": m.get("leakage_rate", 0.0),
+                    "fpr": m.get("fpr", 0.0),
+                    "fnr": m.get("fnr", 0.0),
+                    "precision": m.get("precision", 0.0),
+                    "recall": m.get("recall", 0.0),
+                    "avg_sq": m.get("avg_sq", 0.0),
+                    "total_sq": m.get("total_sq", 0),
+                    "avg_processing_latency_ticks": m.get("total_latency_ticks", 0) / safe_tot,
+                    "total_latency_ticks": m.get("total_latency_ticks", 0),
+                    "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+                })
             
             # 3. Store transition step in rolling buffer
             buffer["states"].append(state)
@@ -156,6 +200,10 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 buffer["attack_intensities"].append(m.get("true_anomaly_rate", 0.0))
                 buffer["fprs"].append(m.get("fpr", 0.0))
                 buffer["fnrs"].append(m.get("fnr", 0.0))
+                buffer["inspected_counts"].append(m.get("inspected_count", 0))
+                buffer["total_packets"].append(tot)
+                buffer["total_sq"].append(m.get("total_sq", 0))
+                buffer["total_latency_ticks"].append(m.get("total_latency_ticks", 0))
                 buffer["tp_counts"].append(tp)
                 buffer["tn_counts"].append(tn)
                 buffer["fp_counts"].append(fp)
@@ -174,7 +222,8 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 def safe_mean(xs):
                     return sum(xs) / len(xs) if len(xs) > 0 else 0.0
 
-                batch_mean_reward = safe_mean([r.item() for r in buffer["rewards"]])
+                reward_values = [r.item() for r in buffer["rewards"]]
+                batch_mean_reward = safe_mean(reward_values)
 
                 avg_inspection_rate = safe_mean(buffer["inspection_rates"])
                 avg_target_sampling_rate = safe_mean(buffer["target_sampling_rates"])
@@ -186,6 +235,10 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 sum_tn = sum(buffer["tn_counts"])
                 sum_fp = sum(buffer["fp_counts"])
                 sum_fn = sum(buffer["fn_counts"])
+                sum_packets = sum(buffer["total_packets"])
+                sum_inspected = sum(buffer["inspected_counts"])
+                sum_sq = sum(buffer["total_sq"])
+                sum_latency = sum(buffer["total_latency_ticks"])
 
                 
                 
@@ -210,27 +263,37 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Replay: {int(metrics.get('replay_size', 0))}"
                     )
 
-                    log_writer.writerow([
-                        update_count,
-                        step_count,
-                        reward,
-                        batch_mean_reward,
-                        metrics.get("q_loss", 0.0),
-                        metrics.get("mean_q", 0.0),
-                        metrics.get("mean_target_q", 0.0),
-                        metrics.get("avg_leakage_rate", 0.0),
-                        metrics.get("lambda_penalty", 0.0),
-                        metrics.get("replay_size", 0.0),
-                        avg_inspection_rate,
-                        avg_target_sampling_rate,
-                        avg_attack_intensity,
-                        avg_fpr,
-                        avg_fnr,
-                        sum_tp,
-                        sum_tn,
-                        sum_fp,
-                        sum_fn,
-                    ])
+                    # The progress schema is PPO-oriented. Keep common QoS
+                    # fields usable when this shared loop runs DQN as well.
+                    malware_count = sum_tp + sum_fn
+                    benign_count = sum_tn + sum_fp
+                    detected_count = sum_tp + sum_fp
+                    log_writer.writerow({
+                        "update": update_count,
+                        "step": step_count,
+                        "rollout_steps": len(buffer["states"]),
+                        "reward_mean": batch_mean_reward,
+                        "reward_std": float(torch.tensor(reward_values).std(unbiased=False).item()),
+                        "reward_min": min(reward_values),
+                        "reward_max": max(reward_values),
+                        "total_loss": metrics.get("q_loss", 0.0),
+                        "lambda_penalty": metrics.get("lambda_penalty", 0.0),
+                        "leakage_target": getattr(env.reward_strategy, "leakage_target", 0.0),
+                        "packet_count": sum_packets,
+                        "malware_count": malware_count,
+                        "inspected_count": sum_inspected,
+                        "inspection_rate": sum_inspected / max(sum_packets, 1),
+                        "target_sampling_rate_mean": avg_target_sampling_rate,
+                        "attack_rate": malware_count / max(sum_packets, 1),
+                        "detected_anomaly_rate": detected_count / max(sum_packets, 1),
+                        "fpr": sum_fp / max(benign_count, 1),
+                        "fnr": sum_fn / max(malware_count, 1),
+                        "precision": sum_tp / max(detected_count, 1),
+                        "recall": sum_tp / max(malware_count, 1),
+                        "avg_sq": sum_sq / max(sum_packets, 1),
+                        "avg_processing_latency_ticks": sum_latency / max(sum_packets, 1),
+                        "tp": sum_tp, "tn": sum_tn, "fp": sum_fp, "fn": sum_fn,
+                    })
                 else:
                     print(
                         f"[{C_INFO}UPDATE #{update_count:03d}{C_RESET}] "
@@ -238,7 +301,60 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         f"Actor Loss: {C_BOLD}{metrics.get('actor_loss', 0.0):+.5f}{C_RESET} | "
                         f"Critic Loss: {C_BOLD}{metrics.get('critic_loss', 0.0):.4f}{C_RESET}"
                     )
-                    log_writer.writerow([update_count, reward, metrics.get('actor_loss', 0.0), metrics.get('critic_loss', 0.0)])
+                    malware_count = sum_tp + sum_fn
+                    benign_count = sum_tn + sum_fp
+                    detected_count = sum_tp + sum_fp
+                    action_counts = [0] * 5
+                    action_map = getattr(agent.action_translator, "action_map", None)
+                    if action_map is not None:
+                        for buffered_action in buffer["actions"]:
+                            index = int(buffered_action.item())
+                            if 0 <= index < len(action_counts):
+                                action_counts[index] += 1
+                    rollout_len = len(buffer["states"])
+                    row = {
+                        "update": update_count,
+                        "step": step_count,
+                        "rollout_steps": rollout_len,
+                        "reward_mean": batch_mean_reward,
+                        "reward_std": float(torch.tensor(reward_values).std(unbiased=False).item()),
+                        "reward_min": min(reward_values),
+                        "reward_max": max(reward_values),
+                        "actor_loss": metrics.get("actor_loss", 0.0),
+                        "critic_loss": metrics.get("critic_loss", 0.0),
+                        "total_loss": metrics.get("total_loss", 0.0),
+                        "entropy": metrics.get("entropy", 0.0),
+                        "approx_kl": metrics.get("approx_kl", 0.0),
+                        "clip_fraction": metrics.get("clip_fraction", 0.0),
+                        "explained_variance": metrics.get("explained_variance", 0.0),
+                        "grad_norm": metrics.get("grad_norm", 0.0),
+                        "value_mean": metrics.get("value_mean", 0.0),
+                        "return_mean": metrics.get("return_mean", 0.0),
+                        "advantage_mean": metrics.get("advantage_mean", 0.0),
+                        "advantage_std": metrics.get("advantage_std", 0.0),
+                        "learning_rate": metrics.get("learning_rate", 0.0),
+                        "lambda_penalty": metrics.get("lambda_penalty", 0.0),
+                        "leakage_target": getattr(env.reward_strategy, "leakage_target", 0.0),
+                        "packet_count": sum_packets,
+                        "malware_count": malware_count,
+                        "inspected_count": sum_inspected,
+                        "inspection_rate": sum_inspected / max(sum_packets, 1),
+                        "target_sampling_rate_mean": avg_target_sampling_rate,
+                        "attack_rate": malware_count / max(sum_packets, 1),
+                        "detected_anomaly_rate": detected_count / max(sum_packets, 1),
+                        "fpr": sum_fp / max(benign_count, 1),
+                        "fnr": sum_fn / max(malware_count, 1),
+                        "precision": sum_tp / max(detected_count, 1),
+                        "recall": sum_tp / max(malware_count, 1),
+                        "avg_sq": sum_sq / max(sum_packets, 1),
+                        "avg_processing_latency_ticks": sum_latency / max(sum_packets, 1),
+                        "tp": sum_tp, "tn": sum_tn, "fp": sum_fp, "fn": sum_fn,
+                    }
+                    if action_map is not None:
+                        for index, count in enumerate(action_counts):
+                            row[f"action_{index}_count"] = count
+                            row[f"action_{index}_fraction"] = count / max(rollout_len, 1)
+                    log_writer.writerow(row)
                 
                 log_file.flush()
                 telemetry_file.flush()

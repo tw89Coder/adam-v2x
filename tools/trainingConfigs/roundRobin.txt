@@ -1,42 +1,66 @@
-# mode rate
-# warm-up: medium difficulty
-0 1.0
-1 1.0
-2 1.0
+# ============================================================
+# Discrete PPO convergence curriculum
+# Format: attack_mode pollution_rate_percent
+#
+# Mode:
+#   0 = Uniform random
+#   1 = Single pulse
+#   2 = Periodic on/off
+#   3 = Grand mix
+#
+# 0.75 is reserved for validation and is not used here.
+# ============================================================
+
+# Phase 1: warm-up around the leakage constraint
 3 1.0
+0 1.0
+2 1.0
+1 1.0
 
-# high attack intensity
-0 10.0
-1 10.0
-2 10.0
-3 10.0
-
-# low-medium attack intensity
+3 0.5
+2 0.5
 0 0.5
 1 0.5
-2 0.5
-3 0.5
 
-# medium-high attack intensity
-0 5.0
-1 5.0
-2 5.0
-3 5.0
-
-# harder low-rate cases
-0 0.25
-1 0.25
-2 0.25
-3 0.25
-
-# intermediate validation-like rate
-0 0.75
-1 0.75
-2 0.75
-3 0.75
-
-# very sparse attack
+# Phase 2: interleaved broad coverage
 0 0.1
-1 0.1
+2 5.0
+1 0.25
+3 10.0
+
+2 0.5
+0 5.0
+3 0.25
+1 10.0
+
+1 0.5
+3 5.0
 2 0.1
+0 10.0
+
 3 0.1
+1 5.0
+0 0.25
+2 10.0
+
+# Phase 3: reinforce difficult low-rate cases
+3 0.1
+2 0.25
+1 0.1
+0 0.5
+
+1 0.25
+3 0.5
+0 0.1
+2 0.5
+
+# Phase 4: finish with balanced mixed conditions
+0 1.0
+2 5.0
+3 0.5
+1 10.0
+
+2 1.0
+0 5.0
+1 0.5
+3 10.0

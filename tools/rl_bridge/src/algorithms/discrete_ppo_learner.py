@@ -58,7 +58,17 @@ class DiscretePPOLearner(BaseLearner):
                 advantages.std(unbiased=False) + 1e-8
             )
 
+            # A critic that explains the rollout returns should approach 1.0.
+            # Values near/below zero indicate an uninformative or unstable critic.
+            return_variance = torch.var(returns, unbiased=False)
+            explained_variance = (
+                1.0 - torch.var(returns - old_values, unbiased=False) / return_variance
+                if return_variance > 1e-8
+                else torch.zeros((), device=self.device)
+            )
+
         actor_total = critic_total = entropy_total = total_total = 0.0
+        approx_kl_total = clip_fraction_total = grad_norm_total = 0.0
         updates = 0
         sample_count = len(states)
 
@@ -71,6 +81,7 @@ class DiscretePPOLearner(BaseLearner):
                 entropy = dist.entropy().mean()
 
                 ratios = torch.exp(new_log_probs - old_log_probs[batch])
+                log_ratio = new_log_probs - old_log_probs[batch]
                 unclipped = ratios * advantages[batch]
                 clipped = torch.clamp(
                     ratios, 1.0 - self.clip_eps, 1.0 + self.clip_eps
@@ -85,13 +96,26 @@ class DiscretePPOLearner(BaseLearner):
 
                 self.optimizer.zero_grad()
                 total_loss.backward()
-                nn.utils.clip_grad_norm_(self.agent.model.parameters(), self.max_grad_norm)
+                grad_norm = nn.utils.clip_grad_norm_(
+                    self.agent.model.parameters(), self.max_grad_norm
+                )
                 self.optimizer.step()
+
+                # Standard PPO diagnostics. approx_kl and clip_fraction reveal
+                # whether an update moved the policy too aggressively.
+                with torch.no_grad():
+                    approx_kl = ((ratios - 1.0) - log_ratio).mean()
+                    clip_fraction = (
+                        (torch.abs(ratios - 1.0) > self.clip_eps).float().mean()
+                    )
 
                 actor_total += actor_loss.item()
                 critic_total += critic_loss.item()
                 entropy_total += entropy.item()
                 total_total += total_loss.item()
+                approx_kl_total += approx_kl.item()
+                clip_fraction_total += clip_fraction.item()
+                grad_norm_total += float(grad_norm)
                 updates += 1
 
         divisor = max(updates, 1)
@@ -100,6 +124,15 @@ class DiscretePPOLearner(BaseLearner):
             "critic_loss": critic_total / divisor,
             "entropy": entropy_total / divisor,
             "total_loss": total_total / divisor,
+            "approx_kl": approx_kl_total / divisor,
+            "clip_fraction": clip_fraction_total / divisor,
+            "grad_norm": grad_norm_total / divisor,
+            "explained_variance": explained_variance.item(),
+            "value_mean": old_values.mean().item(),
+            "return_mean": returns.mean().item(),
+            "advantage_mean": advantages.mean().item(),
+            "advantage_std": advantages.std(unbiased=False).item(),
+            "learning_rate": self.optimizer.param_groups[0]["lr"],
         }
 
 

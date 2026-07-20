@@ -66,7 +66,9 @@ class NetworkIOHelper:
                 "precision": tp / (tp + fp) if (tp + fp) > 0 else 0.0,
                 "recall": tp / total_malware if total_malware > 0 else 0.0,
                 "leakage_rate": fn / total_malware if total_malware > 0 else 0.0,
-                "avg_latency_ticks": latency_ticks / inspected if inspected > 0 else 0.0
+                # The C++ accumulator includes processing latency for every
+                # packet, not only inspected packets.
+                "avg_processing_latency_ticks": latency_ticks / total_packets
             }
         except Exception:
             return None
