@@ -64,7 +64,7 @@ _defaults = {
         "max_recovery_rate": 0.10, "min_base_sampling_rate": 0.05
     },
     "dqn": {
-        "action_map": [-0.10, -0.05, 0.0, 0.05, 0.10],
+        "action_map": [-0.20, -0.10, 0.0, 0.10, 0.20],
         "capacity": 10000,
         "eps_start": 1.0,
         "eps_end": 0.05,

@@ -148,7 +148,7 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
 
         // 2. Dynamically parse agent.yaml to read algorithm and action_map
         algorithm_ = "dqn"; // Default fallback
-        dqn_action_map_ = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f}; // Default fallback
+        dqn_action_map_ = {-0.20f, -0.10f, 0.0f, 0.10f, 0.20f}; // Default fallback
 
         std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
         std::ifstream config_file(config_path);
@@ -582,7 +582,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         else if (algorithm_ == "discrete_ppo") {
             if (action_dim == 4) {
                 // Deterministic categorical PPO export wrapper. The wrapper
-                // embeds argmax action selection and sampling-rate translation.
+                // embeds the probability-weighted expected action delta and
+                // sampling-rate translation.
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));

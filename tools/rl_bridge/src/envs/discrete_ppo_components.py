@@ -16,7 +16,7 @@ class DiscretePPOActionTranslator:
 
         dqn_cfg = RAW_CFG.get("dqn", {})
         self.action_map = action_map or list(
-            dqn_cfg.get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
+            dqn_cfg.get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
         )
 
     def translate(self, action: Any, current_sampling_rate: float) -> list:

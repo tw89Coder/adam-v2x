@@ -16,15 +16,15 @@
 
 # Phase 1: strong-signal warm-up
 # Establish unmistakable attack/clean state separation.
+0 10.0
 3 10.0
 2 10.0
 1 10.0
-0 10.0
 
+0 5.0
 3 5.0
 2 5.0
 1 5.0
-0 5.0
 
 # Phase 2: repeated onset and recovery practice
 # Modes 1/2/3 contain explicit temporal transitions; alternate intensity so

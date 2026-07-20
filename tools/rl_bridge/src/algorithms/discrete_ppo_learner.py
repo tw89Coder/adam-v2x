@@ -87,7 +87,8 @@ class DiscretePPOLearner(BaseLearner):
                     ratios, 1.0 - self.clip_eps, 1.0 + self.clip_eps
                 ) * advantages[batch]
                 actor_loss = -torch.min(unclipped, clipped).mean()
-                critic_loss = nn.functional.mse_loss(values, returns[batch])
+                # Limit the influence of rare high-leakage returns on the critic.
+                critic_loss = nn.functional.smooth_l1_loss(values, returns[batch])
                 total_loss = (
                     actor_loss
                     + self.value_coef * critic_loss

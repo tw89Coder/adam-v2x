@@ -58,7 +58,8 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         "tp_counts": [],
         "tn_counts": [],
         "fp_counts": [],
-        "fn_counts": []
+        "fn_counts": [],
+        "greedy_actions": []
     }
     
     # Initialize CSV logger for recording convergence metrics
@@ -88,6 +89,8 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         "tp", "tn", "fp", "fn",
         "action_0_count", "action_1_count", "action_2_count", "action_3_count", "action_4_count",
         "action_0_fraction", "action_1_fraction", "action_2_fraction", "action_3_fraction", "action_4_fraction",
+        "greedy_action_0_fraction", "greedy_action_1_fraction", "greedy_action_2_fraction",
+        "greedy_action_3_fraction", "greedy_action_4_fraction",
     ]
     log_writer = csv.DictWriter(log_file, fieldnames=progress_fields)
     log_writer.writeheader()
@@ -99,6 +102,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
         "step", "update", "rollout_step", "reward",
         "action_index", "action_delta", "sampling_rate_before", "sampling_rate_after",
         "action_log_prob", "chosen_action_probability", "state_value",
+        "greedy_action_index", "policy_prob_0", "policy_prob_1", "policy_prob_2", "policy_prob_3", "policy_prob_4",
         "packet_count", "malware_count", "benign_count", "inspected_count",
         "actual_inspection_rate", "attack_rate", "detected_anomaly_rate",
         "leakage_rate", "fpr", "fnr", "precision", "recall",
@@ -116,6 +120,14 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             # 1. Action inference and adaptation
             action, adapted_actions, log_prob, state_value = agent.act(state)
             raw_actions, safe_actions = adapted_actions
+
+            policy_probs = []
+            greedy_action_index = ""
+            if getattr(agent, "algorithm_name", "") == "discrete_ppo":
+                with torch.no_grad():
+                    eval_dist, _ = agent.get_action_distribution(state)
+                    policy_probs = eval_dist.probs.detach().cpu().reshape(-1).tolist()
+                    greedy_action_index = int(torch.argmax(eval_dist.probs).item())
             
             # 2. Step environment (send parameters and wait for next observation)
             next_state, reward, done, info = env.step(safe_actions)
@@ -152,6 +164,11 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                     "action_log_prob": float(log_prob.item()),
                     "chosen_action_probability": float(torch.exp(log_prob).item()),
                     "state_value": float(state_value.item()),
+                    "greedy_action_index": greedy_action_index,
+                    **{
+                        f"policy_prob_{index}": policy_probs[index] if index < len(policy_probs) else ""
+                        for index in range(5)
+                    },
                     "packet_count": tot,
                     "malware_count": malware,
                     "benign_count": benign,
@@ -179,6 +196,7 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
             buffer["values"].append(state_value)
             buffer["next_states"].append(next_state)
             buffer["dones"].append(torch.tensor([float(done)], dtype=torch.float32))
+            buffer["greedy_actions"].append(greedy_action_index)
             # Store leakage rate for Lagrangian penalty update
             if "metrics" in info:
                 m = info["metrics"]
@@ -244,7 +262,12 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 
                 # Update Lagrangian multiplier for constrained DQN reward
                 if hasattr(env.reward_strategy, "update_lambda") and len(buffer["leakage_rates"]) > 0:
-                    avg_leakage_rate = sum(buffer["leakage_rates"]) / len(buffer["leakage_rates"])
+                    rollout_malware_count = sum_tp + sum_fn
+                    avg_leakage_rate = (
+                        sum_fn / rollout_malware_count
+                        if rollout_malware_count > 0
+                        else 0.0
+                    )
                     current_lambda = env.reward_strategy.update_lambda(avg_leakage_rate)
 
                     metrics["avg_leakage_rate"] = avg_leakage_rate
@@ -354,6 +377,12 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                         for index, count in enumerate(action_counts):
                             row[f"action_{index}_count"] = count
                             row[f"action_{index}_fraction"] = count / max(rollout_len, 1)
+                        greedy_counts = [0] * len(action_counts)
+                        for greedy_index in buffer["greedy_actions"]:
+                            if isinstance(greedy_index, int) and 0 <= greedy_index < len(greedy_counts):
+                                greedy_counts[greedy_index] += 1
+                        for index, count in enumerate(greedy_counts):
+                            row[f"greedy_action_{index}_fraction"] = count / max(rollout_len, 1)
                     log_writer.writerow(row)
                 
                 log_file.flush()

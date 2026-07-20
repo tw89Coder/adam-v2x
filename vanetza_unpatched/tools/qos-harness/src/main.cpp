@@ -35,7 +35,7 @@ void printHelp(const char* progName) {
               << "                     2 = Periodic On-Off (5 attack waves)\n"
               << "                     3 = Integrated Multi-Scenario Mix (RL Training Profile)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
-              << "  --rl             Enable Interactive RL Training Mode (Sync via Socket)\n"
+              << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
               << "  --recovery       Override FSM Recovery Rate (AI/Custom)\n"
               << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
@@ -251,6 +251,15 @@ int main(int argc, char* argv[]) {
 
     // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
+
+    // In online training, PPO must be the sole authority over the sampling
+    // rate. Keep anomaly detection and budget telemetry active, but prevent
+    // the FSM from changing the effective rate behind the policy's back.
+    if (rl_train_mode) {
+        filter_fsm.set_adaptive_sampling_enabled(false);
+        std::cout << "[+] PPO-only training active: FSM sampling override disabled; "
+                     "detector and budget telemetry remain enabled.\n";
+    }
 
     // Apply custom parameters if CLI override flags were provided
     if (has_custom_policy) {

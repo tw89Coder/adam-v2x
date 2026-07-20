@@ -126,11 +126,11 @@ safety_boundaries:
 dqn:
   # Action map for DQN discrete actions. Translates discrete action index (0-4) to relative sampling rate change.
   action_map:
+    - -0.20
     - -0.10
-    - -0.05
     - 0.00
-    - 0.05
     - 0.10
+    - 0.20
   
   # Hyperparameters specific to DQN
   capacity: 10000                       # Replay buffer maximum capacity
@@ -159,5 +159,5 @@ discrete_ppo:
   update_epochs: 5
   minibatch_size: 64
   value_coef: 0.5
-  entropy_coef: 0.01
+  entropy_coef: 0.03                 # Preserve exploration until attack windows appear.
   max_grad_norm: 0.5

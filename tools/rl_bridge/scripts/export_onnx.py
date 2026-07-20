@@ -77,7 +77,7 @@ class DQNDeploymentWrapper(nn.Module):
 
 
 class DiscretePPODeploymentWrapper(nn.Module):
-    """Export a deterministic categorical PPO policy as the 4D wire policy."""
+    """Export the categorical PPO policy's deterministic expected action."""
 
     def __init__(self, actor_critic, action_map):
         super().__init__()
@@ -88,8 +88,15 @@ class DiscretePPODeploymentWrapper(nn.Module):
 
     def forward(self, full_observation):
         logits, _ = self.actor_critic(full_observation)
-        best_action_idx = torch.argmax(logits, dim=1)
-        delta = self.action_map_tensor[best_action_idx]
+        # Training samples from this categorical distribution. Using argmax at
+        # deployment discards the probability mass on the other actions and can
+        # turn a policy with a negative mean delta into a permanent Hold action.
+        # The expectation preserves the policy's learned average control while
+        # remaining deterministic and jitter-free in production.
+        action_probabilities = torch.softmax(logits, dim=1)
+        delta = torch.sum(
+            action_probabilities * self.action_map_tensor.unsqueeze(0), dim=1
+        )
 
         # The newest stacked frame occupies the final three features.
         current_rate = full_observation[:, full_observation.shape[1] - 3]
@@ -232,7 +239,7 @@ def main():
         dqn_model.eval()
         
         # 4. Wrap base Q-Network inside DQNDeploymentWrapper to align output signature (5 -> 4)
-        action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
+        action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
         export_model = DQNDeploymentWrapper(dqn_model, action_map)
         export_model.eval()
 
@@ -262,7 +269,7 @@ def main():
         model.load_state_dict(checkpoint)
         model.eval()
         action_map = RAW_CFG.get("dqn", {}).get(
-            "action_map", [-0.10, -0.05, 0.0, 0.05, 0.10]
+            "action_map", [-0.20, -0.10, 0.0, 0.10, 0.20]
         )
         export_model = DiscretePPODeploymentWrapper(model, action_map)
         export_model.eval()
@@ -306,7 +313,7 @@ def main():
     # Create dynamic dummy input matching input features shape (Batch=1, Features=input_dim)
     dummy_input = torch.randn(1, input_dim)
 
-    print(f"  ├── {C_INFO}Exporting Pipeline{C_RESET}      : Serializing Graph to ONNX opset 16...")
+    print(f"  ├── {C_INFO}Exporting Pipeline{C_RESET}      : Serializing Graph to ONNX opset 18...")
     
     try:
         os.makedirs(os.path.dirname(onnx_output_path), exist_ok=True)
@@ -315,7 +322,7 @@ def main():
             dummy_input,
             onnx_output_path,
             export_params=True,
-            opset_version=16,
+            opset_version=18,
             do_constant_folding=True,
             input_names=['input_telemetry'],
             output_names=['output_actions'],

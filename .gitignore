@@ -24,6 +24,9 @@ third_party/
 checkpoints/*.onnx
 tools/rl_bridge/checkpoints/*.onnx
 
+# Online training telemetry is generated locally and can exceed GitHub's 100 MB limit.
+checkpoints/online_training_telemetry_discrete_ppo.csv
+
 # ==============================================================================
 # V2X QoS Experiment Output Exclusions & Whitelist
 # ==============================================================================

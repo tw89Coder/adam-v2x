@@ -53,7 +53,7 @@ class DqnActionTranslator(ActionTranslator):
         from src.config import RAW_CFG
         dqn_cfg = RAW_CFG.get("dqn", {})
         # Read maps from central configuration
-        self.action_map = action_map or dqn_cfg.get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
+        self.action_map = action_map or dqn_cfg.get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
 
     def translate(self, action: Any, current_sampling_rate: float) -> list:
         action_index = int(action)
