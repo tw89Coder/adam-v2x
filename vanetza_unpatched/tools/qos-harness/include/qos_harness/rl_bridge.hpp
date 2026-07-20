@@ -144,7 +144,7 @@ private:
     bool run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
 
     // Window-level statistical accumulators
-    const int CTRL_WINDOW_SIZE = 1000;
+    const int CTRL_WINDOW_SIZE = 100;
     uint32_t window_tp_count_ = 0;
     uint32_t window_tn_count_ = 0;
     uint32_t window_fp_count_ = 0;

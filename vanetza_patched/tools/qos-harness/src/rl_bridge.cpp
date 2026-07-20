@@ -12,7 +12,7 @@
  * file to prevent cross-run trace contamination.
  * 
  * CONTROL WINDOW & SOCKET HANDSHAKE:
- * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (1000) packets.
+ * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (100) packets.
  * - At window boundaries, it opens a blocking TCP socket loopback connection to port 8080.
  * - Sends a serialized telemetry observation string: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
  * - Blocks execution waiting for the DRL policy decision, which is received as a serialized 

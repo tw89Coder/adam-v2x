@@ -1,66 +1,71 @@
 # ============================================================
-# Discrete PPO convergence curriculum
+# Discrete PPO rapid-response curriculum
 # Format: attack_mode pollution_rate_percent
 #
 # Mode:
-#   0 = Uniform random
-#   1 = Single pulse
-#   2 = Periodic on/off
-#   3 = Grand mix
+#   0 = Uniform random (steady attack reference)
+#   1 = Single pulse (attack onset and recovery)
+#   2 = Periodic on/off (repeated reaction practice)
+#   3 = Grand mix (clean -> attack -> recovery -> pulses)
 #
-# 0.75 is reserved for validation and is not used here.
+# Training objective:
+#   React quickly when an attack begins, track repeated attack transitions,
+#   and reduce sampling after the attack ends. Rates below 1% are excluded;
+#   5% and 10% dominate because they produce a clear system-load signal.
 # ============================================================
 
-# Phase 1: warm-up around the leakage constraint
-3 1.0
-0 1.0
-2 1.0
-1 1.0
-
-3 0.5
-2 0.5
-0 0.5
-1 0.5
-
-# Phase 2: interleaved broad coverage
-0 0.1
-2 5.0
-1 0.25
+# Phase 1: strong-signal warm-up
+# Establish unmistakable attack/clean state separation.
 3 10.0
-
-2 0.5
-0 5.0
-3 0.25
+2 10.0
 1 10.0
-
-1 0.5
-3 5.0
-2 0.1
 0 10.0
 
-3 0.1
-1 5.0
-0 0.25
-2 10.0
-
-# Phase 3: reinforce difficult low-rate cases
-3 0.1
-2 0.25
-1 0.1
-0 0.5
-
-1 0.25
-3 0.5
-0 0.1
-2 0.5
-
-# Phase 4: finish with balanced mixed conditions
-0 1.0
+3 5.0
 2 5.0
-3 0.5
+1 5.0
+0 5.0
+
+# Phase 2: repeated onset and recovery practice
+# Modes 1/2/3 contain explicit temporal transitions; alternate intensity so
+# the policy cannot memorize one fixed attack level.
+1 10.0
+2 5.0
+3 10.0
+1 5.0
+
+2 10.0
+3 5.0
+1 10.0
+2 5.0
+
+3 10.0
+1 5.0
+2 10.0
+3 5.0
+
+# Phase 3: lower-bound generalization
+# Retain 1% as the minimum supported attack intensity, but do not let this
+# low-overhead case dominate training.
+3 1.0
+2 1.0
+1 1.0
+0 1.0
+
+3 5.0
+1 10.0
+2 5.0
+3 10.0
+
+# Phase 4: finish on balanced dynamic scenarios
+# End with transition-heavy runs so the final updates emphasize response
+# latency and recovery instead of a stationary uniform distribution.
+1 5.0
+2 10.0
+3 5.0
 1 10.0
 
-2 1.0
-0 5.0
-1 0.5
+2 5.0
 3 10.0
+2 10.0
+3 5.0
