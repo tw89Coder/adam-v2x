@@ -16,11 +16,32 @@
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/traffic_generator.hpp"
 #include "qos_harness/dataset_builder.hpp"
+#include "qos_harness/queue_simulator.hpp"
 
 // Repository filesystem paths resolving normal packets and raw attack POC binaries
 const std::string REPO_ROOT_STR = REPO_ROOT;
 const std::string NORMAL_FOLDER = REPO_ROOT_STR + "/inputs/base_packets";
 const std::string ATTACK_FOLDER = REPO_ROOT_STR + "/inputs/attack_vectors/malware";
+
+#include <unistd.h>
+#include <fstream>
+
+/**
+ * @brief Retrieves the Peak Resident Set Size (RSS) in MB from /proc/self/status
+ */
+long get_peak_rss_mb() {
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+        if (line.compare(0, 6, "VmHWM:") == 0) {
+            long kb = 0;
+            if (sscanf(line.c_str(), "VmHWM: %ld kB", &kb) == 1) {
+                return kb / 1024;
+            }
+        }
+    }
+    return 0;
+}
 
 /**
  * @brief Prints CLI instructions mapping available parameter sweep arguments.
@@ -41,6 +62,7 @@ void printHelp(const char* progName) {
               << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
               << "  --sq-thresh      Override FSM SQ Threshold (AI/Custom)\n"
               << "  --build-dataset  Generate and validate attack packet dataset\n"
+              << "  --lambda         Arrival rate in packets per second (Default: 3000.0)\n"
               << "  --profile-amp    Run MTU-constrained amplification profiling\n"
               << "  --diagnose-flood Run flood region parse contribution test\n";
 }
@@ -96,6 +118,7 @@ int main(int argc, char* argv[]) {
     bool has_custom_policy = false;
     bool enable_trace = false;
     unsigned int seed = 42;
+    double lambda_pps = 3000.0;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -123,6 +146,8 @@ int main(int argc, char* argv[]) {
             enable_filter = true;
         } else if (arg == "--disable-safety") {
             disable_safety = true;
+        } else if (arg == "--lambda" && i + 1 < argc) {
+            lambda_pps = std::atof(argv[++i]);
         } else if (arg == "-f") {
             enable_filter = true;
         } else if (arg == "--recovery" && i + 1 < argc) {
@@ -289,38 +314,21 @@ int main(int argc, char* argv[]) {
     // Ensures sub-1.0% pollution rates (e.g. 0.1%, 0.5%) map to accurate integer ranges
     unsigned int target_basis_threshold = static_cast<unsigned int>(pollution_rate * 100.0);
 
-    // Main packet generation and processing iteration loop
-    for (int i = 0; i < total_packets; ++i) {
-        if (i % print_interval == 0 || i == total_packets - 1) {
-            // Calculate current actual and target sampling rates
-            double actual_avg_rate = (i > 0) ? (static_cast<double>(total_inspected) / i) * 100.0 : 0.0;
-            double current_target_rate = enable_filter ? filter_fsm.get_sampling_rate() * 100.0 : 0.0;
-            
-            // Call the console presenter
-            qos_harness::ConsolePresenter::printSimulationProgress(
-                i, total_packets, malware_so_far, 
-                enable_filter, actual_avg_rate, current_target_rate
-            );
-        }
+    // Queue Simulator implementation
+    qos_harness::QueueSimulator simulator(lambda_pps, total_packets);
 
-        // Determine if current packet slot contains an attack variant based on the active mode schedule
+    std::cout << "[*] Starting Multi-Threaded Queue Simulator with lambda = " << lambda_pps << " pps...\n";
+
+    auto producer_func = [&](int i) -> std::pair<bool, vanetza::ByteBuffer> {
         bool is_malware = false;
         if (attack_mode == 0) {
-            // Mode 0: Uniform Random distribution across the entire trajectory
             is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 1) {
-            // Mode 1: Single attack burst occurring between 30% and 50% timelines
             if (i >= mode1_start && i <= mode1_end) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 2) {
-            // Mode 2: Periodic On-Off waves (attack waves repeat every mode2_period steps)
             int current_cycle = i / mode2_period;
             if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
         } else if (attack_mode == 3) {
-            // Mode 3: Integrated Multi-Scenario Mix (Default training pattern)
-            //   0.0 - 0.2: Clean peacetime nominal traffic
-            //   0.2 - 0.5: Continuous uniform attack storm
-            //   0.5 - 0.7: Peacetime recovery window
-            //   0.7 - 1.0: Periodic oscillating pulsing attacks
             double progress = static_cast<double>(i) / total_packets;
             if (progress < 0.2) {
                 is_malware = false;
@@ -333,23 +341,34 @@ int main(int argc, char* argv[]) {
                 if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
             }
         }
+        
+        vanetza::ByteBuffer buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
+                                             : normal_packets[sequence[i] % normal_packets.size()];
+        return {is_malware, buf};
+    };
+
+    auto consumer_func = [&](const qos_harness::QueuePacket& pkt) {
+        int i = pkt.id;
+        bool is_malware = pkt.is_malware;
+        const vanetza::ByteBuffer& buf = pkt.buffer;
+
+        if (i % print_interval == 0 || i == total_packets - 1) {
+            double actual_avg_rate = (i > 0) ? (static_cast<double>(total_inspected) / i) * 100.0 : 0.0;
+            double current_target_rate = enable_filter ? filter_fsm.get_sampling_rate() * 100.0 : 0.0;
+            qos_harness::ConsolePresenter::printSimulationProgress(
+                i, total_packets, malware_so_far, 
+                enable_filter, actual_avg_rate, current_target_rate
+            );
+        }
 
         if (is_malware) malware_so_far++;
 
-        // Route packet payload from normal or attack dataset vectors
-        const vanetza::ByteBuffer& buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
-                                                    : normal_packets[sequence[i] % normal_packets.size()];
-
-        // Execute parsing and record processing latency
-        auto start = std::chrono::high_resolution_clock::now();
         bool drop_packet = enable_filter ? filter_fsm.process_packet(buf) : false;
 
-        // If the filter is enabled and the packet is indeed sampled, increment the count.
         if (enable_filter && filter_fsm.was_inspected()) {
             total_inspected++;
         }
 
-        // Classification metric routing
         if (drop_packet) {
             if (is_malware)
                 true_positives++;
@@ -360,20 +379,17 @@ int main(int argc, char* argv[]) {
                 false_negatives++;
             else
                 true_negatives++;
-            // Pass allowed packets to the mock router logic indicate method
             vanetza::ByteBuffer buf_copy = buf;
             context.indicate(std::move(buf_copy));
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 
-        // Log packet results
+        auto end = std::chrono::high_resolution_clock::now();
+        long long latency_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - pkt.arrival_time).count();
+
         collector.recordPacket(i, is_malware, drop_packet, latency_ns);
 
-        // Interactive Online DRL Bridge interface synchronization check
         if (enable_filter) {
             if (enable_trace || rl_train_mode || enable_onnx) {
-                // Buffer packet stats and evaluate window boundary splits
                 rl_bridge.collect_packet_telemetry(buf.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                    static_cast<int>(filter_fsm.get_state()), drop_packet, is_malware,
                                                    filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
@@ -382,7 +398,10 @@ int main(int argc, char* argv[]) {
                 rl_bridge.check_and_sync_window(i, filter_fsm);
             }
         }
-    }
+    };
+
+    simulator.start(producer_func, consumer_func);
+    simulator.wait_until_done();
 
     std::cout << "\n[*] Simulation complete. Writing data to disk...\n";
     collector.exportToCSV(out_filename);
@@ -394,5 +413,61 @@ int main(int argc, char* argv[]) {
 
     std::cout << qos_harness::ConsolePresenter::green() << "[+] Saved to " << out_filename
               << qos_harness::ConsolePresenter::reset() << "\n";
+
+    // Write to ablation_metrics.csv
+    std::string config_name = "Static (100%)";
+    if (enable_filter) {
+        if (enable_onnx) {
+            std::string algo = rl_bridge.get_active_algorithm();
+            for (char &c : algo) c = std::toupper(c);
+            config_name = "FSM + " + algo;
+        } else {
+            config_name = "FSM Only";
+        }
+    }
+
+    double fnr = malware_so_far > 0 ? (static_cast<double>(false_negatives) / malware_so_far) * 100.0 : 0.0;
+    double avg_sampling = total_packets > 0 ? (static_cast<double>(total_inspected) / total_packets) * 100.0 : 0.0;
+    if (!enable_filter) {
+        avg_sampling = 100.0;
+        fnr = 0.0; // Static 100% means the heavy ASN.1 parser catches everything.
+    }
+    
+    long peak_rss = get_peak_rss_mb();
+    double inference_time = enable_onnx ? rl_bridge.get_avg_inference_time_ms() : 0.0;
+
+    std::string ablation_csv = csv_base_dir + "/ablation_metrics.csv";
+    std::ofstream ofs(ablation_csv, std::ios::app);
+    
+    char cost_str[64];
+    if (enable_onnx) {
+        std::snprintf(cost_str, sizeof(cost_str), "%ldMB / %.2fms", peak_rss, inference_time);
+    } else if (enable_filter) {
+        std::snprintf(cost_str, sizeof(cost_str), "%ldMB / N/A", peak_rss);
+    } else {
+        std::snprintf(cost_str, sizeof(cost_str), "N/A");
+    }
+
+    if (ofs.is_open()) {
+        ofs.seekp(0, std::ios::end);
+        if (ofs.tellp() == 0) {
+            ofs << "Configuration,Rate,P99,Avg_Sampling,FNR,Memory_MB,Inference_ms\n";
+        }
+        
+        long out_mem = enable_filter ? peak_rss : -1;
+        double out_inf = enable_onnx ? inference_time : -1.0;
+        
+        ofs << config_name << "," 
+            << pollution_rate << "," 
+            << "-," 
+            << avg_sampling << "," 
+            << fnr << "," 
+            << out_mem << "," 
+            << out_inf << "\n";
+    }
+
+    // Print to console using the centralized ConsolePresenter
+    qos_harness::ConsolePresenter::printAblationMetrics(config_name, fnr, avg_sampling, cost_str);
+
     return 0;
 }

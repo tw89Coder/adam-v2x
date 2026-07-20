@@ -19,7 +19,7 @@ namespace qos_harness {
 /**
  * @brief Structure holding defense policy parameters received from RL agent.
  */
-struct FilterPolicy {
+struct alignas(64) FilterPolicy {
     double recovery_rate;
     double penalty_multiplier;
     int sq_threshold;
@@ -98,6 +98,21 @@ public:
      * @param enabled If true, safety boundaries clamp RL outputs.
      */
     void set_safety_guards(bool enabled);
+
+    /**
+     * @brief Retrieves the average ONNX inference latency in milliseconds.
+     */
+    double get_avg_inference_time_ms() const {
+        if (inference_count_ == 0) return 0.0;
+        return (static_cast<double>(total_inference_time_us_.load()) / inference_count_.load()) / 1000.0;
+    }
+
+    /**
+     * @brief Retrieves the active ONNX algorithm (e.g., dqn, ppo).
+     */
+    std::string get_active_algorithm() const {
+        return algorithm_;
+    }
 
     /**
      * @brief Diagnostic hook for testing ONNX outputs with mock inputs.
@@ -179,6 +194,9 @@ private:
     // Shared communication buffers
     WindowTelemetry shared_telemetry_;
     FilterPolicy shared_policy_;
+
+    std::atomic<uint64_t> total_inference_time_us_{0};
+    std::atomic<uint32_t> inference_count_{0};
 
     /**
      * @brief Worker loop function executed by the background ONNX inference thread.
