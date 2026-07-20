@@ -579,6 +579,21 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 std::exit(1);
             }
         }
+        else if (algorithm_ == "discrete_ppo") {
+            if (action_dim == 4) {
+                // Deterministic categorical PPO export wrapper. The wrapper
+                // embeds argmax action selection and sampling-rate translation.
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+                out_policy.base_sampling_rate = float_output[3];
+            }
+            else {
+                std::cerr << "[FATAL] ONNX Discrete PPO model returned unexpected action dimensions: "
+                          << action_dim << " (Expected wrapped=4)\n";
+                std::exit(1);
+            }
+        }
         else if (algorithm_ == "ppo") {
             if (action_dim == 4) {
                 // ==========================================
