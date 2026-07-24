@@ -211,7 +211,7 @@ class QoSPlotter(BasePlotter):
                     max_y = local_max
 
         ax1.set_ylim(-0.015, max_y * 1.1)
-        ax1.set_xlabel('Packet ID (Around Attack Onset)', fontsize=11)
+        ax1.set_xlabel('Packet Sequence Index (n)', fontsize=11)
         ax1.set_ylabel('Processing Latency (ms)', fontsize=11)
         ax1.grid(True, linestyle=':', alpha=0.7)
         ax1.legend(loc='upper right', fontsize=8.5, frameon=True, edgecolor='#cccccc', framealpha=0.9)
