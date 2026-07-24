@@ -253,7 +253,21 @@ class QoSPlotter(BasePlotter):
                     ax2.text(p99 * 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='left', va='center')
 
         ax2.set_xscale('log')
-        ax2.set_xlim(1e-4, 10.0)
+        
+        # Dynamically compute smart x-axis bounds to eliminate empty log-scale margins
+        all_lats = []
+        for _, df, _, _, _ in series_map:
+            if df is not None and not df.empty:
+                all_lats.extend(df['latency_ms'].values)
+        if all_lats:
+            min_val = np.percentile(all_lats, 0.1)
+            max_val = np.percentile(all_lats, 99.9)
+            x_min = max(1e-3, min_val * 0.7)
+            x_max = max(5.0, max_val * 1.5)
+            ax2.set_xlim(x_min, x_max)
+        else:
+            ax2.set_xlim(1e-2, 10.0)
+
         ax2.set_xlabel('Latency (ms) [Log Scale]', fontsize=11)
         ax2.set_ylabel('CDF Probability', fontsize=11)
         ax2.grid(True, which="both", linestyle=':', alpha=0.7)
