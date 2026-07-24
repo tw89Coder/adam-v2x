@@ -17,7 +17,6 @@ mpmath
 networkx
 numpy<2.0.0
 onnx
-onnxruntime
 packaging
 pandas
 pillow
