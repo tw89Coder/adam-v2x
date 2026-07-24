@@ -262,13 +262,24 @@ setup_python_venv() {
     fi
 
     # Apply requirements
-    if [ -f "$req_file" ]; then
-        echo -e "${COLOR_INFO}[*] Applying Python requirements from ${req_file}...${COLOR_RESET}"
+    local req_rpi="${SCRIPT_DIR}/tools/rl_bridge/requirements-rpi.txt"
+    local active_req="$req_file"
+
+    local dpkg_arch
+    dpkg_arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+
+    if [ -f "$req_rpi" ] && { [ "$dpkg_arch" = "armhf" ] || [ "$dpkg_arch" = "arm64" ] || [ "$(uname -m)" != "x86_64" ]; }; then
+        echo -e "${COLOR_INFO}[*] Detected ARM / Raspberry Pi environment (${dpkg_arch}). Using ${req_rpi}...${COLOR_RESET}"
+        active_req="$req_rpi"
+    fi
+
+    if [ -f "$active_req" ]; then
+        echo -e "${COLOR_INFO}[*] Applying Python requirements from ${active_req}...${COLOR_RESET}"
         "$venv_dir/bin/pip" install --upgrade pip
-        "$venv_dir/bin/pip" install -r "$req_file"
+        "$venv_dir/bin/pip" install -r "$active_req"
         log_success "Python requirements successfully applied."
     else
-        log_warning "requirements.txt not found at ${req_file}. Skipping package installation."
+        log_warning "Requirements file not found at ${active_req}. Skipping package installation."
     fi
 }
 
@@ -431,11 +442,27 @@ setup_onnxruntime() {
         return 0
     fi
 
-    echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries...${COLOR_RESET}"
+    local dpkg_arch
+    dpkg_arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+
+    if [ "$dpkg_arch" = "armhf" ]; then
+        echo -e "${COLOR_WARNING}[WARNING] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
+        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime C++ releases do not provide prebuilt binaries for armhf.${COLOR_RESET}"
+        echo -e "${COLOR_WARNING}[WARNING] Creating empty stub directory ${target_dir}. Python ONNX Runtime will be used for execution.${COLOR_RESET}"
+        mkdir -p "$target_dir"
+        return 0
+    fi
+
+    local onnx_arch="x64"
+    if [ "$dpkg_arch" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+        onnx_arch="aarch64"
+    fi
+
+    echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries (${onnx_arch})...${COLOR_RESET}"
     mkdir -p "${SCRIPT_DIR}/third_party"
     
     local version="1.16.3"
-    local tarball="onnxruntime-linux-x64-${version}.tgz"
+    local tarball="onnxruntime-linux-${onnx_arch}-${version}.tgz"
     local url="https://github.com/microsoft/onnxruntime/releases/download/v${version}/${tarball}"
     
     if command -v wget >/dev/null 2>&1; then
@@ -448,7 +475,7 @@ setup_onnxruntime() {
     fi
     
     tar -xzf "/tmp/${tarball}" -C "/tmp"
-    mv "/tmp/onnxruntime-linux-x64-${version}" "$target_dir"
+    mv "/tmp/onnxruntime-linux-${onnx_arch}-${version}" "$target_dir"
     rm "/tmp/${tarball}"
     
     echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library configured successfully at ${target_dir}.${COLOR_RESET}"
