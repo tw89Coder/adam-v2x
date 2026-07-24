@@ -161,16 +161,19 @@ class QoSPlotter(BasePlotter):
         
         suffix = "_onnx" if self.use_onnx else "_filtered"
 
-        df_b   = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
-        df_un  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_unf = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
-        df_p   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_pf  = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
+        df_b    = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
+        df_un   = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_unf  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
+        df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_full100.csv') or \
+                   self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_static100.csv')
+        df_p    = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_pf   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
-            ("Baseline",           df_b,   '#55a868', '-',  3),  # Drawn on top (zorder=3)
-            ("Unpatched Native",   df_un,  '#c44e52', '-',  1),  # Drawn at the bottom (zorder=1)
-            ("Unpatched Filtered", df_unf, '#4c72b0', ':',  2),  # Drawn in middle (zorder=2) - High contrast blue
+            ("Baseline (Peacetime)", df_b,    '#55a868', '-',  3),  # Green
+            ("Unpatched (No Filter)", df_un,   '#c44e52', '-',  1),  # Red (No defense, tail explosion)
+            ("Static 100% Inspection", df_full, '#ff7f0e', '--', 2),  # Orange (100% Static inspection)
+            ("Proposed Adaptive FSM",  df_unf,  '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
         ]
         if not self.use_onnx and not self.no_patched:
             series_map.extend([

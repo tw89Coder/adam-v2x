@@ -274,6 +274,10 @@ while [[ $# -gt 0 ]]; do
             DISABLE_SAFETY=true
             shift
             ;;
+        -S|--static-100|--full-100|--static-filter)
+            RUN_STATIC_100=true
+            shift
+            ;;
         #===================================Chi-AN: new command for training data flow =======================================
         --zip|--paired)
             ZIP_MODE=true
@@ -535,6 +539,9 @@ execute_matrix_sweep() {
                 fi
                 if [ "$RUN_ONNX" = true ]; then
                     sweep_args+=("--onnx" "$ONNX_MODEL_PATH")
+                fi
+                if [ "$RUN_STATIC_100" = true ]; then
+                    sweep_args+=("--static-filter" "1.0")
                 fi
                 if [ "$DISABLE_SAFETY" = true ]; then
                     sweep_args+=("--disable-safety")

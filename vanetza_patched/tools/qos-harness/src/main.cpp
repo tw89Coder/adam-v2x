@@ -92,6 +92,8 @@ int main(int argc, char* argv[]) {
     bool diagnose_flood = false;
     bool rl_train_mode = false;
     bool enable_onnx = false;
+    bool static_filter_mode = false;
+    double static_sampling_rate = 1.0;
     std::string onnx_model_path = "";
     bool disable_safety = false;
     bool has_custom_policy = false;
@@ -123,6 +125,14 @@ int main(int argc, char* argv[]) {
             enable_onnx = true;
             onnx_model_path = argv[++i];
             enable_filter = true;
+        } else if (arg == "--static-filter" || arg == "--full-100" || arg == "--static-100") {
+            static_filter_mode = true;
+            enable_filter = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                static_sampling_rate = std::atof(argv[++i]);
+            } else {
+                static_sampling_rate = 1.0;
+            }
         } else if (arg == "--disable-safety") {
             disable_safety = true;
         } else if (arg == "-f") {
@@ -158,6 +168,10 @@ int main(int argc, char* argv[]) {
     // Defensive check: Assert ONNX cannot run without FSM pre-filter enabled
     if (enable_onnx && !enable_filter) {
         std::cerr << "[-] Error: ONNX mode (--onnx) and disabled filter (without -f) are mutually exclusive.\n";
+        return 1;
+    }
+    if (static_filter_mode && (enable_onnx || rl_train_mode)) {
+        std::cerr << "[-] Error: Static Filter mode (--static-filter) and ONNX/RL modes are mutually exclusive.\n";
         return 1;
     }
 
@@ -230,7 +244,10 @@ int main(int argc, char* argv[]) {
     if (pollution_rate == 0.0) {
         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_baseline.csv", csv_target_dir.c_str());
     } else if (enable_filter) {
-        if (rl_train_mode) {
+        if (static_filter_mode) {
+            std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_full100.csv",
+                          csv_target_dir.c_str(), pollution_rate, attack_mode);
+        } else if (rl_train_mode) {
             std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_rl.csv",
                           csv_target_dir.c_str(), pollution_rate, attack_mode);
         } else if (enable_onnx) {
@@ -247,7 +264,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[*] Mode: " << attack_mode << " | Rate: " << pollution_rate
               << "% | Filter: " << (enable_filter ? "ON" : "OFF")
-              << " | ONNX: " << (enable_onnx ? "ON" : "OFF") << "\n";
+              << " | ONNX: " << (enable_onnx ? "ON" : "OFF")
+              << " | Static: " << (static_filter_mode ? "ON (100%)" : "OFF") << "\n";
     std::cout << "[*] Starting QoS Measurement...\n";
     if (enable_filter) {
         std::cout << "[*] Metric Legend: Insp[A/T] = Inspection Rate [Actual / Target]\n";
@@ -256,13 +274,18 @@ int main(int argc, char* argv[]) {
     // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
 
-    // In online training, PPO must be the sole authority over the sampling
-    // rate. Keep anomaly detection and budget telemetry active, but prevent
-    // the FSM from changing the effective rate behind the policy's back.
-    if (rl_train_mode) {
-        filter_fsm.set_adaptive_sampling_enabled(false);
+    if (static_filter_mode) {
+        filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
+        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, static_sampling_rate);
+        std::cout << "[+] Static Fixed Filter Active: Sampling Rate = " << (static_sampling_rate * 100.0) << "%\n";
+    } else if (enable_onnx) {
+        filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
+    } else if (rl_train_mode) {
+        filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::RL_SOCKET_CONTROL);
         std::cout << "[+] PPO-only training active: FSM sampling override disabled; "
                      "detector and budget telemetry remain enabled.\n";
+    } else {
+        filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::DYNAMIC_ADAPTIVE_FSM);
     }
 
     // Apply custom parameters if CLI override flags were provided
