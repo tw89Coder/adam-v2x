@@ -16,9 +16,9 @@ matplotlib
 mpmath
 networkx
 numpy<2.0.0
-onnx
+onnx<1.16.0
 packaging
-pandas
+pandas<2.0.0
 pillow
 pluggy
 protobuf
