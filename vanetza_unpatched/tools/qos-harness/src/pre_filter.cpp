@@ -24,8 +24,23 @@
 #include "qos_harness/pre_filter.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <ctime>
+
+#if defined(__i386__) || defined(__x86_64__)
 #include <x86intrin.h>
+static inline uint64_t get_hardware_ticks() {
+    return __rdtsc();
+}
+#else
+static inline uint64_t get_hardware_ticks() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+#endif
 
 AdaptiveFilterFSM::AdaptiveFilterFSM()
     : rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {
@@ -157,9 +172,9 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     // Run sliding window inspection if selected by the sampling gate
     if (inspect) {
         last_inspected_ = true;
-        uint64_t start_ticks = __rdtsc();
+        uint64_t start_ticks = get_hardware_ticks();
         max_sum_sq = calculate_max_sum_sq(buf);
-        uint64_t end_ticks = __rdtsc();
+        uint64_t end_ticks = get_hardware_ticks();
         last_latency_ticks_ = (end_ticks >= start_ticks) ? (end_ticks - start_ticks) : 0;
         
         is_anomalous = (max_sum_sq > SQ_THRESHOLD);
