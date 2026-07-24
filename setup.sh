@@ -428,6 +428,12 @@ compile_library() {
     cmake ..
 
     local cores=$(nproc)
+    local dpkg_arch
+    dpkg_arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+    if [ "$dpkg_arch" = "armhf" ] || [ "$dpkg_arch" = "arm64" ] || [ "$(uname -m)" != "x86_64" ]; then
+        echo -e "${COLOR_INFO}[MAKE] Detected ARM / Raspberry Pi. Limiting build concurrency to 2 jobs to prevent RAM OOM...${COLOR_RESET}"
+        cores=2
+    fi
     echo -e "${COLOR_INFO}[MAKE] Starting compilation on ${COLOR_SUCCESS}${cores}${COLOR_RESET} ${COLOR_INFO}CPU cores...${COLOR_RESET}"
     make -j"${cores}"
 
