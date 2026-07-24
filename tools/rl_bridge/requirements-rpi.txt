@@ -31,5 +31,4 @@ PyYAML
 six
 sympy
 tomli
-torch
 typing_extensions
