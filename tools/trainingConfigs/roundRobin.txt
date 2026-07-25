@@ -1,42 +1,71 @@
-# mode rate
-# warm-up: medium difficulty
-0 1.0
-1 1.0
-2 1.0
-3 1.0
+# ============================================================
+# Discrete PPO rapid-response curriculum
+# Format: attack_mode pollution_rate_percent
+#
+# Mode:
+#   0 = Uniform random (steady attack reference)
+#   1 = Single pulse (attack onset and recovery)
+#   2 = Periodic on/off (repeated reaction practice)
+#   3 = Grand mix (clean -> attack -> recovery -> pulses)
+#
+# Training objective:
+#   React quickly when an attack begins, track repeated attack transitions,
+#   and reduce sampling after the attack ends. Rates below 1% are excluded;
+#   5% and 10% dominate because they produce a clear system-load signal.
+# ============================================================
 
-# high attack intensity
+# Phase 1: strong-signal warm-up
+# Establish unmistakable attack/clean state separation.
 0 10.0
-1 10.0
-2 10.0
 3 10.0
+2 10.0
+1 10.0
 
-# low-medium attack intensity
-0 0.5
-1 0.5
-2 0.5
-3 0.5
-
-# medium-high attack intensity
 0 5.0
-1 5.0
+3 5.0
 2 5.0
+1 5.0
+
+# Phase 2: repeated onset and recovery practice
+# Modes 1/2/3 contain explicit temporal transitions; alternate intensity so
+# the policy cannot memorize one fixed attack level.
+1 10.0
+2 5.0
+3 10.0
+1 5.0
+
+2 10.0
+3 5.0
+1 10.0
+2 5.0
+
+3 10.0
+1 5.0
+2 10.0
 3 5.0
 
-# harder low-rate cases
-0 0.25
-1 0.25
-2 0.25
-3 0.25
+# Phase 3: lower-bound generalization
+# Retain 1% as the minimum supported attack intensity, but do not let this
+# low-overhead case dominate training.
+3 1.0
+2 1.0
+1 1.0
+0 1.0
 
-# intermediate validation-like rate
-0 0.75
-1 0.75
-2 0.75
-3 0.75
+3 5.0
+1 10.0
+2 5.0
+3 10.0
 
-# very sparse attack
-0 0.1
-1 0.1
-2 0.1
-3 0.1
+# Phase 4: finish on balanced dynamic scenarios
+# End with transition-heavy runs so the final updates emphasize response
+# latency and recovery instead of a stationary uniform distribution.
+1 5.0
+2 10.0
+3 5.0
+1 10.0
+
+2 5.0
+3 10.0
+2 10.0
+3 5.0

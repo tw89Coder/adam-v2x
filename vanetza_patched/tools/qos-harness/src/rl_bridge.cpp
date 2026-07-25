@@ -12,7 +12,7 @@
  * file to prevent cross-run trace contamination.
  * 
  * CONTROL WINDOW & SOCKET HANDSHAKE:
- * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (1000) packets.
+ * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (100) packets.
  * - At window boundaries, it opens a blocking TCP socket loopback connection to port 8080.
  * - Sends a serialized telemetry observation string: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
  * - Blocks execution waiting for the DRL policy decision, which is received as a serialized 
@@ -148,7 +148,7 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
 
         // 2. Dynamically parse agent.yaml to read algorithm and action_map
         algorithm_ = "dqn"; // Default fallback
-        dqn_action_map_ = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f}; // Default fallback
+        dqn_action_map_ = {-0.20f, -0.10f, 0.0f, 0.10f, 0.20f}; // Default fallback
 
         std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
         std::ifstream config_file(config_path);
@@ -583,6 +583,22 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             else {
                 std::cerr << "[FATAL] ONNX DQN model returned unexpected action dimensions: " << action_dim 
                           << " (Expected raw=" << dqn_action_map_.size() << " or wrapped=4)\n";
+                std::exit(1);
+            }
+        }
+        else if (algorithm_ == "discrete_ppo") {
+            if (action_dim == 4) {
+                // Deterministic categorical PPO export wrapper. The wrapper
+                // embeds the probability-weighted expected action delta and
+                // sampling-rate translation.
+                out_policy.recovery_rate = float_output[0] * 0.5;
+                out_policy.penalty_multiplier = float_output[1] * 100.0;
+                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
+                out_policy.base_sampling_rate = float_output[3];
+            }
+            else {
+                std::cerr << "[FATAL] ONNX Discrete PPO model returned unexpected action dimensions: "
+                          << action_dim << " (Expected wrapped=4)\n";
                 std::exit(1);
             }
         }

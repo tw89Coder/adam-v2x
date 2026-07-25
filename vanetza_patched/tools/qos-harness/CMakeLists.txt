@@ -17,7 +17,8 @@ target_include_directories(qos-harness PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(qos-harness PUBLIC vanetza)
+find_package(Threads REQUIRED)
+target_link_libraries(qos-harness PUBLIC vanetza Threads::Threads)
 
 get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 
@@ -26,7 +27,7 @@ target_compile_definitions(qos-harness PRIVATE REPO_ROOT="${REPO_ROOT}")
 # Dynamic ONNX Runtime detection and linking
 set(ONNXRT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/onnxruntime")
 
-if(EXISTS "${ONNXRT_ROOT}")
+if(EXISTS "${ONNXRT_ROOT}/include/onnxruntime_cxx_api.h")
     message(STATUS "[QoS-Harness] Found ONNX Runtime at ${ONNXRT_ROOT}. Enabling in-process inference.")
     target_compile_definitions(qos-harness PRIVATE USE_ONNX)
     target_include_directories(qos-harness PRIVATE ${ONNXRT_ROOT}/include)

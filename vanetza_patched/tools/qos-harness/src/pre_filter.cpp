@@ -24,11 +24,28 @@
 #include "qos_harness/pre_filter.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <ctime>
+
+#if defined(__i386__) || defined(__x86_64__)
 #include <x86intrin.h>
+static inline uint64_t get_hardware_ticks() {
+    return __rdtsc();
+}
+#else
+static inline uint64_t get_hardware_ticks() {
+    return static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch()
+        ).count()
+    );
+}
+#endif
 
 AdaptiveFilterFSM::AdaptiveFilterFSM()
-    : current_budget(MAX_BUDGET), rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {}
+    : rng_state(static_cast<uint32_t>(time(nullptr)) ^ 0xDEADBEEF) {
+    current_budget = MAX_BUDGET;
+}
 
 /**
  * @brief Maps the current virtual CPU budget to a discrete system state.
@@ -145,16 +162,7 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     // - budget >= 100: sampling_rate = BASE_SAMPLING_RATE (e.g. 5% or 10%)
     // - budget == 70 (TAU_1): sampling_rate = 0.50 (50%)
     // - budget <= 40 (TAU_2): sampling_rate = 1.00 (100%)
-    double sampling_rate = BASE_SAMPLING_RATE;
-    if (current_budget <= TAU_2) {
-        sampling_rate = 1.0;
-    } else if (current_budget <= TAU_1) {
-        double range_ratio = (current_budget - TAU_2) / (TAU_1 - TAU_2);
-        sampling_rate = 1.0 - 0.5 * range_ratio; // Smooth transition between 50% and 100%
-    } else if (current_budget < MAX_BUDGET) {
-        double range_ratio = (current_budget - TAU_1) / (MAX_BUDGET - TAU_1);
-        sampling_rate = 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio; // Smooth transition between base and 50%
-    }
+    double sampling_rate = get_sampling_rate();
     
     bool inspect = (fast_rand() % 100 < static_cast<int>(sampling_rate * 100.0));
 
@@ -164,9 +172,9 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     // Run sliding window inspection if selected by the sampling gate
     if (inspect) {
         last_inspected_ = true;
-        uint64_t start_ticks = __rdtsc();
+        uint64_t start_ticks = get_hardware_ticks();
         max_sum_sq = calculate_max_sum_sq(buf);
-        uint64_t end_ticks = __rdtsc();
+        uint64_t end_ticks = get_hardware_ticks();
         last_latency_ticks_ = (end_ticks >= start_ticks) ? (end_ticks - start_ticks) : 0;
         
         is_anomalous = (max_sum_sq > SQ_THRESHOLD);

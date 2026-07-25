@@ -17,6 +17,8 @@ if PROJECT_ROOT not in sys.path:
 from src.envs.translators import DqnActionTranslator
 from src.models.dqn_net import DQNNet
 from scripts.export_onnx import DQNDeploymentWrapper
+from scripts.export_onnx import DiscretePPODeploymentWrapper
+from src.models.discrete_ppo_net import DiscretePPOActorCritic
 from src.config import RAW_CFG
 
 def cpp_scale(onnx_output):
@@ -37,7 +39,7 @@ def dqn_setup():
     state_dim = 3
     action_dim = 5
     hidden_dim = 64
-    action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
+    action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
     
     dqn_net = DQNNet(state_dim=state_dim, action_dim=action_dim, hidden_dim=hidden_dim)
     dqn_net.eval()
@@ -92,3 +94,29 @@ def test_dqn_translation_consistency(dqn_setup):
                 f"State: {state}, chosen action index: {best_action}. "
                 f"Python: {py_output}, ONNX C++: {cpp_output}"
             )
+
+
+def test_discrete_ppo_wrapper_uses_expected_delta():
+    """Deployment must preserve the categorical policy's mean action."""
+    action_map = RAW_CFG["dqn"]["action_map"]
+    model = DiscretePPOActorCritic(state_dim=30, action_dim=5, hidden_dim=128)
+
+    # Make logits state-independent with Hold as argmax, while the combined
+    # negative-action mass still produces a negative expected delta.
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+        model.actor.bias.copy_(torch.log(torch.tensor([0.38, 0.12, 0.49, 0.005, 0.005])))
+
+    wrapper = DiscretePPODeploymentWrapper(model, action_map).eval()
+    observation = torch.zeros((1, 30), dtype=torch.float32)
+    observation[0, -3] = 1.0
+
+    with torch.no_grad():
+        output = wrapper(observation)[0]
+
+    expected_delta = sum(probability * delta for probability, delta in zip(
+        [0.38, 0.12, 0.49, 0.005, 0.005], action_map
+    ))
+    assert abs(output[3].item() - (1.0 + expected_delta)) < 1e-6
+    assert output[3].item() < 1.0  # Argmax Hold would incorrectly remain at 100%.

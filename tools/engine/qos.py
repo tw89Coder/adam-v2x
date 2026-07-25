@@ -161,16 +161,19 @@ class QoSPlotter(BasePlotter):
         
         suffix = "_onnx" if self.use_onnx else "_filtered"
 
-        df_b   = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
-        df_un  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_unf = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
-        df_p   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
-        df_pf  = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
+        df_b    = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
+        df_un   = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_unf  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
+        df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_full100.csv') or \
+                   self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_static100.csv')
+        df_p    = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_pf   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
-            ("Baseline",           df_b,   '#55a868', '-',  3),  # Drawn on top (zorder=3)
-            ("Unpatched Native",   df_un,  '#c44e52', '-',  1),  # Drawn at the bottom (zorder=1)
-            ("Unpatched Filtered", df_unf, '#4c72b0', ':',  2),  # Drawn in middle (zorder=2) - High contrast blue
+            ("Baseline (Peacetime)", df_b,    '#55a868', '-',  3),  # Green
+            ("Unpatched (No Filter)", df_un,   '#c44e52', '-',  1),  # Red (No defense, tail explosion)
+            ("Static 100% Inspection", df_full, '#ff7f0e', '--', 2),  # Orange (100% Static inspection)
+            ("Proposed Adaptive FSM",  df_unf,  '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
         ]
         if not self.use_onnx and not self.no_patched:
             series_map.extend([
@@ -208,7 +211,7 @@ class QoSPlotter(BasePlotter):
                     max_y = local_max
 
         ax1.set_ylim(-0.015, max_y * 1.1)
-        ax1.set_xlabel('Packet ID (Around Attack Onset)', fontsize=11)
+        ax1.set_xlabel('Packet Sequence Index (n)', fontsize=11)
         ax1.set_ylabel('Processing Latency (ms)', fontsize=11)
         ax1.grid(True, linestyle=':', alpha=0.7)
         ax1.legend(loc='upper right', fontsize=8.5, frameon=True, edgecolor='#cccccc', framealpha=0.9)
@@ -250,7 +253,21 @@ class QoSPlotter(BasePlotter):
                     ax2.text(p99 * 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='left', va='center')
 
         ax2.set_xscale('log')
-        ax2.set_xlim(1e-4, 10.0)
+        
+        # Dynamically compute smart x-axis bounds to eliminate empty log-scale margins
+        all_lats = []
+        for _, df, _, _, _ in series_map:
+            if df is not None and not df.empty:
+                all_lats.extend(df['latency_ms'].values)
+        if all_lats:
+            min_val = np.percentile(all_lats, 0.1)
+            max_val = np.percentile(all_lats, 99.9)
+            x_min = max(1e-3, min_val * 0.7)
+            x_max = max(5.0, max_val * 1.5)
+            ax2.set_xlim(x_min, x_max)
+        else:
+            ax2.set_xlim(1e-2, 10.0)
+
         ax2.set_xlabel('Latency (ms) [Log Scale]', fontsize=11)
         ax2.set_ylabel('CDF Probability', fontsize=11)
         ax2.grid(True, which="both", linestyle=':', alpha=0.7)
@@ -576,9 +593,12 @@ class QoSPlotter(BasePlotter):
         """
         Plots a high-quality visualization of the step-by-step telemetry recorded during online training.
         """
-        csv_path = os.path.join(os.path.dirname(self.root_output_dir), "checkpoints", "online_training_telemetry.csv")
+        checkpoint_dir = os.path.join(os.path.dirname(self.root_output_dir), "checkpoints")
+        discrete_path = os.path.join(checkpoint_dir, "online_training_telemetry_discrete_ppo.csv")
+        legacy_path = os.path.join(checkpoint_dir, "online_training_telemetry.csv")
+        csv_path = discrete_path if os.path.exists(discrete_path) else legacy_path
         if not os.path.exists(csv_path):
-            LogStyle.log_warn("Aborting Online Telemetry Plot: Missing 'checkpoints/online_training_telemetry.csv'.")
+            LogStyle.log_warn("Aborting Online Telemetry Plot: no online training telemetry CSV found.")
             return
             
         df = self._load_csv_file(csv_path)
@@ -591,14 +611,16 @@ class QoSPlotter(BasePlotter):
         # Smooth curves slightly for readability over long training runs
         # Use a rolling window of 50 steps
         WINDOW = min(50, len(df))
+        attack_column = 'attack_rate' if 'attack_rate' in df.columns else 'attack_intensity'
+        target_column = 'sampling_rate_after' if 'sampling_rate_after' in df.columns else 'target_sampling_rate'
         if WINDOW > 1:
-            smoothed_attack = df['attack_intensity'].rolling(WINDOW, min_periods=1).mean() * 100.0
-            smoothed_target = df['target_sampling_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_attack = df[attack_column].rolling(WINDOW, min_periods=1).mean() * 100.0
+            smoothed_target = df[target_column].rolling(WINDOW, min_periods=1).mean() * 100.0
             smoothed_actual = df['actual_inspection_rate'].rolling(WINDOW, min_periods=1).mean() * 100.0
             smoothed_fnr = df['fnr'].rolling(WINDOW, min_periods=1).mean() * 100.0
         else:
-            smoothed_attack = df['attack_intensity'] * 100.0
-            smoothed_target = df['target_sampling_rate'] * 100.0
+            smoothed_attack = df[attack_column] * 100.0
+            smoothed_target = df[target_column] * 100.0
             smoothed_actual = df['actual_inspection_rate'] * 100.0
             smoothed_fnr = df['fnr'] * 100.0
 

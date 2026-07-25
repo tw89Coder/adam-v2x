@@ -30,8 +30,17 @@ class ConvergencePlotter(BasePlotter):
             return
 
         x = df["update"]
-        reward = df["reward"]
-        loss = df["loss"]
+        # New algorithm-specific logs use explicit PPO names; retain support
+        # for legacy reward/loss CSV files.
+        reward_column = "reward_mean" if "reward_mean" in df.columns else "reward"
+        if "total_loss" in df.columns:
+            loss_column = "total_loss"
+        elif "loss" in df.columns:
+            loss_column = "loss"
+        else:
+            loss_column = "critic_loss"
+        reward = df[reward_column]
+        loss = df[loss_column]
 
         # Dynamic rolling average calculation for smoothing noisy RL trajectories
         window = max(2, len(df) // 10)

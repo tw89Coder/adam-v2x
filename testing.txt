@@ -1,0 +1,134 @@
+這次 expected-delta 修改成功，已經解決「攻擊結束後永遠卡在 100%」的問題。
+
+分析檔案：
+
+- [window_trace_5.0_mode1_onnx.csv](/home/andyyiu/CSE625_QoS/outputs/rl_env/unpatched/window_trace_5.0_mode1_onnx.csv)
+- [qos_attack_5.0_mode1_onnx.csv](/home/andyyiu/CSE625_QoS/outputs/csv_raw/unpatched/qos_attack_5.0_mode1_onnx.csv)
+
+## 實驗結果
+
+Mode 1 的時序為：
+
+```text
+Window 0–2999：   乾淨
+Window 3000–4999：攻擊
+Window 5000–9999：乾淨恢復
+```
+
+### 乾淨期
+
+排除開頭 transient 後：
+
+| 階段 | Target sampling | 實際 inspection |
+|---|---:|---:|
+| 攻擊前穩定乾淨期 | 5.00% | 5.01% |
+| 攻擊後穩定乾淨期 | 5.00% | 5.07% |
+
+代表模型現在確實可以從高 sampling 降回 5%。
+
+### 攻擊反應
+
+攻擊從 window 3000 開始：
+
+```text
+Window 3000：target 5%，漏掉 7/7
+Window 3001：target 5%，漏掉 4/4
+Window 3002：target 100%，實際 79%，漏掉 2/11
+Window 3003：target 100%，實際 100%，FN = 0
+```
+
+反應時間：
+
+```text
+2 telemetry windows
+= 約 200 packets
+```
+
+整段攻擊：
+
+```text
+Malware：10,000
+TP：      9,987
+FN：         13
+FNR：     0.13%
+FPR：     0%
+```
+
+FNR 低於目前設定的 1% leakage target。
+
+### 攻擊後恢復
+
+攻擊在 window 5000 結束：
+
+```text
+5000–5006：維持約 100%
+5007：     99.5%
+5008：     91.2%
+5009：     80.3%
+5010：     58.5%
+5011：     49.7%
+5014：     23.8%
+5016：      6.6%
+5017：      5.0%
+```
+
+恢復時間：
+
+```text
+17 windows
+= 約 1,700 packets
+```
+
+這與訓練 log 預測的中位約 18.5 windows 很接近，表示 expected-delta ONNX 行為與 stochastic training 的平均行為已經對齊。
+
+## 封包層結果
+
+```text
+總封包：       1,000,000
+Malware：         10,000
+TP：               9,987
+FN：                  13
+FP：                   0
+FNR：              0.13%
+FPR：                 0%
+平均 latency：    15.91 μs
+```
+
+## 還有一個獨立 bug
+
+最前面的 window 0–7 不正常地從 100% inspection 開始：
+
+```text
+window 0–7：target 100%
+window 8：  91.7%
+...
+window 17： 5%
+```
+
+從 packet trace 可以看到第一個 packet：
+
+```text
+current_budget = 0.05
+fsm_state = S3
+```
+
+但 FSM constructor 理論上應該從 budget 100 開始。原因是 constructor：
+
+```cpp
+AdaptiveFilterFSM::AdaptiveFilterFSM()
+    : current_budget(MAX_BUDGET)
+```
+
+而 `MAX_BUDGET` 是宣告在 `current_budget` 後面的 non-static member。C++ 會依成員宣告順序初始化，因此這裡讀到了尚未初始化的 `MAX_BUDGET`。
+
+這造成每次 simulation 開始時：
+
+```text
+FSM 誤從 S3 quarantine 開始
+→ 前約 1,700 packets 使用高 sampling
+→ recovery 後才回到 5%
+```
+
+它不影響這次攻擊前的穩態結果，因為 Mode 1 有很長的乾淨前段，但會污染 startup overhead，對短時間實驗尤其明顯。
+
+總結：expected-delta 修正成功；目前模型能維持乾淨期約 5%、攻擊後 200 packets 內升到 100%，並在結束後約 1,700 packets 回到 5%。剩餘主要問題是 FSM budget 的 constructor initialization bug。

@@ -1,13 +1,13 @@
 # ==============================================================================
 # V2X QoS DRL Refactored Configuration Matrix
 # ==============================================================================
-algorithm: "dqn"                        # Default algorithm selection ('dqn' or 'ppo')
+algorithm: "dqn"               # Default algorithm used by training/export/deployment
 
 # ------------------------------------------------------------------------------
 # State Representation Settings
 # ------------------------------------------------------------------------------
 state_representation:
-  frame_stack: 4                        # k frames to stack. Set to 1 for stateless mode.
+  frame_stack: 10                        # k frames to stack. Set to 1 for stateless mode.
 
 
 # ------------------------------------------------------------------------------
@@ -126,11 +126,11 @@ safety_boundaries:
 dqn:
   # Action map for DQN discrete actions. Translates discrete action index (0-4) to relative sampling rate change.
   action_map:
+    - -0.20
     - -0.10
-    - -0.05
     - 0.00
-    - 0.05
     - 0.10
+    - 0.20
   
   # Hyperparameters specific to DQN
   capacity: 10000                       # Replay buffer maximum capacity
@@ -146,3 +146,18 @@ dqn:
     lambda_lr: 0.05
     leakage_target: 0.01
     overhead_scale: 2.0
+
+# ------------------------------------------------------------------------------
+# 9. DQN-aligned Discrete PPO (same state/action/reward, different learner)
+# ------------------------------------------------------------------------------
+discrete_ppo:
+  hidden_dim: 128
+  rollout_steps: 200
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_eps: 0.2
+  update_epochs: 5
+  minibatch_size: 64
+  value_coef: 0.5
+  entropy_coef: 0.03                 # Preserve exploration until attack windows appear.
+  max_grad_norm: 0.5
