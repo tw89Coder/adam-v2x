@@ -138,6 +138,23 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
     onnx_model_path_ = model_path;
 
     if (onnx_enabled_) {
+        // Fallback to default ONNX checkpoint path if no explicit path provided
+        if (onnx_model_path_.empty()) {
+            std::vector<std::string> candidates = {
+                repo_root_ + "/checkpoints/v2x_agent_dqn.onnx",
+                repo_root_ + "/checkpoints/v2x_agent_discrete_ppo.onnx",
+                repo_root_ + "/checkpoints/v2x_agent_ppo.onnx",
+                repo_root_ + "/tools/rl_bridge/checkpoints/v2x_agent_dqn.onnx"
+            };
+            for (const auto& cand : candidates) {
+                struct stat st_cand;
+                if (stat(cand.c_str(), &st_cand) == 0) {
+                    onnx_model_path_ = cand;
+                    break;
+                }
+            }
+        }
+
         // 1. Ensure the ONNX model file exists to prevent silent execution fallback
         struct stat st;
         if (stat(onnx_model_path_.c_str(), &st) != 0) {

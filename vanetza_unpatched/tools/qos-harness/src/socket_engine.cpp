@@ -130,7 +130,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
-                    rl_bridge.initialize_onnx(true, "");
+                    rl_bridge.initialize_onnx(true);
                     rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
