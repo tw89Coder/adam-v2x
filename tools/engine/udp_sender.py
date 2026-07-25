@@ -81,6 +81,10 @@ def main():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(0.5)  # 500ms timeout for ACK validation
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 * 1024 * 1024)
+    except Exception:
+        pass
 
     dest_tuple = (args.dest_ip, args.port)
 
@@ -150,7 +154,14 @@ def main():
 
                 is_malware_flag = 1 if is_malware else 0
                 wire_pkt = struct.pack("<I", is_malware_flag) + pkt_data
-                sock.sendto(wire_pkt, dest_tuple)
+                try:
+                    sock.sendto(wire_pkt, dest_tuple)
+                except OSError as e:
+                    if getattr(e, 'winerror', None) == 10055 or getattr(e, 'errno', None) == 10055:
+                        time.sleep(0.005)
+                        sock.sendto(wire_pkt, dest_tuple)
+                    else:
+                        raise e
 
                 # Real-time progress update
                 if (i + 1) % print_interval == 0 or i == args.packets - 1:
