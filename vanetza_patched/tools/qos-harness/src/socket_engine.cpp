@@ -35,7 +35,7 @@ static const std::string LOCAL_ATTACK_FOLDER = LOCAL_REPO_ROOT_STR + "/inputs/at
 
 namespace qos_harness {
 
-int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool no_taskset) {
+int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool no_taskset, const std::string& default_onnx_path) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to create socket.\n" << ConsolePresenter::reset();
@@ -130,7 +130,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
-                    rl_bridge.initialize_onnx(true, "");
+                    std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
+                    rl_bridge.initialize_onnx(true, model_to_use);
                     rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);

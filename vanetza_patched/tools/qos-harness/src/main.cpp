@@ -238,7 +238,10 @@ int main(int argc, char* argv[]) {
     if (is_udp_receiver) {
         std::string prog_path = argv[0];
         std::string build_type = (prog_path.find("vanetza_patched") != std::string::npos) ? "patched" : "unpatched";
-        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, true);
+        if (onnx_model_path.empty()) {
+            onnx_model_path = REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx";
+        }
+        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, true, onnx_model_path);
     }
     if (is_udp_sender) {
         int f_mode = 0; // 0=OFF
