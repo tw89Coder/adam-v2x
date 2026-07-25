@@ -84,6 +84,13 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double lambda_pps = header.lambda_pps;
                 uint32_t filter_mode = header.filter_mode; // 0=OFF, 1=ADAPTIVE, 2=STATIC100
 
+                // Send Handshake ACK back to Sender
+                UDPControlHeader ack_header = header;
+                ack_header.magic = MAGIC_SESSION_ACK;
+                for (int ack_try = 0; ack_try < 3; ++ack_try) {
+                    sendto(sockfd, &ack_header, sizeof(ack_header), 0, (struct sockaddr*)&client_addr, client_len);
+                }
+
                 // Render session init header using ConsolePresenter
                 ConsolePresenter::printUDPSessionHeader(mode, rate, total_pkts, lambda_pps, filter_mode);
 
@@ -238,6 +245,12 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
         return 1;
     }
 
+    // Set 500ms socket timeout for ACK response validation
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 500000; // 500ms
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+
     sockaddr_in dest_addr{};
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(port);
@@ -260,30 +273,51 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
     // Print Sender Industrial Banner
     ConsolePresenter::printUDPSenderBanner(dest_ip, port, modes.size(), rates.size());
 
-    auto send_control = [&](uint32_t magic, int mode, float rate) {
-        UDPControlHeader header{};
-        header.magic = magic;
-        header.mode = mode;
-        header.pollution_rate = rate;
-        header.total_packets = total_packets;
-        header.lambda_pps = lambda_pps;
-        header.filter_mode = filter_mode;
-        header.is_patched = is_patched ? 1 : 0;
-
-        for (int retry = 0; retry < 3; ++retry) {
-            sendto(sockfd, &header, sizeof(header), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-    };
-
     uint64_t interval_ns = (lambda_pps > 0) ? static_cast<uint64_t>(1e9 / lambda_pps) : 0;
     int print_interval = std::max(1, total_packets / 100);
+
+    std::vector<uint8_t> ack_buf(sizeof(UDPControlHeader));
+    sockaddr_in reply_addr{};
+    socklen_t reply_len = sizeof(reply_addr);
 
     for (int mode : modes) {
         for (double rate : rates) {
             ConsolePresenter::printUDPSessionHeader(mode, rate, total_packets, lambda_pps, filter_mode);
-            send_control(MAGIC_SESSION_START, mode, static_cast<float>(rate));
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            UDPControlHeader start_header{};
+            start_header.magic = MAGIC_SESSION_START;
+            start_header.mode = mode;
+            start_header.pollution_rate = static_cast<float>(rate);
+            start_header.total_packets = total_packets;
+            start_header.lambda_pps = lambda_pps;
+            start_header.filter_mode = filter_mode;
+            start_header.is_patched = is_patched ? 1 : 0;
+
+            bool ack_received = false;
+            std::cout << ConsolePresenter::warn() << "  [*] Connecting & sending START_SESSION handshake to Pi (" << dest_ip << ":" << port << ")..." << ConsolePresenter::reset() << "\n";
+
+            for (int attempt = 1; attempt <= 20; ++attempt) { // Try for up to 10 seconds
+                sendto(sockfd, &start_header, sizeof(start_header), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+                ssize_t ack_bytes = recvfrom(sockfd, ack_buf.data(), ack_buf.size(), 0, (struct sockaddr*)&reply_addr, &reply_len);
+                if (ack_bytes == sizeof(UDPControlHeader)) {
+                    UDPControlHeader ack_hdr;
+                    std::memcpy(&ack_hdr, ack_buf.data(), sizeof(UDPControlHeader));
+                    if (ack_hdr.magic == MAGIC_SESSION_ACK) {
+                        ack_received = true;
+                        std::cout << ConsolePresenter::safe() << "  [+] Handshake ACK confirmed from Pi! Starting packet stream...\n" << ConsolePresenter::reset();
+                        break;
+                    }
+                }
+                std::cout << ConsolePresenter::warn() << "  [!] Handshake Attempt " << attempt << "/20 timeout. Retrying...\r" << ConsolePresenter::reset() << std::flush;
+            }
+
+            if (!ack_received) {
+                std::cerr << "\n" << ConsolePresenter::crit() << "[-] [UDP CONNECTIVITY ERROR] Unable to reach Pi at " << dest_ip << ":" << port << "!\n"
+                          << "[-] Please check: 1) Is receiver running on Pi? 2) Windows Firewall blocking UDP port " << port << "? 3) Ping " << dest_ip << " from WSL.\n"
+                          << ConsolePresenter::reset();
+                close(sockfd);
+                return 1;
+            }
 
             auto start_time = std::chrono::high_resolution_clock::now();
             int malware_count = 0;
@@ -324,13 +358,25 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
             }
 
             std::cout << ConsolePresenter::safe() << "  [+] Streamed " << total_packets << " packets for Session (Mode=" << mode << ", Rate=" << rate << "%).\n" << ConsolePresenter::reset();
-            send_control(MAGIC_SESSION_END, mode, static_cast<float>(rate));
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            // Send Session End control
+            UDPControlHeader end_header = start_header;
+            end_header.magic = MAGIC_SESSION_END;
+            for (int retry = 0; retry < 3; ++retry) {
+                sendto(sockfd, &end_header, sizeof(end_header), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
     }
 
     // Batch completed
-    send_control(MAGIC_BATCH_END, 0, 0.0f);
+    UDPControlHeader batch_header{};
+    batch_header.magic = MAGIC_BATCH_END;
+    for (int retry = 0; retry < 3; ++retry) {
+        sendto(sockfd, &batch_header, sizeof(batch_header), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
     std::cout << "\n" << ConsolePresenter::green() << "[UDP SENDER COMPLETE] All batch sessions streamed successfully to " << dest_ip << ":" << port << "!\n" << ConsolePresenter::reset();
 
     close(sockfd);
