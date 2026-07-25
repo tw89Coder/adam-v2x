@@ -43,13 +43,16 @@ def main():
     parser.add_argument("-B", "--baseline", action="store_true", help="Baseline mode (Filter OFF)")
     parser.add_argument("-F", "--filter", action="store_true", help="Adaptive FSM Filter Mode")
     parser.add_argument("-S", "--static-100", action="store_true", help="Static 100% Full Inspection Mode")
+    parser.add_argument("-o", "--onnx", action="store_true", help="ONNX DRL Neural Model Inference Mode")
     parser.add_argument("--patched", action="store_true", help="Target kernel is patched")
 
     args = parser.parse_args()
 
-    # Determine filter mode
+    # Determine filter mode: 0=OFF, 1=ADAPTIVE FSM, 2=STATIC 100%, 3=ONNX DRL
     filter_mode = 0  # OFF
-    if args.static_100:
+    if args.onnx:
+        filter_mode = 3
+    elif args.static_100:
         filter_mode = 2
     elif args.filter:
         filter_mode = 1

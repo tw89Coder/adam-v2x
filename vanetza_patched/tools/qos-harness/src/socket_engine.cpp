@@ -108,7 +108,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 if (rate == 0.0) {
                     std::snprintf(out_filename, sizeof(out_filename), "%s/qos_baseline.csv", csv_target_dir.c_str());
                 } else if (filter_mode != 0) {
-                    if (filter_mode == 2) {
+                    if (filter_mode == 3) {
+                        std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_onnx.csv",
+                                      csv_target_dir.c_str(), rate, mode);
+                    } else if (filter_mode == 2) {
                         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_full100.csv",
                                       csv_target_dir.c_str(), rate, mode);
                     } else {
@@ -122,7 +125,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                 // Setup FSM Filter
                 AdaptiveFilterFSM filter_fsm;
-                if (filter_mode == 2) {
+                if (filter_mode == 3) {
+                    filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
+                } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 1.0);
                 } else if (filter_mode == 1) {
