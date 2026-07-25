@@ -464,12 +464,9 @@ setup_onnxruntime() {
                 echo -e "${COLOR_SUCCESS}[SUCCESS] Native x86_64 ONNX Runtime C++ library configured at ${target_dir}.${COLOR_RESET}"
                 return 0
             else
-                echo -e "${COLOR_WARNING}[WARNING] Existing ONNX Runtime architecture mismatched system architecture (${onnx_arch}). Purging stale library...${COLOR_RESET}"
-                rm -rf "$target_dir"
+                echo -e "${COLOR_WARNING}[WARNING] Existing ONNX Runtime architecture mismatched system architecture (${onnx_arch}). Updating library...${COLOR_RESET}"
+                rm -f "${target_dir}/lib/libonnxruntime.so"*
             fi
-        else
-            echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library already present at ${target_dir}.${COLOR_RESET}"
-            return 0
         fi
     fi
 
@@ -478,21 +475,30 @@ setup_onnxruntime() {
         mkdir -p "${target_dir}/include" "${target_dir}/lib"
         
         # Locate installed onnxruntime in venv
-        local venv_site="${SCRIPT_DIR}/tools/rl_bridge/venv/lib/python3.9/site-packages/onnxruntime"
-        if [ ! -d "$venv_site" ]; then
-            venv_site=$(find "${SCRIPT_DIR}/tools/rl_bridge/venv" -type d -name "onnxruntime" 2>/dev/null | head -n 1)
-        fi
+        local venv_site
+        venv_site=$(find "${SCRIPT_DIR}/tools/rl_bridge/venv" -type d -name "onnxruntime" 2>/dev/null | head -n 1)
         
         if [ -n "$venv_site" ] && [ -d "$venv_site/capi" ]; then
             local capi_so
             capi_so=$(find "$venv_site/capi" -name "*.so*" | head -n 1)
             if [ -f "$capi_so" ]; then
                 cp "$capi_so" "${target_dir}/lib/libonnxruntime.so"
-                # Copy include headers from repo or fallback header download
-                if [ -d "${SCRIPT_DIR}/third_party/onnxruntime_backup/include" ]; then
-                    cp -r "${SCRIPT_DIR}/third_party/onnxruntime_backup/include/"* "${target_dir}/include/"
+                # Ensure headers exist from x64 release download if missing
+                if [ ! -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
+                    echo -e "${COLOR_INFO}[*] Downloading C++ API headers for 32-bit ONNX Runtime...${COLOR_RESET}"
+                    local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
+                    if command -v wget >/dev/null 2>&1; then
+                        wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"
+                    elif command -v curl >/dev/null 2>&1; then
+                        curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"
+                    fi
+                    if [ -f "/tmp/onnx_hdr.tgz" ]; then
+                        tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"
+                        cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"
+                        rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3
+                    fi
                 fi
-                echo -e "${COLOR_SUCCESS}[SUCCESS] Extracted 32-bit ARM C++ ONNX Runtime library from venv to ${target_dir}.${COLOR_RESET}"
+                echo -e "${COLOR_SUCCESS}[SUCCESS] Configured 32-bit ARM C++ ONNX Runtime library and headers at ${target_dir}.${COLOR_RESET}"
                 return 0
             fi
         fi
