@@ -122,15 +122,17 @@ class QoSPlotter(BasePlotter):
 
         for mode in self.MODES:
             for rate in self.RATES:
-                suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
                 scenarios = [
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',   False),
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}{suffix}',      'Unpatched Filtered', True),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',         False),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_onnx.csv',     'ADAM Filtered (ONNX)',     True),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Adaptive Filtered (FSM)',   True),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_full100.csv',  'Static 100% Inspection',   True),
                 ]
                 if not self.use_onnx and not self.no_patched:
                     scenarios.extend([
-                        ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',     False),
-                        ('patched',   f'qos_attack_{rate}_mode{mode}{suffix}',      'Patched Filtered',   True),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',           False),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}_onnx.csv',     'Patched ADAM (ONNX)',      True),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Patched Filtered (FSM)',   True),
                     ])
                 for env, filename, label, is_filt in scenarios:
                     df = self._resolve_dataframe(env, filename)
