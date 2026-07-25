@@ -240,13 +240,38 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 // Export CSV Log
                 collector.exportToCSV(out_filename);
 
+                // Append session transport telemetry to summary CSV
+                std::string stats_summary_dir = LOCAL_REPO_ROOT_STR + "/outputs/stats";
+                mkdir(stats_summary_dir.c_str(), 0755);
+                std::string summary_csv_path = stats_summary_dir + "/udp_transport_summary.csv";
+
+                int total_sent = total_pkts;
+                int dropped_pkts = (total_sent > received_pkts) ? (total_sent - received_pkts) : 0;
+                double drop_rate_pct = (total_sent > 0) ? (static_cast<double>(dropped_pkts) / total_sent) * 100.0 : 0.0;
+                double fpr_pct = (false_positives + true_negatives > 0) ? (static_cast<double>(false_positives) / (false_positives + true_negatives)) * 100.0 : 0.0;
+                double fnr_pct = (false_negatives + true_positives > 0) ? (static_cast<double>(false_negatives) / (false_negatives + true_positives)) * 100.0 : 0.0;
+
+                bool exists = (access(summary_csv_path.c_str(), F_OK) == 0);
+                std::ofstream sum_file(summary_csv_path, std::ios::out | std::ios::app);
+                if (sum_file.is_open()) {
+                    if (!exists) {
+                        sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,tp,tn,fp,fn,fpr_pct,fnr_pct,out_filename\n";
+                    }
+                    sum_file << mode << "," << rate << "," << filter_mode << ","
+                             << total_sent << "," << received_pkts << "," << dropped_pkts << ","
+                             << drop_rate_pct << "," << true_positives << "," << true_negatives << ","
+                             << false_positives << "," << false_negatives << ","
+                             << fpr_pct << "," << fnr_pct << "," << out_filename << "\n";
+                    sum_file.close();
+                }
+
                 // Print industrial security report if filter was active
                 if (filter_mode != 0) {
                     ConsolePresenter::printSecurityReport(received_pkts, malware_count, true_positives, true_negatives, false_positives, false_negatives);
                 }
 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
-                          << " | Received: " << received_pkts << " frames" << ConsolePresenter::reset() << "\n";
+                          << " | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
             }
         }
