@@ -443,13 +443,35 @@ compile_library() {
 
 setup_onnxruntime() {
     local target_dir="${SCRIPT_DIR}/third_party/onnxruntime"
-    if [ -d "$target_dir" ]; then
-        echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library already configured at ${target_dir}.${COLOR_RESET}"
-        return 0
-    fi
-
     local dpkg_arch
     dpkg_arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+
+    local onnx_arch="x64"
+    if [ "$dpkg_arch" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+        onnx_arch="aarch64"
+    fi
+
+    # Check if target_dir exists and holds compatible binaries
+    if [ -d "$target_dir/lib" ]; then
+        local lib_file="${target_dir}/lib/libonnxruntime.so"
+        if [ -f "$lib_file" ] && command -v file >/dev/null 2>&1; then
+            local file_info
+            file_info=$(file "$lib_file")
+            if [[ "$onnx_arch" == "aarch64" && "$file_info" == *"ARM aarch64"* ]]; then
+                echo -e "${COLOR_SUCCESS}[SUCCESS] Native ARM64 ONNX Runtime C++ library configured at ${target_dir}.${COLOR_RESET}"
+                return 0
+            elif [[ "$onnx_arch" == "x64" && "$file_info" == *"x86-64"* ]]; then
+                echo -e "${COLOR_SUCCESS}[SUCCESS] Native x86_64 ONNX Runtime C++ library configured at ${target_dir}.${COLOR_RESET}"
+                return 0
+            else
+                echo -e "${COLOR_WARNING}[WARNING] Existing ONNX Runtime architecture mismatched system architecture (${onnx_arch}). Purging stale library...${COLOR_RESET}"
+                rm -rf "$target_dir"
+            fi
+        else
+            echo -e "${COLOR_SUCCESS}[SUCCESS] ONNX Runtime C++ library already present at ${target_dir}.${COLOR_RESET}"
+            return 0
+        fi
+    fi
 
     if [ "$dpkg_arch" = "armhf" ]; then
         echo -e "${COLOR_WARNING}[WARNING] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
@@ -457,11 +479,6 @@ setup_onnxruntime() {
         echo -e "${COLOR_WARNING}[WARNING] Creating empty stub directory ${target_dir}. Python ONNX Runtime will be used for execution.${COLOR_RESET}"
         mkdir -p "$target_dir"
         return 0
-    fi
-
-    local onnx_arch="x64"
-    if [ "$dpkg_arch" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
-        onnx_arch="aarch64"
     fi
 
     echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries (${onnx_arch})...${COLOR_RESET}"
