@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -252,13 +253,17 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 
     sockaddr_in dest_addr{};
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-    if (inet_pton(AF_INET, dest_ip.c_str(), &dest_addr.sin_addr) <= 0) {
-        std::cerr << ConsolePresenter::crit() << "[UDP SENDER ERROR] Invalid destination IP: " << dest_ip << "\n" << ConsolePresenter::reset();
+    struct addrinfo hints{}, *res = nullptr;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    if (getaddrinfo(dest_ip.c_str(), std::to_string(port).c_str(), &hints, &res) != 0 || !res) {
+        std::cerr << ConsolePresenter::crit() << "[UDP SENDER ERROR] Unable to resolve destination host/IP: " << dest_ip << "\n" << ConsolePresenter::reset();
         close(sockfd);
         return 1;
     }
+    std::memcpy(&dest_addr, res->ai_addr, res->ai_addrlen);
+    freeaddrinfo(res);
 
     // Load payload templates
     auto normals = qos_harness::FileManager::loadPacketsFromFolder(LOCAL_NORMAL_FOLDER);
