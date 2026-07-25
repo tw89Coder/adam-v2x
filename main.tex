@@ -15,7 +15,7 @@
 \usepackage{stfloats}
 \usepackage{placeins}
 \usepackage{url}
-\usepackage{subcaption}
+\usepackage[caption=false,font=footnotesize]{subfig}
 \usetikzlibrary{automata, positioning, arrows.meta, fit, calc, backgrounds}
 
 % Seaborn Colors for Architecture Diagram
@@ -81,7 +81,7 @@ To isolate the impact of algorithmic-complexity workloads from volumetric networ
 \subsection{Limitations of Existing Edge Admission}
 Conventional mitigation strategies rely on Deep Packet Inspection (DPI) or static compiler patching \cite{Zhang_Edge_2018}. However, DPI involves heavy signature matching that inflates the baseline inspection cost ($C_{inspection}$). Moreover, managing bespoke inline DPI rules for diverse edge communication protocols is computationally prohibitive for a unified edge ingress layer \cite{SmartNIC_2019, Sadiq_DataPlane_2023}. 
 
-Our objective is to design a protocol-agnostic computational admission mechanism that operates in $\mathcal{O}(1)$ time relative to packet length, decoupling the admission decision from specific protocol state machines. We base this on the insight that malicious structural repetition sharply contrasts with the higher entropy of legitimate data.
+Our objective is to design a mechanism-level protocol-agnostic architecture (with protocol-aware parameters) that operates in $\mathcal{O}(1)$ time relative to packet length, decoupling the admission decision from specific protocol state machines. We base this on the insight that malicious structural repetition sharply contrasts with the higher entropy of legitimate data.
 
 While Machine Learning (ML) enables adaptive resource allocation \cite{SACD_2025}, inline ML classification introduces inference latency that fundamentally violates sub-10 ms V2X constraints. To preserve deterministic edge availability, our architecture restricts complex ML inference strictly to the asynchronous slow path. The $\mathcal{O}(1)$ data plane evaluates structural risk instantly, while the control plane updates admission thresholds at coarse-grained intervals, decoupling intelligence from the latency-critical ingress pipeline.
 
@@ -93,7 +93,7 @@ The theoretical foundation of our defense relies on the principle of structural 
 
 To formalize this physical boundary, we must establish the transport-layer conditions of vehicular networks. Crucially, IEEE 802.11 standards explicitly disallow MAC-layer fragmentation for broadcast and multicast frames. Since V2X safety messages (e.g., CAM and DENM) are transmitted exclusively as unacknowledged broadcast frames under the ITS-G5 protocol suite, payloads cannot be fragmented across multiple physical frames \cite{IEEE80211_2020}. This structural transport guarantee, rather than a mere simplifying approximation, allows us to define the following system assumptions:
 \begin{itemize}
-    \item \textbf{Assumption 1 (Finite Packet Size / MTU Limit):} The communication link has a strictly bounded Maximum Transmission Unit ($M$), and all parsed payloads must fit within a single physical frame.
+    \item \textbf{Assumption 1 (Single-Frame Limit):} The link MTU ($M$) strictly bounds payloads to a single physical frame. Extending this to reassembled multi-frame streams fundamentally violates $\mathcal{O}(1)$ constraints.
     \item \textbf{Assumption 2 (Online Processing):} The edge node processes incoming packet streams on-the-fly, disallowing stateful, multi-pass deep packet inspection due to microsecond-level latency constraints.
     \item \textbf{Assumption 3 (Legacy-Compatibility Recursive Parsing):} The vulnerability exists within a retained legacy-compatibility parsing path in the decoder. While the current protocol schema is flattened and depth-bounded, backward compatibility with pre-flattened certificate chain grammars requires unbounded recursive-descent TLV traversal. The attack surface persists strictly due to this legacy code path, not the active deployed schema.
 \end{itemize}
@@ -124,7 +124,7 @@ Theorem 1 establishes that recursive amplification inevitably manifests as local
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.75\columnwidth]{pareto_frontier.pdf}
-\caption{Pareto frontier between entropy padding and the maximum achievable recursive depth under MTU constraints. Increasing entropy padding to evade detection necessarily reduces the achievable recursion depth, revealing a fundamental entropy--depth tradeoff.}
+\caption{Pareto frontier between entropy padding and the maximum achievable recursive depth under MTU constraints. Increasing entropy padding to evade detection necessarily reduces the achievable recursion depth. The operating point ($w=64$) illustrates how our chosen window size bounds the maximum theoretical depth under this MTU constraint.}
 \label{fig:pareto_curve}
 \end{figure}
 
@@ -245,7 +245,7 @@ where $c_j$ is the frequency of byte value $j$ in the window.
 
 For legitimate high-entropy payloads, $c_j$ is highly dispersed, resulting in a low $SQ$. Conversely, recursion bombs inflate the $F_2$ moment due to concentrated structural markers. 
 
-To prevent false positives, the $SQ$ calculation explicitly masks the \texttt{0x00} state. In specific schema-driven serializations like ASN.1 OER, unpopulated optional fields generate dense \texttt{0x00} sequences. This pruning eliminates protocol-specific benign noise without degrading the theoretical bound, because forcing an uncontrolled recursion fundamentally requires active (non-zero) structural markers to traverse the schema tree.
+While the $F_2$ mechanism is protocol-agnostic, operational parameters ($\theta$) are empirically calibrated from benign baselines. To prevent false positives, we mask \texttt{0x00} sequences caused by ASN.1 OER optional fields. Porting this downstream-bound filter to zero-padding-free schemas (e.g., DER) requires re-profiling $\theta$ without this mask.
 
 \begin{algorithm}[!ht]
 \caption{Bounded Streaming Structural Risk Filter}
@@ -406,21 +406,15 @@ For periodic flapping in Mode 2 (Fig. \ref{fig:recovery_timelines}b), the native
 \begin{figure}[htbp]
     \centering
     
-    \begin{subfigure}[b]{0.75\columnwidth}
-        \centering
-        \includegraphics[width=\textwidth]{pulse_recovery_timeline_onnx.png}
-        \caption{Single Pulse Attack}
-        \label{fig:pulse_timeline}
-    \end{subfigure}
+    \subfloat[Single Pulse Attack\label{fig:pulse_timeline}]{%
+        \includegraphics[width=0.75\columnwidth]{pulse_recovery_timeline_onnx.png}%
+    }
     
     \vspace{0.2cm}
     
-    \begin{subfigure}[b]{0.75\columnwidth}
-        \centering
-        \includegraphics[width=\textwidth]{periodic_recovery_timeline_onnx.png}
-        \caption{Periodic Attacks}
-        \label{fig:periodic_timeline}
-    \end{subfigure}
+    \subfloat[Periodic Attacks\label{fig:periodic_timeline}]{%
+        \includegraphics[width=0.75\columnwidth]{periodic_recovery_timeline_onnx.png}%
+    }
     
     \caption{System recovery timelines illustrating FSM state transitions, budget replenishment, and quarantine under (a) single pulse and (b) periodic structural attacks.}
     \label{fig:recovery_timelines}

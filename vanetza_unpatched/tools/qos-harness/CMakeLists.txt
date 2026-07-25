@@ -11,6 +11,7 @@ add_executable(qos-harness
     src/router_fuzzing_context.cpp
     src/dataset_builder.cpp
     src/queue_simulator.cpp
+    src/socket_engine.cpp
 )
 
 target_include_directories(qos-harness PRIVATE

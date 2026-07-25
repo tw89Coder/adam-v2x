@@ -18,6 +18,7 @@
 #include "qos_harness/traffic_generator.hpp"
 #include "qos_harness/dataset_builder.hpp"
 #include "qos_harness/queue_simulator.hpp"
+#include "qos_harness/socket_engine.hpp"
 
 // Repository filesystem paths resolving normal packets and raw attack POC binaries
 const std::string REPO_ROOT_STR = REPO_ROOT;
@@ -107,13 +108,56 @@ int main(int argc, char* argv[]) {
     double custom_penalty = 50.0;
     int custom_sq_thresh = 600;
 
+    bool is_udp_receiver = false;
+    bool is_udp_sender = false;
+    int udp_port = 9999;
+    std::string dest_ip = "127.0.0.1";
+    std::vector<int> target_modes = {0};
+    std::vector<double> target_rates = {5.0};
+
     // Parse runtime arguments and configure evaluation profiles
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h") {
             printHelp(argv[0]);
             return 0;
+        } else if (arg == "--receive-udp" || arg == "--udp-receive" || arg == "--listen-udp") {
+            is_udp_receiver = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                udp_port = std::atoi(argv[++i]);
+            }
+        } else if (arg == "--send-udp" || arg == "--udp-send") {
+            is_udp_sender = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                dest_ip = argv[++i];
+            }
+        } else if (arg == "--dest-ip" && i + 1 < argc) {
+            dest_ip = argv[++i];
+        } else if (arg == "--port" && i + 1 < argc) {
+            udp_port = std::atoi(argv[++i]);
+        } else if (arg == "--modes" && i + 1 < argc) {
+            std::string m_str = argv[++i];
+            target_modes.clear();
+            std::size_t pos = 0;
+            while ((pos = m_str.find_first_not_of(" ,", pos)) != std::string::npos) {
+                std::size_t end = m_str.find_first_of(" ,", pos);
+                if (end == std::string::npos) end = m_str.length();
+                target_modes.push_back(std::atoi(m_str.substr(pos, end - pos).c_str()));
+                pos = end;
+            }
+        } else if (arg == "--rates" && i + 1 < argc) {
+            std::string r_str = argv[++i];
+            target_rates.clear();
+            std::size_t pos = 0;
+            while ((pos = r_str.find_first_not_of(" ,", pos)) != std::string::npos) {
+                std::size_t end = r_str.find_first_of(" ,", pos);
+                if (end == std::string::npos) end = r_str.length();
+                target_rates.push_back(std::atof(r_str.substr(pos, end - pos).c_str()));
+                pos = end;
+            }
         } else if (arg == "--build-dataset") {
+            build_dataset = true;
+        } else if (arg == "--profile-amp") {
             build_dataset = true;
         } else if (arg == "--profile-amp") {
             profile_amp = true;
@@ -193,7 +237,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Diagnostics / Profiling modes exit early after computing local metrics
+    // Diagnostics / Profiling / UDP modes exit early
+    if (is_udp_receiver) {
+        std::string prog_path = argv[0];
+        std::string build_type = (prog_path.find("vanetza_patched") != std::string::npos) ? "patched" : "unpatched";
+        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, true);
+    }
+    if (is_udp_sender) {
+        int f_mode = 0; // 0=OFF
+        if (static_filter_mode) f_mode = 2; // STATIC 100%
+        else if (enable_filter) f_mode = 1; // ADAPTIVE FSM
+        std::string prog_path = argv[0];
+        bool is_p = (prog_path.find("vanetza_patched") != std::string::npos);
+        return qos_harness::UDPSocketEngine::run_sender(dest_ip, udp_port, target_modes, target_rates, total_packets, lambda_pps, f_mode, is_p);
+    }
+
     if (profile_amp) {
         qos_harness::AmplificationProfiler::runAmplificationProfiling(poc_packet);
         return 0;

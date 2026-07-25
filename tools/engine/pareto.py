@@ -52,7 +52,7 @@ class ParetoPlotter(BasePlotter):
 
         # Annotate the operating point with a clean arrow and label (coordinates adjusted for linear scale)
         ax.annotate(
-            "Detector\nOperating Point\n($w=64$)",
+            "Selected Window\nSize\n($w=64$)",
             xy=(op_x, op_y),
             xytext=(op_x + 25, 140),
             arrowprops=dict(

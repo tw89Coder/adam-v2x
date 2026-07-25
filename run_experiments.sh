@@ -278,6 +278,14 @@ while [[ $# -gt 0 ]]; do
             RUN_STATIC_100=true
             shift
             ;;
+        -P|--port)
+            UDP_PORT="$2"
+            shift 2
+            ;;
+        -ip|--dest-ip|--ip)
+            DEST_IP="$2"
+            shift 2
+            ;;
         #===================================Chi-AN: new command for training data flow =======================================
         --zip|--paired)
             ZIP_MODE=true
@@ -605,6 +613,57 @@ case "$ACTION" in
             execute_matrix_sweep "$TARGET"
         fi
         echo -e "${C_SUCCESS}[SUCCESS] Dynamic matrix sweep executed successfully. Data converged.${C_RESET}"
+        ;;
+
+    receive|--receive|listen|--listen)
+        execute_receive() {
+            local tgt=$1
+            local bin="${ROOT_DIR}/vanetza_${tgt}/build/bin/qos-harness"
+            if [ ! -f "$bin" ]; then
+                echo -e "${C_ERROR}[FATAL] Executable kernel missing at ${bin}.${C_RESET}"
+                echo -e "${C_ERROR}[FATAL] Run './manage_build.sh ${tgt}' first to compile binary map.${C_RESET}"
+                exit 1
+            fi
+            echo -e "${C_INFO}[RECEIVER] Starting UDP Daemon on target [${tgt}] on port ${UDP_PORT:-9999}...${C_RESET}"
+            execute_cmd "$bin" "--receive-udp" "${UDP_PORT:-9999}"
+        }
+        if [ "$TARGET" == "all" ]; then
+            execute_receive "unpatched"
+            execute_receive "patched"
+        else
+            execute_receive "$TARGET"
+        fi
+        ;;
+
+    send|--send|transmit|--transmit)
+        execute_send() {
+            local tgt=$1
+            local bin="${ROOT_DIR}/vanetza_${tgt}/build/bin/qos-harness"
+            if [ ! -f "$bin" ]; then
+                echo -e "${C_ERROR}[FATAL] Executable kernel missing at ${bin}.${C_RESET}"
+                echo -e "${C_ERROR}[FATAL] Run './manage_build.sh ${tgt}' first to compile binary map.${C_RESET}"
+                exit 1
+            fi
+            local modes_str="${TARGET_MODES[*]}"
+            local rates_str="${POLLUTION_RATES[*]}"
+            local send_args=("--send-udp" "${DEST_IP:-127.0.0.1}" "--port" "${UDP_PORT:-9999}" "--modes" "$modes_str" "--rates" "$rates_str" "-t" "$TOTAL_PACKETS")
+            if [ -n "$LAMBDA_PPS" ]; then
+                send_args+=("--lambda" "$LAMBDA_PPS")
+            fi
+            if [ "$RUN_STATIC_100" = true ]; then
+                send_args+=("--static-filter" "1.0")
+            elif [ "$RUN_FILTER_ON" = true ]; then
+                send_args+=("-f")
+            fi
+            echo -e "${C_INFO}[SENDER] Streaming UDP batch sessions to ${DEST_IP:-127.0.0.1}:${UDP_PORT:-9999} for target [${tgt}]...${C_RESET}"
+            execute_cmd "$bin" "${send_args[@]}"
+        }
+        if [ "$TARGET" == "all" ]; then
+            execute_send "unpatched"
+            execute_send "patched"
+        else
+            execute_send "$TARGET"
+        fi
         ;;
 
     --train-rl)
