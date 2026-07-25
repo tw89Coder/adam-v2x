@@ -74,7 +74,7 @@ void ConsolePresenter::printHorizontalSeparator() {
 void ConsolePresenter::printUDPReceiverDaemonBanner(int port, const std::string& build_type) {
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s         UDP SOCKET HARDWARE TESTBED DAEMON ACTIVE          %s│\n"
+        "│%s          UDP SOCKET HARDWARE TESTBED DAEMON ACTIVE           %s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
     std::printf("  ├── Listening Address  : %s0.0.0.0:%d (UDP)%s\n", info().c_str(), port, reset().c_str());
@@ -99,7 +99,7 @@ void ConsolePresenter::printUDPSessionHeader(int mode, double rate, int total_pk
 void ConsolePresenter::printUDPSenderBanner(const std::string& dest_ip, int port, size_t modes_cnt, size_t rates_cnt) {
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s          UDP TRAFFIC GENERATOR TRANSMITTER ACTIVE           %s│\n"
+        "│%s           UDP TRAFFIC GENERATOR TRANSMITTER ACTIVE           %s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n",
         frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
     std::printf("  ├── Target Receiver    : %s%s:%d%s\n", info().c_str(), dest_ip.c_str(), port, reset().c_str());
