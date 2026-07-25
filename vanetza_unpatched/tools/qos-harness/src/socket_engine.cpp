@@ -170,8 +170,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         }
                     }
 
-                    // Process Data Packet
-                    vanetza::ByteBuffer packet_data(buffer.begin(), buffer.begin() + pkt_len);
+                    // Process Data Packet with 4-byte Ground Truth header
+                    if (pkt_len < 4) continue;
+
+                    uint32_t is_malware_flag = 0;
+                    std::memcpy(&is_malware_flag, buffer.data(), sizeof(uint32_t));
+                    bool is_malware = (is_malware_flag == 1);
+
+                    vanetza::ByteBuffer packet_data(buffer.begin() + 4, buffer.begin() + pkt_len);
 
                     auto start_t = std::chrono::high_resolution_clock::now();
                     bool is_drop = false;
@@ -196,8 +202,6 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         total_latency_ns += accumulated_queue_ns;
                     }
 
-                    // Confusion matrix estimation heuristics
-                    bool is_malware = (pkt_len > 1200); // Simple payload heuristic for real-time progress
                     if (is_malware) malware_count++;
 
                     if (is_drop) {

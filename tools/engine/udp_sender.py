@@ -148,7 +148,9 @@ def main():
                 else:
                     pkt_data = normals[i % len(normals)]
 
-                sock.sendto(pkt_data, dest_tuple)
+                is_malware_flag = 1 if is_malware else 0
+                wire_pkt = struct.pack("<I", is_malware_flag) + pkt_data
+                sock.sendto(wire_pkt, dest_tuple)
 
                 # Real-time progress update
                 if (i + 1) % print_interval == 0 or i == args.packets - 1:
