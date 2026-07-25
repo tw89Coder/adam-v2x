@@ -308,3 +308,32 @@ During deployment, use the in-process ONNX inference engine to evaluate policy d
 # Run dynamic in-process ONNX inference simulation sweep (custom example)
 bash run_experiments.sh unpatched --simulate-all -F -r "10.0 5.0 1.0" -o v2x_agent_dqn.onnx
 ```
+
+---
+
+## 6. Hardware Testbed & Cross-Platform UDP Traffic Generator
+
+The framework supports real-world hardware testbed evaluation across physical network links (e.g., Windows Laptop connected via RJ45 Ethernet to Raspberry Pi / ARM Edge Node).
+
+### 6.1 Edge Node Receiver Daemon (Raspberry Pi / ARM Target)
+
+On the Raspberry Pi target node, pull the repository and start the receiver daemon:
+
+```bash
+# Compile and start the UDP receiver daemon on port 9999
+./run_experiments.sh unpatched receive -P 9999
+```
+
+### 6.2 Windows Host Native Traffic Transmitter (Windows PowerShell)
+
+To avoid WSL virtual network NAT overhead and directly stream UDP frames across physical RJ45 Ethernet links, run the cross-platform native Python transmitter directly in Windows PowerShell:
+
+```powershell
+# Execute from Windows PowerShell to stream batch matrix sessions to Raspberry Pi
+python tools/engine/udp_sender.py --dest-ip 192.168.137.120 -P 9999 -m "0" -r "0.0" -N 1000000 -l 3000 -B
+```
+
+For UNC network share paths, run via:
+```powershell
+python \\wsl.localhost\V2X\home\yhl\term-project\CSE625_QoS\tools\engine\udp_sender.py --dest-ip 192.168.137.120 -P 9999 -m "0" -r "0.0" -N 1000000 -l 3000 -B
+```
