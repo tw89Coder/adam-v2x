@@ -473,11 +473,30 @@ setup_onnxruntime() {
         fi
     fi
 
-    if [ "$dpkg_arch" = "armhf" ]; then
-        echo -e "${COLOR_WARNING}[WARNING] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
-        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime C++ releases do not provide prebuilt binaries for armhf.${COLOR_RESET}"
-        echo -e "${COLOR_WARNING}[WARNING] Creating empty stub directory ${target_dir}. Python ONNX Runtime will be used for execution.${COLOR_RESET}"
-        mkdir -p "$target_dir"
+    if [ "$dpkg_arch" = "armhf" ] || [ "$(uname -m)" = "armv7l" ]; then
+        echo -e "${COLOR_INFO}[*] Detected 32-bit ARM (armhf) architecture. Extracting native C++ ONNX Runtime from Python venv...${COLOR_RESET}"
+        mkdir -p "${target_dir}/include" "${target_dir}/lib"
+        
+        # Locate installed onnxruntime in venv
+        local venv_site="${SCRIPT_DIR}/tools/rl_bridge/venv/lib/python3.9/site-packages/onnxruntime"
+        if [ ! -d "$venv_site" ]; then
+            venv_site=$(find "${SCRIPT_DIR}/tools/rl_bridge/venv" -type d -name "onnxruntime" 2>/dev/null | head -n 1)
+        fi
+        
+        if [ -n "$venv_site" ] && [ -d "$venv_site/capi" ]; then
+            local capi_so
+            capi_so=$(find "$venv_site/capi" -name "*.so*" | head -n 1)
+            if [ -f "$capi_so" ]; then
+                cp "$capi_so" "${target_dir}/lib/libonnxruntime.so"
+                # Copy include headers from repo or fallback header download
+                if [ -d "${SCRIPT_DIR}/third_party/onnxruntime_backup/include" ]; then
+                    cp -r "${SCRIPT_DIR}/third_party/onnxruntime_backup/include/"* "${target_dir}/include/"
+                fi
+                echo -e "${COLOR_SUCCESS}[SUCCESS] Extracted 32-bit ARM C++ ONNX Runtime library from venv to ${target_dir}.${COLOR_RESET}"
+                return 0
+            fi
+        fi
+        echo -e "${COLOR_WARNING}[WARNING] Could not locate 32-bit ONNX Runtime in venv yet. Run setup_python_venv first.${COLOR_RESET}"
         return 0
     fi
 
@@ -508,11 +527,11 @@ setup_onnxruntime() {
 # Run Requested Actions
 # ------------------------------------------------------------------------------
 
-# Download and extract ONNX Runtime dependency
-setup_onnxruntime
-
 # Configure Python virtual environment and install requirements
 setup_python_venv
+
+# Download and extract ONNX Runtime dependency
+setup_onnxruntime
 
 if [ "$MODE" == "patch" ]; then
     echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
