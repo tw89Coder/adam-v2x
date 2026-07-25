@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 
 #include <chrono>
 #include <thread>
@@ -245,9 +246,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 mkdir(stats_summary_dir.c_str(), 0755);
                 std::string summary_csv_path = stats_summary_dir + "/udp_transport_summary.csv";
 
+                struct rusage usage;
+                getrusage(RUSAGE_SELF, &usage);
+                long peak_rss_kb = usage.ru_maxrss;
+
                 int total_sent = total_pkts;
                 int dropped_pkts = (total_sent > received_pkts) ? (total_sent - received_pkts) : 0;
                 double drop_rate_pct = (total_sent > 0) ? (static_cast<double>(dropped_pkts) / total_sent) * 100.0 : 0.0;
+                double insp_rate_pct = (received_pkts > 0) ? (static_cast<double>(total_inspected) / received_pkts) * 100.0 : 0.0;
                 double fpr_pct = (false_positives + true_negatives > 0) ? (static_cast<double>(false_positives) / (false_positives + true_negatives)) * 100.0 : 0.0;
                 double fnr_pct = (false_negatives + true_positives > 0) ? (static_cast<double>(false_negatives) / (false_negatives + true_positives)) * 100.0 : 0.0;
 
@@ -255,13 +261,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 std::ofstream sum_file(summary_csv_path, std::ios::out | std::ios::app);
                 if (sum_file.is_open()) {
                     if (!exists) {
-                        sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,tp,tn,fp,fn,fpr_pct,fnr_pct,out_filename\n";
+                        sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,total_inspected,inspection_rate_pct,malware_count,tp,tn,fp,fn,fpr_pct,fnr_pct,peak_rss_kb,out_filename\n";
                     }
                     sum_file << mode << "," << rate << "," << filter_mode << ","
                              << total_sent << "," << received_pkts << "," << dropped_pkts << ","
-                             << drop_rate_pct << "," << true_positives << "," << true_negatives << ","
+                             << drop_rate_pct << "," << total_inspected << "," << insp_rate_pct << ","
+                             << malware_count << "," << true_positives << "," << true_negatives << ","
                              << false_positives << "," << false_negatives << ","
-                             << fpr_pct << "," << fnr_pct << "," << out_filename << "\n";
+                             << fpr_pct << "," << fnr_pct << "," << peak_rss_kb << "," << out_filename << "\n";
                     sum_file.close();
                 }
 
