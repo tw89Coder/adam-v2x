@@ -217,10 +217,15 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
             }
             config_file.close();
         }
-        std::cout << "\n[INIT] C++ ONNX Bridge initialized dynamically:\n"
+#ifdef USE_ONNX
+        std::cout << "\n[INIT] Native C++ ONNX Runtime Engine ACTIVE (USE_ONNX=1):\n"
                   << "  └── Algorithm detected: " << algorithm_ << "\n"
                   << "  └── Action space map size: " << dqn_action_map_.size() << "\n"
                   << "  └── Model path verified: " << onnx_model_path_ << "\n\n";
+#else
+        std::cout << "\n[INIT] Fallback Non-ONNX Mode (USE_ONNX=0 - Missing ARM C++ Library):\n"
+                  << "  └── Model path requested: " << onnx_model_path_ << "\n\n";
+#endif
 
         stop_onnx_thread_ = false;
         new_telemetry_available_ = false;
