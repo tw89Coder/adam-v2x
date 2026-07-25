@@ -130,7 +130,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
-                    filter_fsm.update_policy_params(0.05, 50.0, 600, 0.50);
+                    filter_fsm.update_policy_params(0.05, 50.0, 600, 0.10);
                     std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
                     rl_bridge.initialize_onnx(true, model_to_use);
                     rl_bridge.initialize(false, rate, mode, false);
