@@ -30,6 +30,11 @@ public:
     static void printSectionHeader(const std::string& title);
     static void printHorizontalSeparator();
 
+    // Dedicated UDP Testbed Hardware Presentation Interface
+    static void printUDPReceiverDaemonBanner(int port, const std::string& build_type);
+    static void printUDPSessionHeader(int mode, double rate, int total_pkts, double lambda_pps, uint32_t filter_mode);
+    static void printUDPSenderBanner(const std::string& dest_ip, int port, size_t modes_cnt, size_t rates_cnt);
+
     // Real-time loop progression telemetry trackers
     static void printBaselineProgress(const std::string& label, int run, int total, int ok, int crash, long long last);
     static void printVariantProgress(const std::string& label, int run, int total, int ok, int crash, long long last);

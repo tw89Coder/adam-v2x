@@ -20,6 +20,7 @@
 #include "qos_harness/metrics_collector.hpp"
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/file_manager.hpp"
+#include "qos_harness/console_presenter.hpp"
 
 #ifndef REPO_ROOT
 #define REPO_ROOT "."
@@ -34,7 +35,7 @@ namespace qos_harness {
 int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool no_taskset) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
-        std::cerr << "[UDP RECEIVER ERROR] Failed to create socket.\n";
+        std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to create socket.\n" << ConsolePresenter::reset();
         return 1;
     }
 
@@ -48,15 +49,13 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
     server_addr.sin_port = htons(port);
 
     if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        std::cerr << "[UDP RECEIVER ERROR] Failed to bind to port " << port << ".\n";
+        std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to bind to port " << port << ".\n" << ConsolePresenter::reset();
         close(sockfd);
         return 1;
     }
 
-    std::cout << "======================================================================\n";
-    std::cout << "[UDP RECEIVER DAEMON] Started on port " << port << " | Target Kernel: " << build_type << "\n";
-    std::cout << "[UDP RECEIVER DAEMON] Listening for incoming session handshakes from Laptop...\n";
-    std::cout << "======================================================================\n";
+    // Display standardized industrial banner
+    ConsolePresenter::printUDPReceiverDaemonBanner(port, build_type);
 
     std::vector<uint8_t> buffer(65536);
     sockaddr_in client_addr{};
@@ -74,7 +73,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
             std::memcpy(&header, buffer.data(), sizeof(UDPControlHeader));
 
             if (header.magic == MAGIC_BATCH_END) {
-                std::cout << "\n[UDP RECEIVER] Received BATCH_END control signal. Exiting receiver loop.\n";
+                std::cout << "\n" << ConsolePresenter::info() << "[UDP RECEIVER] Received BATCH_END control signal. Exiting receiver daemon loop.\n" << ConsolePresenter::reset();
                 break;
             }
 
@@ -85,12 +84,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double lambda_pps = header.lambda_pps;
                 uint32_t filter_mode = header.filter_mode; // 0=OFF, 1=ADAPTIVE, 2=STATIC100
 
-                std::cout << "\n[UDP SESSION INIT] Mode: " << mode
-                          << " | Rate: " << rate << "%"
-                          << " | Total: " << total_pkts
-                          << " | Lambda: " << lambda_pps << " pps"
-                          << " | Filter: " << (filter_mode == 0 ? "OFF" : (filter_mode == 2 ? "STATIC 100%" : "ADAPTIVE FSM"))
-                          << "\n";
+                // Render session init header using ConsolePresenter
+                ConsolePresenter::printUDPSessionHeader(mode, rate, total_pkts, lambda_pps, filter_mode);
 
                 // Resolve output CSV filename
                 std::string base_out_dir = LOCAL_REPO_ROOT_STR + "/outputs";
@@ -133,10 +128,16 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 context.initialize();
 
                 int received_pkts = 0;
+                int malware_count = 0;
+                int total_inspected = 0;
+                int true_positives = 0, false_positives = 0, true_negatives = 0, false_negatives = 0;
+
                 bool session_running = true;
 
                 long long inter_arrival_ns = (lambda_pps > 0) ? static_cast<long long>(1e9 / lambda_pps) : 0;
                 long long accumulated_queue_ns = 0;
+
+                int print_interval = std::max(1, total_pkts / 100);
 
                 while (session_running) {
                     ssize_t pkt_len = recvfrom(sockfd, buffer.data(), buffer.size(), 0, (struct sockaddr*)&client_addr, &client_len);
@@ -163,6 +164,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     bool is_drop = false;
                     if (filter_mode != 0) {
                         is_drop = filter_fsm.process_packet(packet_data);
+                        if (filter_fsm.was_inspected()) {
+                            total_inspected++;
+                        }
                     }
 
                     if (!is_drop) {
@@ -179,20 +183,42 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         total_latency_ns += accumulated_queue_ns;
                     }
 
+                    // Confusion matrix estimation heuristics
+                    bool is_malware = (pkt_len > 1200); // Simple payload heuristic for real-time progress
+                    if (is_malware) malware_count++;
+
+                    if (is_drop) {
+                        if (is_malware) true_positives++; else false_positives++;
+                    } else {
+                        if (is_malware) false_negatives++; else true_negatives++;
+                    }
+
                     // Record metric
-                    collector.recordPacket(received_pkts, false, is_drop, total_latency_ns);
+                    collector.recordPacket(received_pkts, is_malware, is_drop, total_latency_ns);
                     received_pkts++;
 
-                    if (received_pkts % (total_pkts / 10) == 0 || received_pkts == total_pkts) {
-                        std::cout << "  [*] UDP Streaming Progress: " << received_pkts << " / " << total_pkts
-                                  << " (" << (received_pkts * 100 / total_pkts) << "%)\n";
+                    // Single-line real-time simulation progress telemetry
+                    if (received_pkts % print_interval == 0 || received_pkts == total_pkts) {
+                        double actual_avg_rate = (received_pkts > 0) ? (static_cast<double>(total_inspected) / received_pkts) * 100.0 : 0.0;
+                        double current_target_rate = (filter_mode != 0) ? filter_fsm.get_sampling_rate() * 100.0 : 0.0;
+                        ConsolePresenter::printSimulationProgress(
+                            received_pkts, total_pkts, malware_count,
+                            filter_mode != 0, actual_avg_rate, current_target_rate
+                        );
                     }
                 }
 
                 // Export CSV Log
                 collector.exportToCSV(out_filename);
-                std::cout << "[+] [SESSION SAVED] Target: " << out_filename << " | Total Received: " << received_pkts << "\n";
-                std::cout << "----------------------------------------------------------------------\n";
+
+                // Print industrial security report if filter was active
+                if (filter_mode != 0) {
+                    ConsolePresenter::printSecurityReport(received_pkts, malware_count, true_positives, true_negatives, false_positives, false_negatives);
+                }
+
+                std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
+                          << " | Received: " << received_pkts << " frames" << ConsolePresenter::reset() << "\n";
+                ConsolePresenter::printHorizontalSeparator();
             }
         }
     }
@@ -208,7 +234,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
                                 int filter_mode, bool is_patched) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
-        std::cerr << "[UDP SENDER ERROR] Failed to create socket.\n";
+        std::cerr << ConsolePresenter::crit() << "[UDP SENDER ERROR] Failed to create socket.\n" << ConsolePresenter::reset();
         return 1;
     }
 
@@ -216,7 +242,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(port);
     if (inet_pton(AF_INET, dest_ip.c_str(), &dest_addr.sin_addr) <= 0) {
-        std::cerr << "[UDP SENDER ERROR] Invalid destination IP: " << dest_ip << "\n";
+        std::cerr << ConsolePresenter::crit() << "[UDP SENDER ERROR] Invalid destination IP: " << dest_ip << "\n" << ConsolePresenter::reset();
         close(sockfd);
         return 1;
     }
@@ -226,15 +252,13 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
     auto attacks = qos_harness::FileManager::loadPacketsFromFolder(LOCAL_ATTACK_FOLDER);
 
     if (normals.empty() || attacks.empty()) {
-        std::cerr << "[UDP SENDER ERROR] Normal or Attack packet datasets missing in inputs/\n";
+        std::cerr << ConsolePresenter::crit() << "[UDP SENDER ERROR] Normal or Attack packet datasets missing in inputs/\n" << ConsolePresenter::reset();
         close(sockfd);
         return 1;
     }
 
-    std::cout << "======================================================================\n";
-    std::cout << "[UDP SENDER TRANSMITTER] Target Receiver: " << dest_ip << ":" << port << "\n";
-    std::cout << "[UDP SENDER TRANSMITTER] Batch Matrix Sweep: " << modes.size() << " modes x " << rates.size() << " rates\n";
-    std::cout << "======================================================================\n";
+    // Print Sender Industrial Banner
+    ConsolePresenter::printUDPSenderBanner(dest_ip, port, modes.size(), rates.size());
 
     auto send_control = [&](uint32_t magic, int mode, float rate) {
         UDPControlHeader header{};
@@ -253,14 +277,16 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
     };
 
     uint64_t interval_ns = (lambda_pps > 0) ? static_cast<uint64_t>(1e9 / lambda_pps) : 0;
+    int print_interval = std::max(1, total_packets / 100);
 
     for (int mode : modes) {
         for (double rate : rates) {
-            std::cout << "\n[UDP SCRIPT STREAMING] Launching Session: Mode=" << mode << " | Rate=" << rate << "% | Pacing=" << lambda_pps << " pps\n";
+            ConsolePresenter::printUDPSessionHeader(mode, rate, total_packets, lambda_pps, filter_mode);
             send_control(MAGIC_SESSION_START, mode, static_cast<float>(rate));
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
             auto start_time = std::chrono::high_resolution_clock::now();
+            int malware_count = 0;
 
             for (int i = 0; i < total_packets; ++i) {
                 // Determine attack or normal
@@ -280,8 +306,15 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
                     }
                 }
 
+                if (is_malware) malware_count++;
+
                 const auto& pkt = is_malware ? attacks[i % attacks.size()] : normals[i % normals.size()];
                 sendto(sockfd, pkt.data(), pkt.size(), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+
+                // Real-time sender progress update
+                if ((i + 1) % print_interval == 0 || i == total_packets - 1) {
+                    ConsolePresenter::printSimulationProgress(i + 1, total_packets, malware_count, false, 0.0, 0.0);
+                }
 
                 // High-precision pacing sleep
                 if (interval_ns > 0) {
@@ -290,7 +323,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
                 }
             }
 
-            std::cout << "  [+] Streamed " << total_packets << " packets for Session (Mode=" << mode << ", Rate=" << rate << "%).\n";
+            std::cout << ConsolePresenter::safe() << "  [+] Streamed " << total_packets << " packets for Session (Mode=" << mode << ", Rate=" << rate << "%).\n" << ConsolePresenter::reset();
             send_control(MAGIC_SESSION_END, mode, static_cast<float>(rate));
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
@@ -298,7 +331,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
 
     // Batch completed
     send_control(MAGIC_BATCH_END, 0, 0.0f);
-    std::cout << "\n[UDP SENDER COMPLETE] All batch sessions streamed successfully to " << dest_ip << ":" << port << "!\n";
+    std::cout << "\n" << ConsolePresenter::green() << "[UDP SENDER COMPLETE] All batch sessions streamed successfully to " << dest_ip << ":" << port << "!\n" << ConsolePresenter::reset();
 
     close(sockfd);
     return 0;

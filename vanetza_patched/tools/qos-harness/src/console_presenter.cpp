@@ -71,6 +71,42 @@ void ConsolePresenter::printHorizontalSeparator() {
                 reset().c_str());
 }
 
+void ConsolePresenter::printUDPReceiverDaemonBanner(int port, const std::string& build_type) {
+    std::printf(
+        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
+        "│%s         UDP SOCKET HARDWARE TESTBED DAEMON ACTIVE          %s│\n"
+        "└──────────────────────────────────────────────────────────────┘%s\n",
+        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+    std::printf("  ├── Listening Address  : %s0.0.0.0:%d (UDP)%s\n", info().c_str(), port, reset().c_str());
+    std::printf("  ├── Target Kernel      : %s%s%s\n", warn().c_str(), build_type.c_str(), reset().c_str());
+    std::printf("  └── Execution Status   : %sWAITING FOR STREAMING SESSIONS...%s\n", safe().c_str(), reset().c_str());
+    std::printf("  %s──────────────────────────────────────────────────────────────%s\n\n", frame().c_str(), reset().c_str());
+}
+
+void ConsolePresenter::printUDPSessionHeader(int mode, double rate, int total_pkts, double lambda_pps, uint32_t filter_mode) {
+    std::string f_str = (filter_mode == 0) ? "OFF (Baseline)" : (filter_mode == 2 ? "STATIC 100% FULL" : "ADAPTIVE FSM");
+    std::string f_col = (filter_mode == 0) ? crit() : (filter_mode == 2 ? warn() : safe());
+
+    std::printf("\n%s[UDP SESSION INIT]%s Mode: %s%d%s | Rate: %s%.1f%%%s | Packets: %s%d%s | Pacing: %s%.0f pps%s | Filter: %s%s%s\n",
+                label().c_str(), reset().c_str(),
+                info().c_str(), mode, reset().c_str(),
+                warn().c_str(), rate, reset().c_str(),
+                info().c_str(), total_pkts, reset().c_str(),
+                warn().c_str(), lambda_pps, reset().c_str(),
+                f_col.c_str(), f_str.c_str(), reset().c_str());
+}
+
+void ConsolePresenter::printUDPSenderBanner(const std::string& dest_ip, int port, size_t modes_cnt, size_t rates_cnt) {
+    std::printf(
+        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
+        "│%s       UDP TRAFFIC GENERATOR TRANSMITTER ACTIVE             %s│\n"
+        "└──────────────────────────────────────────────────────────────┘%s\n",
+        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+    std::printf("  ├── Target Receiver    : %s%s:%d%s\n", info().c_str(), dest_ip.c_str(), port, reset().c_str());
+    std::printf("  └── Matrix Sweep Scope : %s%zu modes x %zu rates%s\n", warn().c_str(), modes_cnt, rates_cnt, reset().c_str());
+    std::printf("  %s──────────────────────────────────────────────────────────────%s\n\n", frame().c_str(), reset().c_str());
+}
+
 /**
  * @brief Prints active baseline latency test progress.
  */
