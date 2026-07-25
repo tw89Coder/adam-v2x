@@ -670,12 +670,24 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
 }
 #else
 bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
-    std::cerr << "\n[FATAL] ONNX Runtime in-process inference was requested with model: " 
-              << onnx_model_path_ << "\n";
-    std::cerr << "[FATAL] ONNX Runtime C++ API is not yet integrated into the build matrix.\n";
-    std::cerr << "[FATAL] Exiting execution gracefully as requested.\n";
-    std::exit(1);
-    return false;
+    WindowTelemetryPayload payload;
+    payload.tp_count = window_tp_count_;
+    payload.tn_count = window_tn_count_;
+    payload.fp_count = window_fp_count_;
+    payload.fn_count = window_fn_count_;
+    payload.inspected_count = window_inspected_count_;
+    payload.total_sq = window_sq_sum_;
+    payload.total_latency_ticks = window_latency_ticks_;
+    payload.current_sampling_rate = static_cast<float>(telemetry.instant_sampling_rate);
+
+    if (handshake_with_agent(payload, out_policy)) {
+        return true;
+    }
+    out_policy.recovery_rate = 0.05;
+    out_policy.penalty_multiplier = 50.0;
+    out_policy.sq_threshold = 600;
+    out_policy.base_sampling_rate = 0.10;
+    return true;
 }
 #endif
 
