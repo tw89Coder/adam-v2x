@@ -22,6 +22,7 @@
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/file_manager.hpp"
 #include "qos_harness/console_presenter.hpp"
+#include "qos_harness/rl_bridge.hpp"
 
 #ifndef REPO_ROOT
 #define REPO_ROOT "."
@@ -123,10 +124,13 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                                   csv_target_dir.c_str(), rate, mode);
                 }
 
-                // Setup FSM Filter
+                // Setup FSM Filter and ONNX RL Bridge
                 AdaptiveFilterFSM filter_fsm;
+                qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
+                    rl_bridge.initialize_onnx(true, "");
+                    rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 1.0);
@@ -212,6 +216,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                     // Record metric
                     collector.recordPacket(received_pkts, is_malware, is_drop, total_latency_ns);
+
+                    // Sync RL telemetry and ONNX window update for DRL control plane
+                    if (filter_mode == 3) {
+                        rl_bridge.collect_packet_telemetry(packet_data.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
+                                                           static_cast<int>(filter_fsm.get_state()), is_drop, is_malware,
+                                                           filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
+                        rl_bridge.check_and_sync_window(received_pkts, filter_fsm);
+                    }
                     received_pkts++;
 
                     // Single-line real-time simulation progress telemetry
