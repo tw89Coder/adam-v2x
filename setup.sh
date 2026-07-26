@@ -509,9 +509,9 @@ setup_onnxruntime() {
                 
                 cd "${target_dir}/lib"
                 local lib_so
-                lib_so=$(find . -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
+                lib_so=$(find . -maxdepth 1 -name "libonnxruntime.so.*" 2>/dev/null | head -n 1)
                 if [ -n "$lib_so" ]; then
-                    ln -sf "$lib_so" libonnxruntime.so
+                    ln -sf "$lib_so" libonnxruntime.so 2>/dev/null || true
                 fi
                 cd "${SCRIPT_DIR}"
                 
