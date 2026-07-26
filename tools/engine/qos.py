@@ -7,13 +7,19 @@ import matplotlib.pyplot as plt
 from engine.base import BasePlotter
 from engine.logger import LogStyle
 
+def _detect_jitter_threshold():
+    arch = platform.machine().lower()
+    if "arm" in arch or "aarch" in arch or struct.calcsize("P") == 4:
+        return 50.0  # Edge / ARM architecture (e.g. Raspberry Pi)
+    return 5.0      # x86_64 PC / Laptop architecture
+
 class QoSPlotter(BasePlotter):
     """
     Evaluates multi-scenario Quality of Service indicators, processes false positive
     bounds, compiles comparative performance summaries, and renders execution timelines.
     """
-    WARMUP = 50
-    JITTER_THRESHOLD_MS = 5.0
+    JITTER_THRESHOLD_MS = _detect_jitter_threshold()
+    WARMUP = 100
     MODES = [0, 1, 2]
     RATES = [1.0, 5.0, 10.0]
 
