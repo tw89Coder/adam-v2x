@@ -476,11 +476,42 @@ setup_onnxruntime() {
     fi
 
     if [ "$dpkg_arch" = "armhf" ] || [ "$(uname -m)" = "armv7l" ]; then
-        echo -e "${COLOR_WARNING}[WARNING] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
-        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime C++ releases do not provide prebuilt C++ binaries for 32-bit ARM.${COLOR_RESET}"
-        echo -e "${COLOR_SUCCESS}[+] Python ONNX IPC Bridge (tools/rl_bridge/onnx_server.py) will serve v2x_agent_dqn.onnx for 32-bit ARM.${COLOR_RESET}"
-        mkdir -p "$target_dir"
-        return 0
+        echo -e "${COLOR_INFO}[*] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
+        
+        if [ -f "${target_dir}/lib/libonnxruntime.so" ] && [ -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
+            echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
+            return 0
+        fi
+
+        echo -e "${COLOR_INFO}[*] Downloading HuggingFace pre-compiled 32-bit C++ ONNX Runtime library...${COLOR_RESET}"
+        mkdir -p "${target_dir}/lib" "${target_dir}/include"
+        
+        local arm32_url="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
+        local tarball="/tmp/onnx_arm32.tar.bz2"
+        
+        if command -v wget >/dev/null 2>&1; then
+            wget -q --show-progress "$arm32_url" -O "$tarball"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -L -# "$arm32_url" -o "$tarball"
+        fi
+        
+        if [ -f "$tarball" ]; then
+            tar -xjf "$tarball" -C /tmp/
+            cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/lib/* "${target_dir}/lib/"
+            cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/include/* "${target_dir}/include/" 2>/dev/null || true
+            
+            cd "${target_dir}/lib"
+            local lib_so
+            lib_so=$(find . -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
+            if [ -n "$lib_so" ]; then
+                ln -sf "$lib_so" libonnxruntime.so
+            fi
+            cd "${SCRIPT_DIR}"
+            
+            rm -rf "$tarball" /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared
+            echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
+            return 0
+        fi
     fi
 
     echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries (${onnx_arch})...${COLOR_RESET}"
