@@ -3,6 +3,7 @@
 @file onnx_server.py
 @brief Lightweight Python ONNX Runtime Bridge Server.
 Loads ONNX model (v2x_agent_dqn.onnx) and serves policy inference over TCP socket (127.0.0.1:8080) for 32-bit ARM environments.
+100% mirrors C++ RLBridge::run_onnx_inference history buffer and policy mapping.
 """
 
 import os
@@ -27,7 +28,20 @@ if not os.path.exists(MODEL_PATH):
 
 print(f"[+] Loading ONNX model from: {MODEL_PATH}")
 session = ort.InferenceSession(MODEL_PATH)
-input_name = session.get_inputs()[0].name
+input_meta = session.get_inputs()[0]
+input_name = input_meta.name
+input_shape = input_meta.shape
+
+# Dynamically parse expected input dimension (e.g. 12 for frame_stack=4 x 3 features)
+expected_dim = 12
+if len(input_shape) > 1 and isinstance(input_shape[1], int):
+    expected_dim = input_shape[1]
+
+FEATURE_DIM = 3
+K = expected_dim // FEATURE_DIM
+
+print(f"[+] ONNX Input Tensor: '{input_name}' | Expected Dim: {expected_dim} (K={K} frames x {FEATURE_DIM} features)")
+
 action_map = [-0.20, -0.10, 0.0, 0.10, 0.20]
 
 server_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -39,6 +53,7 @@ print(f"======================================================================")
 print(f"       PYTHON ONNX RUNTIME IPC BRIDGE ACTIVE (127.0.0.1:8080)")
 print(f"======================================================================")
 print(f"  ├── Model Path       : {MODEL_PATH}")
+print(f"  ├── Input Dim        : {expected_dim} features (K={K})")
 print(f"  ├── Action Map Size  : {len(action_map)} discrete actions")
 print(f"  └── Execution Status : WAITING FOR C++ HARNESS CONNECTION...")
 print(f"======================================================================\n")
@@ -48,30 +63,46 @@ while True:
         conn, addr = server_fd.accept()
         print(f"[+] C++ QoS Harness connected from {addr[0]}:{addr[1]}")
         
-        current_sampling_rate = 0.10
+        current_sampling_rate = 0.50
+        history_buffer = np.zeros((1, expected_dim), dtype=np.float32)
+        history_initialized = False
         
         while True:
             # Wire protocol: Receive PacketTelemetry / Window summary struct
-            # Each telemetry window sends 48 bytes (or window signal)
             data = conn.recv(1024)
             if not data:
                 print("[-] Client disconnected. Waiting for next session...")
                 break
 
-            # Infer state observation: [norm_size, norm_sq, anomaly_rate]
-            # If payload length matches telemetry, extract features:
+            # Parse 3 features: [norm_size, norm_sq, anomaly_rate]
             if len(data) >= 12:
-                features = np.frombuffer(data[:12], dtype=np.float32).reshape(1, 3)
+                cur_feat = np.frombuffer(data[:12], dtype=np.float32)[:3]
             else:
-                features = np.array([[0.20, 0.01, 0.001]], dtype=np.float32)
+                cur_feat = np.array([0.20, 0.01, 0.001], dtype=np.float32)
 
-            # Run Python ONNX Runtime inference pass
-            outputs = session.run(None, {input_name: features})
-            q_values = outputs[0][0]
-            best_action_idx = int(np.argmax(q_values))
-            delta = action_map[best_action_idx]
+            # 100% Mirror C++ RLBridge::run_onnx_inference frame history buffer logic
+            if not history_initialized:
+                for i in range(K):
+                    history_buffer[0, i * FEATURE_DIM : (i + 1) * FEATURE_DIM] = cur_feat
+                history_initialized = True
+            else:
+                if K > 1:
+                    history_buffer[0, :-FEATURE_DIM] = history_buffer[0, FEATURE_DIM:]
+                    history_buffer[0, -FEATURE_DIM:] = cur_feat
+                else:
+                    history_buffer[0, :FEATURE_DIM] = cur_feat
 
-            current_sampling_rate = max(0.05, min(1.0, current_sampling_rate + delta))
+            # Execute ONNX model inference feedforward pass
+            outputs = session.run(None, {input_name: history_buffer})
+            float_output = outputs[0][0]
+            
+            # 100% Mirror C++ RLBridge::run_onnx_inference algorithm mapping
+            if len(float_output) == len(action_map):
+                best_action_idx = int(np.argmax(float_output))
+                delta = action_map[best_action_idx]
+                current_sampling_rate = max(0.05, min(1.0, current_sampling_rate + delta))
+            elif len(float_output) == 4:
+                current_sampling_rate = float(float_output[3])
 
             # Send back Policy parameters struct (4 floats: recovery, penalty, sq_thresh, base_sampling_rate)
             reply = struct.pack("ffff", 0.05, 50.0, 600.0, float(current_sampling_rate))
