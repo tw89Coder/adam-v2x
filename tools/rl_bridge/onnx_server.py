@@ -18,7 +18,7 @@ except ImportError:
     print("[FATAL] Please run: pip install onnxruntime")
     sys.exit(1)
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "v2x_agent_dqn.onnx")
 
 if not os.path.exists(MODEL_PATH):
