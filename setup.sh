@@ -484,7 +484,7 @@ setup_onnxruntime() {
             return 0
         fi
 
-        echo -e "${COLOR_INFO}[*] Downloading 32-bit C++ ONNX Runtime library from GitHub Releases...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}[*] Downloading 32-bit C++ ONNX Runtime library from GitHub Releases (20MB)...${COLOR_RESET}"
         mkdir -p "${target_dir}/lib" "${target_dir}/include"
         
         local arm32_url1="https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.17.1/onnxruntime-linux-arm-1.17.1.zip"
@@ -493,12 +493,13 @@ setup_onnxruntime() {
         rm -f "$zipfile"
         
         if command -v curl >/dev/null 2>&1; then
-            curl -L -s "$arm32_url1" -o "$zipfile" || curl -L -s "$arm32_url2" -o "$zipfile"
+            curl -L -# "$arm32_url1" -o "$zipfile" || curl -L -# "$arm32_url2" -o "$zipfile"
         elif command -v wget >/dev/null 2>&1; then
-            wget --no-check-certificate -q "$arm32_url1" -O "$zipfile" || wget --no-check-certificate -q "$arm32_url2" -O "$zipfile"
+            wget --no-check-certificate --show-progress "$arm32_url1" -O "$zipfile" || wget --no-check-certificate --show-progress "$arm32_url2" -O "$zipfile"
         fi
         
         if [ -f "$zipfile" ] && [ -s "$zipfile" ]; then
+            echo -e "${COLOR_INFO}[*] Unpacking 32-bit ARM ONNX C++ library and headers...${COLOR_RESET}"
             unzip -q "$zipfile" -d /tmp/ 2>/dev/null || true
             local extracted_dir
             extracted_dir=$(find /tmp -maxdepth 1 -name "onnxruntime-linux-arm*" -type d 2>/dev/null | head -n 1)
