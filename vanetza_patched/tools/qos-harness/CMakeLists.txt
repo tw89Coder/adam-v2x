@@ -19,7 +19,7 @@ target_include_directories(qos-harness PRIVATE
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(qos-harness PUBLIC vanetza Threads::Threads)
+target_link_libraries(qos-harness PUBLIC vanetza Threads::Threads atomic)
 
 get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 
