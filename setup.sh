@@ -487,14 +487,19 @@ setup_onnxruntime() {
         echo -e "${COLOR_INFO}[*] Downloading HuggingFace pre-compiled 32-bit C++ ONNX Runtime library...${COLOR_RESET}"
         mkdir -p "${target_dir}/lib" "${target_dir}/include"
         
-        local arm32_url="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
+        local arm32_url1="https://hf-mirror.com/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
+        local arm32_url2="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
         local tarball="/tmp/onnx_arm32.tar.bz2"
         rm -f "$tarball"
         
-        if command -v curl >/dev/null 2>&1; then
-            curl -sL --retry 3 "$arm32_url" -o "$tarball"
-        elif command -v wget >/dev/null 2>&1; then
-            wget --no-check-certificate -q --tries=3 "$arm32_url" -O "$tarball"
+        if command -v wget >/dev/null 2>&1; then
+            wget --no-check-certificate -q "$arm32_url1" -O "$tarball" 2>/dev/null || wget --no-check-certificate -q "$arm32_url2" -O "$tarball" 2>/dev/null || true
+        fi
+        
+        if [ ! -f "$tarball" ] || [ ! -s "$tarball" ]; then
+            if command -v curl >/dev/null 2>&1; then
+                curl -L -k -s "$arm32_url1" -o "$tarball" 2>/dev/null || curl -L -k -s "$arm32_url2" -o "$tarball" 2>/dev/null || true
+            fi
         fi
         
         if [ -f "$tarball" ] && [ -s "$tarball" ]; then
