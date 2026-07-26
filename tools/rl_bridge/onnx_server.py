@@ -61,7 +61,6 @@ print(f"======================================================================\n
 while True:
     try:
         conn, addr = server_fd.accept()
-        print(f"[+] C++ QoS Harness connected from {addr[0]}:{addr[1]}")
         
         current_sampling_rate = 0.50
         history_buffer = np.zeros((1, expected_dim), dtype=np.float32)
@@ -71,7 +70,6 @@ while True:
             # Wire protocol: Receive PacketTelemetry / Window summary struct
             data = conn.recv(1024)
             if not data:
-                print("[-] Client disconnected. Waiting for next session...")
                 break
 
             # Parse 3 features: [norm_size, norm_sq, anomaly_rate]
