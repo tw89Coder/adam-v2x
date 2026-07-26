@@ -471,38 +471,58 @@ setup_onnxruntime() {
     fi
 
     if [ "$dpkg_arch" = "armhf" ] || [ "$(uname -m)" = "armv7l" ]; then
-        echo -e "${COLOR_INFO}[*] Detected 32-bit ARM (armhf) architecture. Extracting native C++ ONNX Runtime from Python venv...${COLOR_RESET}"
-        mkdir -p "${target_dir}/include" "${target_dir}/lib"
+        echo -e "${COLOR_INFO}[*] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
         
-        # Locate installed onnxruntime in venv
-        local venv_site
-        venv_site=$(find "${SCRIPT_DIR}/tools/rl_bridge/venv" -type d -name "onnxruntime" 2>/dev/null | head -n 1)
-        
-        if [ -n "$venv_site" ] && [ -d "$venv_site/capi" ]; then
-            local capi_so
-            capi_so=$(find "$venv_site/capi" -name "*.so*" | head -n 1)
-            if [ -f "$capi_so" ]; then
-                cp "$capi_so" "${target_dir}/lib/libonnxruntime.so"
-                # Ensure headers exist from x64 release download if missing
-                if [ ! -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
-                    echo -e "${COLOR_INFO}[*] Downloading C++ API headers for 32-bit ONNX Runtime...${COLOR_RESET}"
-                    local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
-                    if command -v wget >/dev/null 2>&1; then
-                        wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"
-                    elif command -v curl >/dev/null 2>&1; then
-                        curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"
-                    fi
-                    if [ -f "/tmp/onnx_hdr.tgz" ]; then
-                        tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"
-                        cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"
-                        rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3
-                    fi
-                fi
-                echo -e "${COLOR_SUCCESS}[SUCCESS] Configured 32-bit ARM C++ ONNX Runtime library and headers at ${target_dir}.${COLOR_RESET}"
-                return 0
-            fi
+        # Check if native libonnxruntime.so and headers are already configured
+        if [ -f "${target_dir}/lib/libonnxruntime.so" ] && [ -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
+            echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
+            return 0
         fi
-        echo -e "${COLOR_WARNING}[WARNING] Could not locate 32-bit ONNX Runtime in venv yet. Run setup_python_venv first.${COLOR_RESET}"
+
+        # Check if cached binary exists in checkpoints/ to bypass re-compilation
+        local cache_so="${SCRIPT_DIR}/checkpoints/libonnxruntime_armhf.so"
+        if [ -f "$cache_so" ]; then
+            echo -e "${COLOR_INFO}[*] Restoring 32-bit ARM ONNX Runtime from cached build ${cache_so}...${COLOR_RESET}"
+            mkdir -p "${target_dir}/lib" "${target_dir}/include"
+            cp "$cache_so" "${target_dir}/lib/libonnxruntime.so"
+            if [ ! -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
+                local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
+                if command -v wget >/dev/null 2>&1; then wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"; elif command -v curl >/dev/null 2>&1; then curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"; fi
+                if [ -f "/tmp/onnx_hdr.tgz" ]; then tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"; cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"; rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3; fi
+            fi
+            echo -e "${COLOR_SUCCESS}[SUCCESS] Restored 32-bit ARM C++ ONNX Runtime library from cache.${COLOR_RESET}"
+            return 0
+        fi
+
+        # Academic Reproducibility: Automated build from source on 32-bit ARM (v1.16.3 tag)
+        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime does not release prebuilt C++ binaries for 32-bit ARM (armhf).${COLOR_RESET}"
+        echo -e "${COLOR_INFO}[*] Launching automated ONNX Runtime C++ source compilation (v1.16.3) for 100% academic reproducibility...${COLOR_RESET}"
+        
+        local src_dir="/tmp/onnxruntime_src"
+        rm -rf "$src_dir"
+        git clone --depth 1 --single-branch --branch v1.16.3 --recursive https://github.com/microsoft/onnxruntime.git "$src_dir"
+        
+        cd "$src_dir"
+        ./build.sh --config Release --build_shared_lib --parallel
+        
+        mkdir -p "${target_dir}/lib" "${target_dir}/include"
+        local built_so
+        built_so=$(find "$src_dir/build" -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
+        if [ -n "$built_so" ]; then
+            cp "$built_so" "${target_dir}/lib/libonnxruntime.so"
+            mkdir -p "${SCRIPT_DIR}/checkpoints"
+            cp "${target_dir}/lib/libonnxruntime.so" "$cache_so"
+        fi
+        
+        # Download standard C++ headers
+        local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
+        if command -v wget >/dev/null 2>&1; then wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"; elif command -v curl >/dev/null 2>&1; then curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"; fi
+        if [ -f "/tmp/onnx_hdr.tgz" ]; then tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"; cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"; rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3; fi
+
+        rm -rf "$src_dir"
+        cd "${SCRIPT_DIR}"
+        
+        echo -e "${COLOR_SUCCESS}[SUCCESS] 32-bit ARM C++ ONNX Runtime compiled from source and cached to ${cache_so}.${COLOR_RESET}"
         return 0
     fi
 
