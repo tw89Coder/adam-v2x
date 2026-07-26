@@ -55,4 +55,5 @@ outputs/**/*
 *v2aix*
 inputs/v2aix*
 inputs/base_packets/v2aix*
+inputs/*.tar.gz
 json/

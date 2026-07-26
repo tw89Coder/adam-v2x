@@ -187,8 +187,7 @@ class QoSPlotter(BasePlotter):
         series_map = [
             ("Baseline (Peacetime)", df_b,    '#55a868', '-',  3),  # Green
             ("Unpatched (No Filter)", df_un,   '#c44e52', '-',  1),  # Red (No defense, tail explosion)
-            ("Static 100% Inspection", df_full, '#ff7f0e', '--', 2),  # Orange (100% Static inspection)
-            ("Proposed Adaptive FSM",  df_unf,  '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
+            ("ADAM Filtered (ONNX)",  df_unf,  '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
         ]
         if not self.use_onnx and not self.no_patched:
             series_map.extend([
@@ -215,17 +214,18 @@ class QoSPlotter(BasePlotter):
         # Figure 1: Jitter Time Series
         # ---------------------------------------------------------------------
         fig1, ax1 = plt.subplots(figsize=(5.0, 3.0))
-        max_y = 0.45
+        max_y = 0.15
         for label, df, color, ls, z in series_map:
             if df is not None and not df.empty:
                 plot_df = df.iloc[start_idx:end_idx]
                 ax1.plot(plot_df['packet_id'], plot_df['latency_ms'],
                          label=label, color=color, linestyle=ls, linewidth=1.5, alpha=0.8, zorder=z)
-                local_max = plot_df['latency_ms'].max()
-                if local_max > max_y:
-                    max_y = local_max
+                # Filter extreme OS outliers: Use P99.9 or P99 for Y-limit
+                local_p999 = plot_df['latency_ms'].quantile(0.999)
+                if local_p999 > max_y:
+                    max_y = local_p999
 
-        ax1.set_ylim(-0.015, max_y * 1.1)
+        ax1.set_ylim(-0.005, max_y * 1.15)
         ax1.set_xlabel('Packet Sequence Index (n)', fontsize=11)
         ax1.set_ylabel('Processing Latency (ms)', fontsize=11)
         ax1.grid(True, linestyle=':', alpha=0.7)
@@ -373,7 +373,9 @@ class QoSPlotter(BasePlotter):
                 else:
                     ax.axvspan(lower_bound, upper_bound, color='gray', alpha=0.2)
 
-        ax.set_ylim(0, 0.45) 
+        # Cap Y-axis dynamically at P99.9 to filter extreme OS outliers without squashing timeline
+        max_p999 = max(df_filter['smoothed_latency'].quantile(0.999), df_native['smoothed_latency'].quantile(0.999))
+        ax.set_ylim(0, max(0.15, max_p999 * 1.15))
         ax.set_xlim(0, total_packet_indices)
         ax.set_xlabel('Packet ID (Chronological Order)')
         ax.set_ylabel('Processing Latency (ms)')

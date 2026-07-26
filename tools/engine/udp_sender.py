@@ -11,6 +11,7 @@ import socket
 import struct
 import argparse
 import random
+import tarfile
 
 MAGIC_SESSION_START = 0x56325853
 MAGIC_SESSION_ACK   = 0x56325841
@@ -21,20 +22,66 @@ HEADER_FORMAT = "<IIfIfII"  # 28-byte packed struct matching C++ UDPControlHeade
 
 def load_packets_from_dir(folder_path):
     packets = []
+    repo_root = os.path.abspath(os.path.join(folder_path, ".."))
+    tar_path = os.path.join(repo_root, "base_packets_full.tar.gz")
+    
+    # 1. Fast Path: Read directly from pre-sorted base_packets_full.tar.gz (0.2s instant read)
+    if os.path.exists(tar_path):
+        print(f"[*] Fast Loading dataset directly from archive: {os.path.basename(tar_path)} ...")
+        t0 = time.time()
+        try:
+            with tarfile.open(tar_path, "r:gz") as tar:
+                members = [m for m in tar.getmembers() if m.isfile()]
+                total_m = len(members)
+                print(f"  └── Found {total_m:,} pre-sorted packets in archive. Extracting ALL {total_m:,} packets to RAM...")
+                sys.stdout.flush()
+                
+                for idx, member in enumerate(members, 1):
+                    f = tar.extractfile(member)
+                    if f:
+                        content = f.read()
+                        if len(content) > 0:
+                            packets.append(content)
+                    if idx % 50000 == 0 or idx == total_m:
+                        print(f"  ├── RAM Load Progress: {idx:,} / {total_m:,} packets loaded ({idx*100//total_m}%)...")
+                        sys.stdout.flush()
+            print(f"[SUCCESS] Loaded ALL {len(packets):,} pre-sorted V2X baseline packets into RAM in {time.time() - t0:.2f} seconds!")
+            return packets
+        except Exception as e:
+            print(f"[-] Archive read warning: {e}. Falling back to directory read...")
+
+    # 2. Fallback Path: Read from directory
     if not os.path.exists(folder_path):
         return packets
-    for fname in sorted(os.listdir(folder_path)):
+    print(f"[*] Enumerating files in {folder_path} ...")
+    sys.stdout.flush()
+    file_list = sorted([f for f in os.listdir(folder_path) if not f.startswith(".")])
+    total_files = len(file_list)
+    print(f"  └── Directory contains {total_files:,} files. Reading to RAM...")
+    sys.stdout.flush()
+    
+    max_load = 50000
+    stride = max(1, total_files // max_load) if total_files > max_load else 1
+    selected_files = file_list[::stride][:max_load]
+    
+    t0 = time.time()
+    for idx, fname in enumerate(selected_files, 1):
         fpath = os.path.join(folder_path, fname)
-        if os.path.isfile(fpath) and not fname.startswith("."):
+        if os.path.isfile(fpath):
             with open(fpath, "rb") as f:
                 content = f.read()
                 if len(content) > 0:
                     packets.append(content)
+        if idx % 10000 == 0 or idx == len(selected_files):
+            print(f"  ├── Fast Loading Progress: {idx:,} / {len(selected_files):,} packets loaded into RAM...")
+            sys.stdout.flush()
+            
+    print(f"[SUCCESS] Loaded {len(packets):,} baseline packets into RAM in {time.time() - t0:.2f} seconds!")
     return packets
 
 def main():
     parser = argparse.ArgumentParser(description="V2X Hardware Testbed UDP Traffic Sender")
-    parser.add_argument("--dest-ip", type=str, default="192.168.137.120", help="Target Raspberry Pi IP Address")
+    parser.add_argument("--dest-ip", type=str, default="127.0.0.1", help="Target Receiver IP Address")
     parser.add_argument("-P", "--port", type=int, default=9999, help="Target UDP Port")
     parser.add_argument("-m", "--modes", type=str, default="0", help="Space-separated attack modes (e.g. '0 1 2')")
     parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated pollution rates (e.g. '0.0 5.0')")
