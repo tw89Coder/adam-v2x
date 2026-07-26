@@ -471,68 +471,10 @@ setup_onnxruntime() {
     fi
 
     if [ "$dpkg_arch" = "armhf" ] || [ "$(uname -m)" = "armv7l" ]; then
-        echo -e "${COLOR_INFO}[*] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
-        
-        # Check if native libonnxruntime.so and headers are already configured
-        if [ -f "${target_dir}/lib/libonnxruntime.so" ] && [ -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
-            echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
-            return 0
-        fi
-
-        # Check if cached binary exists in checkpoints/ to bypass re-compilation
-        local cache_so="${SCRIPT_DIR}/checkpoints/libonnxruntime_armhf.so"
-        if [ -f "$cache_so" ]; then
-            echo -e "${COLOR_INFO}[*] Restoring 32-bit ARM ONNX Runtime from cached build ${cache_so}...${COLOR_RESET}"
-            mkdir -p "${target_dir}/lib" "${target_dir}/include"
-            cp "$cache_so" "${target_dir}/lib/libonnxruntime.so"
-            if [ ! -f "${target_dir}/include/onnxruntime_cxx_api.h" ]; then
-                local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
-                if command -v wget >/dev/null 2>&1; then wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"; elif command -v curl >/dev/null 2>&1; then curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"; fi
-                if [ -f "/tmp/onnx_hdr.tgz" ]; then tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"; cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"; rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3; fi
-            fi
-            echo -e "${COLOR_SUCCESS}[SUCCESS] Restored 32-bit ARM C++ ONNX Runtime library from cache.${COLOR_RESET}"
-            return 0
-        fi
-
-        # Academic Reproducibility: Fast minimal inference build from source on 32-bit ARM
-        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime does not release prebuilt C++ binaries for 32-bit ARM (armhf).${COLOR_RESET}"
-        echo -e "${COLOR_INFO}[*] Ensuring CMake 3.26+ in venv for ONNX Runtime build...${COLOR_RESET}"
-        "${SCRIPT_DIR}/tools/rl_bridge/venv/bin/pip" install --quiet "cmake>=3.26"
-        export PATH="${SCRIPT_DIR}/tools/rl_bridge/venv/bin:$PATH"
-        
-        echo -e "${COLOR_INFO}[*] Launching pre-optimized minimal C++ inference build (v1.16.3)...${COLOR_RESET}"
-        local src_dir="/tmp/onnxruntime_src"
-        rm -rf "$src_dir"
-        git clone --depth 1 --single-branch --branch v1.16.3 --recursive https://github.com/microsoft/onnxruntime.git "$src_dir"
-        
-        cd "$src_dir"
-        ./build.sh --config Release \
-            --build_shared_lib \
-            --parallel \
-            --skip_tests \
-            --disable_contrib_ops \
-            --disable_ml_ops \
-            --cmake_path "${SCRIPT_DIR}/tools/rl_bridge/venv/bin/cmake" \
-            --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 CMAKE_CXX_FLAGS="-Wno-psabi"
-        
-        mkdir -p "${target_dir}/lib" "${target_dir}/include"
-        local built_so
-        built_so=$(find "$src_dir/build" -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
-        if [ -n "$built_so" ]; then
-            cp "$built_so" "${target_dir}/lib/libonnxruntime.so"
-            mkdir -p "${SCRIPT_DIR}/checkpoints"
-            cp "${target_dir}/lib/libonnxruntime.so" "$cache_so"
-        fi
-        
-        # Download standard C++ headers
-        local hdr_url="https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
-        if command -v wget >/dev/null 2>&1; then wget -q "$hdr_url" -O "/tmp/onnx_hdr.tgz"; elif command -v curl >/dev/null 2>&1; then curl -sL "$hdr_url" -o "/tmp/onnx_hdr.tgz"; fi
-        if [ -f "/tmp/onnx_hdr.tgz" ]; then tar -xzf "/tmp/onnx_hdr.tgz" -C "/tmp"; cp -r /tmp/onnxruntime-linux-x64-1.16.3/include/* "${target_dir}/include/"; rm -rf /tmp/onnx_hdr.tgz /tmp/onnxruntime-linux-x64-1.16.3; fi
-
-        rm -rf "$src_dir"
-        cd "${SCRIPT_DIR}"
-        
-        echo -e "${COLOR_SUCCESS}[SUCCESS] 32-bit ARM C++ ONNX Runtime compiled from source and cached to ${cache_so}.${COLOR_RESET}"
+        echo -e "${COLOR_WARNING}[WARNING] Detected 32-bit ARM (armhf) architecture.${COLOR_RESET}"
+        echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime C++ releases do not provide prebuilt C++ binaries for 32-bit ARM.${COLOR_RESET}"
+        echo -e "${COLOR_SUCCESS}[+] Python ONNX IPC Bridge (tools/rl_bridge/onnx_server.py) will serve v2x_agent_dqn.onnx for 32-bit ARM.${COLOR_RESET}"
+        mkdir -p "$target_dir"
         return 0
     fi
 
