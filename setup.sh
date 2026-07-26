@@ -494,19 +494,26 @@ setup_onnxruntime() {
             return 0
         fi
 
-        # Academic Reproducibility: Automated build from source on 32-bit ARM (v1.16.3 tag)
+        # Academic Reproducibility: Fast minimal inference build from source on 32-bit ARM
         echo -e "${COLOR_WARNING}[WARNING] Microsoft official ONNX Runtime does not release prebuilt C++ binaries for 32-bit ARM (armhf).${COLOR_RESET}"
         echo -e "${COLOR_INFO}[*] Ensuring CMake 3.26+ in venv for ONNX Runtime build...${COLOR_RESET}"
         "${SCRIPT_DIR}/tools/rl_bridge/venv/bin/pip" install --quiet "cmake>=3.26"
         export PATH="${SCRIPT_DIR}/tools/rl_bridge/venv/bin:$PATH"
         
-        echo -e "${COLOR_INFO}[*] Launching automated ONNX Runtime C++ source compilation (v1.16.3) for 100% academic reproducibility...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}[*] Launching pre-optimized minimal C++ inference build (v1.16.3)...${COLOR_RESET}"
         local src_dir="/tmp/onnxruntime_src"
         rm -rf "$src_dir"
         git clone --depth 1 --single-branch --branch v1.16.3 --recursive https://github.com/microsoft/onnxruntime.git "$src_dir"
         
         cd "$src_dir"
-        ./build.sh --config Release --build_shared_lib --parallel --cmake_path "${SCRIPT_DIR}/tools/rl_bridge/venv/bin/cmake"
+        ./build.sh --config Release \
+            --build_shared_lib \
+            --parallel \
+            --skip_tests \
+            --disable_contrib_ops \
+            --disable_ml_ops \
+            --cmake_path "${SCRIPT_DIR}/tools/rl_bridge/venv/bin/cmake" \
+            --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 CMAKE_CXX_FLAGS="-Wno-psabi"
         
         mkdir -p "${target_dir}/lib" "${target_dir}/include"
         local built_so
