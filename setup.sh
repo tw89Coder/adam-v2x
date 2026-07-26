@@ -487,23 +487,22 @@ setup_onnxruntime() {
         echo -e "${COLOR_INFO}[*] Downloading HuggingFace pre-compiled 32-bit C++ ONNX Runtime library...${COLOR_RESET}"
         mkdir -p "${target_dir}/lib" "${target_dir}/include"
         
-        local arm32_url1="https://hf-mirror.com/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
-        local arm32_url2="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
+        local arm32_url="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
         local tarball="/tmp/onnx_arm32.tar.bz2"
         rm -f "$tarball"
         
-        if command -v wget >/dev/null 2>&1; then
-            wget --no-check-certificate -q "$arm32_url1" -O "$tarball" || wget --no-check-certificate -q "$arm32_url2" -O "$tarball"
-        elif command -v curl >/dev/null 2>&1; then
-            curl -L -s "$arm32_url1" -o "$tarball" || curl -L -s "$arm32_url2" -o "$tarball"
+        if command -v curl >/dev/null 2>&1; then
+            curl -sL --retry 3 "$arm32_url" -o "$tarball"
+        elif command -v wget >/dev/null 2>&1; then
+            wget --no-check-certificate -q --tries=3 "$arm32_url" -O "$tarball"
         fi
         
-        # Verify if file is a valid bzip2 archive and larger than 1MB (not a Git LFS pointer text file)
-        if [ -f "$tarball" ] && [ $(wc -c < "$tarball") -gt 1000000 ]; then
-            tar -xf "$tarball" -C /tmp/ 2>/dev/null || tar -xjf "$tarball" -C /tmp/
-            if [ -d "/tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared" ]; then
-                cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/lib/* "${target_dir}/lib/" 2>/dev/null || true
-                cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/include/* "${target_dir}/include/" 2>/dev/null || true
+        if [ -f "$tarball" ] && [ -s "$tarball" ]; then
+            tar -xf "$tarball" -C /tmp/ 2>/dev/null || tar -xjf "$tarball" -C /tmp/ 2>/dev/null || true
+            local extracted_dir="/tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared"
+            if [ -d "$extracted_dir" ]; then
+                cp -r ${extracted_dir}/lib/* "${target_dir}/lib/" 2>/dev/null || true
+                cp -r ${extracted_dir}/include/* "${target_dir}/include/" 2>/dev/null || true
                 
                 cd "${target_dir}/lib"
                 local lib_so
@@ -513,12 +512,12 @@ setup_onnxruntime() {
                 fi
                 cd "${SCRIPT_DIR}"
                 
-                rm -rf "$tarball" /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared
+                rm -rf "$tarball" "$extracted_dir"
                 echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
                 return 0
             fi
         fi
-        echo -e "${COLOR_DANGER}[ERROR] Failed to download or extract 32-bit ARM C++ ONNX Runtime library from HuggingFace.${COLOR_RESET}" >&2
+        echo -e "${COLOR_DANGER}[ERROR] Download of 32-bit C++ ONNX Runtime library failed or corrupted.${COLOR_RESET}" >&2
         return 1
     fi
 
@@ -582,3 +581,29 @@ elif [ "$MODE" == "all" ]; then
     apply_patches "${SCRIPT_DIR}/vanetza_patched"
     compile_library "${SCRIPT_DIR}/vanetza_patched" "patch"
 fi
+
+run_self_check() {
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}[*] Step 4: Running System Self-Check & Diagnostic Verification...${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}======================================================================${COLOR_RESET}"
+    
+    local onnx_lib="${SCRIPT_DIR}/third_party/onnxruntime/lib/libonnxruntime.so"
+    local onnx_hdr="${SCRIPT_DIR}/third_party/onnxruntime/include/onnxruntime_cxx_api.h"
+    local binary="${SCRIPT_DIR}/vanetza_unpatched/build/tools/qos-harness/qos-harness"
+    
+    if [ -f "$onnx_lib" ] && [ -f "$onnx_hdr" ]; then
+        echo -e "${COLOR_SUCCESS}[SELF-CHECK] 32-bit ARM ONNX C++ library & headers: INSTALLED${COLOR_RESET}"
+    else
+        echo -e "${COLOR_DANGER}[SELF-CHECK FAILED] ONNX C++ library missing in third_party/onnxruntime!${COLOR_RESET}"
+    fi
+
+    if [ -f "$binary" ]; then
+        if strings "$binary" 2>/dev/null | grep -q "Native C++ ONNX Runtime Engine ACTIVE"; then
+            echo -e "${COLOR_SUCCESS}[SELF-CHECK PASSED] Native C++ ONNX Engine is 100% ACTIVE (USE_ONNX=1)${COLOR_RESET}"
+        else
+            echo -e "${COLOR_WARNING}[SELF-CHECK WARNING] Binary built in fallback mode (USE_ONNX=0). Re-run ./setup.sh unpatch.${COLOR_RESET}"
+        fi
+    fi
+}
+
+run_self_check
