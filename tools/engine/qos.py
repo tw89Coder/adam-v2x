@@ -121,7 +121,10 @@ class QoSPlotter(BasePlotter):
         summary_transport_path = os.path.join(self.stats_dir, "udp_transport_summary.csv")
         transport_df = None
         if os.path.exists(summary_transport_path):
-            transport_df = self._load_csv_file(summary_transport_path)
+            try:
+                transport_df = pd.read_csv(summary_transport_path, on_bad_lines='skip')
+            except Exception:
+                transport_df = None
 
         # Graceful evaluation wrapper for optional baseline profiles
         df_base = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv')
