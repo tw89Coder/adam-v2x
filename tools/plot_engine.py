@@ -61,7 +61,13 @@ def main():
 
     try:
         if args.all:
-            amp_engine.execute()
+            try:
+                amp_engine.execute()
+            except SystemExit:
+                LogStyle.log_warn("Amplification profile data absent/skipped. Proceeding cleanly with QoS pipeline...")
+            except Exception as e:
+                LogStyle.log_warn(f"Amplification pipeline bypassed ({e}). Proceeding cleanly with QoS pipeline...")
+
             qos_engine.compute_all_combinations_stats()
             
             for m in qos_engine.MODES:
@@ -70,6 +76,8 @@ def main():
             
             qos_engine.plot_pulse_timeline()
             qos_engine.plot_periodic_timeline()
+            qos_engine.plot_online_training_telemetry()
+            qos_engine.plot_all_existing_window_metrics()
             qos_engine.print_diagnostic_debug()
             
             # Auto-run convergence plot if training logs exist
