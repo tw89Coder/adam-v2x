@@ -426,6 +426,7 @@ compile_library() {
     fi
 
     local build_dir="${target_dir}/build"
+    rm -rf "$build_dir/CMakeCache.txt" "$build_dir/CMakeFiles"
     mkdir -p "$build_dir"
     cd "$build_dir"
 
