@@ -159,6 +159,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                 int print_interval = std::max(1, total_pkts / 100);
 
+                struct timespec session_cpu_start, session_cpu_end;
+                clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_start);
+
                 while (session_running) {
                     ssize_t pkt_len = recvfrom(sockfd, buffer.data(), buffer.size(), 0, (struct sockaddr*)&client_addr, &client_len);
                     if (pkt_len < 0) continue;
@@ -240,6 +243,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     }
                 }
 
+                clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_end);
+                double cpu_time_sec = (session_cpu_end.tv_sec - session_cpu_start.tv_sec) + 
+                                         (session_cpu_end.tv_nsec - session_cpu_start.tv_nsec) * 1e-9;
+
                 // Export CSV Log
                 collector.exportToCSV(out_filename);
 
@@ -263,14 +270,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 std::ofstream sum_file(summary_csv_path, std::ios::out | std::ios::app);
                 if (sum_file.is_open()) {
                     if (!exists) {
-                        sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,total_inspected,inspection_rate_pct,malware_count,tp,tn,fp,fn,fpr_pct,fnr_pct,peak_rss_kb,out_filename\n";
+                        sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,total_inspected,inspection_rate_pct,malware_count,tp,tn,fp,fn,fpr_pct,fnr_pct,cpu_time_sec,peak_rss_kb,out_filename\n";
                     }
                     sum_file << mode << "," << rate << "," << filter_mode << ","
                              << total_sent << "," << received_pkts << "," << dropped_pkts << ","
                              << drop_rate_pct << "," << total_inspected << "," << insp_rate_pct << ","
                              << malware_count << "," << true_positives << "," << true_negatives << ","
                              << false_positives << "," << false_negatives << ","
-                             << fpr_pct << "," << fnr_pct << "," << peak_rss_kb << "," << out_filename << "\n";
+                             << fpr_pct << "," << fnr_pct << "," << cpu_time_sec << "," << peak_rss_kb << "," << out_filename << "\n";
                     sum_file.close();
                 }
 

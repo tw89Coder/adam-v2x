@@ -117,6 +117,12 @@ class QoSPlotter(BasePlotter):
         LogStyle.log_stage("Compiling Combined Statistical Matrix across configurations...")
         matrix_rows = []
 
+        # Load optional UDP transport summary CSV for CPU and RAM overhead integration
+        summary_transport_path = os.path.join(self.stats_dir, "udp_transport_summary.csv")
+        transport_df = None
+        if os.path.exists(summary_transport_path):
+            transport_df = self._load_csv_file(summary_transport_path)
+
         # Graceful evaluation wrapper for optional baseline profiles
         df_base = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv')
         if df_base is None:
@@ -124,30 +130,46 @@ class QoSPlotter(BasePlotter):
             
         base_stats = self._compute_stats(df_base, is_filtered=False)
         if base_stats:
-            matrix_rows.append({"Scenario": "Baseline Optimal", "Env": "unpatched", "Mode": "N/A", "Rate": 0.0, **base_stats})
+            matrix_rows.append({"Scenario": "Baseline Optimal", "Env": "unpatched", "Mode": "N/A", "Rate": 0.0, **base_stats, "CPU_Time_s": "N/A", "Peak_RAM_MB": "N/A"})
         else:
             LogStyle.log_warn("Target baseline verification data framework unavailable. Evaluation skipped.")
 
         for mode in self.MODES:
             for rate in self.RATES:
                 scenarios = [
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',         False),
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}_onnx.csv',     'ADAM Filtered (ONNX)',     True),
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Adaptive Filtered (FSM)',   True),
-                    ('unpatched', f'qos_attack_{rate}_mode{mode}_full100.csv',  'Static 100% Inspection',   True),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',         False, 0),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_onnx.csv',     'ADAM Filtered (ONNX)',     True,  3),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Adaptive Filtered (FSM)',   True,  1),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_full100.csv',  'Static 100% Inspection',   True,  2),
                 ]
                 if not self.use_onnx and not self.no_patched:
                     scenarios.extend([
-                        ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',           False),
-                        ('patched',   f'qos_attack_{rate}_mode{mode}_onnx.csv',     'Patched ADAM (ONNX)',      True),
-                        ('patched',   f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Patched Filtered (FSM)',   True),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}.csv',          'Patched Native',           False, 0),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}_onnx.csv',     'Patched ADAM (ONNX)',      True,  3),
+                        ('patched',   f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Patched Filtered (FSM)',   True,  1),
                     ])
-                for env, filename, label, is_filt in scenarios:
+                for env, filename, label, is_filt, f_mode in scenarios:
                     df = self._resolve_dataframe(env, filename)
                     res = self._compute_stats(df, is_filtered=is_filt)
                     if res:
+                        cpu_s = "N/A"
+                        ram_mb = "N/A"
+                        if transport_df is not None and not transport_df.empty:
+                            match = transport_df[
+                                (transport_df['mode'] == mode) & 
+                                (np.isclose(transport_df['rate'], rate)) & 
+                                (transport_df['filter_mode'] == f_mode)
+                            ]
+                            if not match.empty:
+                                row = match.iloc[-1]
+                                if 'cpu_time_sec' in row and pd.notnull(row['cpu_time_sec']):
+                                    cpu_s = round(float(row['cpu_time_sec']), 4)
+                                if 'peak_rss_kb' in row and pd.notnull(row['peak_rss_kb']):
+                                    ram_mb = round(float(row['peak_rss_kb']) / 1024.0, 2)
+                        
                         matrix_rows.append({
-                            "Scenario": f"{label} | M{mode} | {rate}%", "Env": env, "Mode": f"mode{mode}", "Rate": rate, **res
+                            "Scenario": f"{label} | M{mode} | {rate}%", "Env": env, "Mode": f"mode{mode}", "Rate": rate, **res,
+                            "CPU_Time_s": cpu_s, "Peak_RAM_MB": ram_mb
                         })
 
         if not matrix_rows:
