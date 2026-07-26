@@ -489,30 +489,35 @@ setup_onnxruntime() {
         
         local arm32_url="https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/arm32/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared.tar.bz2"
         local tarball="/tmp/onnx_arm32.tar.bz2"
+        rm -f "$tarball"
         
-        if command -v wget >/dev/null 2>&1; then
-            wget -q --show-progress "$arm32_url" -O "$tarball"
-        elif command -v curl >/dev/null 2>&1; then
-            curl -L -# "$arm32_url" -o "$tarball"
+        if command -v curl >/dev/null 2>&1; then
+            curl -L -s "$arm32_url" -o "$tarball"
+        elif command -v wget >/dev/null 2>&1; then
+            wget --no-check-certificate -q "$arm32_url" -O "$tarball"
         fi
         
-        if [ -f "$tarball" ]; then
-            tar -xjf "$tarball" -C /tmp/
-            cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/lib/* "${target_dir}/lib/"
-            cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/include/* "${target_dir}/include/" 2>/dev/null || true
-            
-            cd "${target_dir}/lib"
-            local lib_so
-            lib_so=$(find . -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
-            if [ -n "$lib_so" ]; then
-                ln -sf "$lib_so" libonnxruntime.so
+        if [ -f "$tarball" ] && [ -s "$tarball" ]; then
+            tar -xf "$tarball" -C /tmp/ 2>/dev/null || tar -xjf "$tarball" -C /tmp/
+            if [ -d "/tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared" ]; then
+                cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/lib/* "${target_dir}/lib/" 2>/dev/null || true
+                cp -r /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared/include/* "${target_dir}/include/" 2>/dev/null || true
+                
+                cd "${target_dir}/lib"
+                local lib_so
+                lib_so=$(find . -name "libonnxruntime.so*" 2>/dev/null | head -n 1)
+                if [ -n "$lib_so" ]; then
+                    ln -sf "$lib_so" libonnxruntime.so
+                fi
+                cd "${SCRIPT_DIR}"
+                
+                rm -rf "$tarball" /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared
+                echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
+                return 0
             fi
-            cd "${SCRIPT_DIR}"
-            
-            rm -rf "$tarball" /tmp/sherpa-onnx-v1.12.1-linux-arm-gnueabihf-shared
-            echo -e "${COLOR_SUCCESS}[SUCCESS] Native 32-bit ARM C++ ONNX Runtime library configured at ${target_dir}.${COLOR_RESET}"
-            return 0
         fi
+        echo -e "${COLOR_DANGER}[ERROR] Failed to download or extract 32-bit ARM C++ ONNX Runtime library from HuggingFace.${COLOR_RESET}" >&2
+        return 1
     fi
 
     echo -e "${COLOR_INFO}[*] Downloading ONNX Runtime C++ prebuilt binaries (${onnx_arch})...${COLOR_RESET}"
