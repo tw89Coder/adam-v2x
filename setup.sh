@@ -277,6 +277,11 @@ setup_python_venv() {
         echo -e "${COLOR_INFO}[*] Applying Python requirements from ${active_req}...${COLOR_RESET}"
         "$venv_dir/bin/pip" install --upgrade pip
         "$venv_dir/bin/pip" install -r "$active_req"
+        
+        if [ "$dpkg_arch" = "armhf" ] || [ "$(uname -m)" = "armv7l" ]; then
+            echo -e "${COLOR_INFO}[*] Installing 32-bit ARM prebuilt onnxruntime wheel for Raspberry Pi Bullseye...${COLOR_RESET}"
+            "$venv_dir/bin/pip" install https://github.com/nknytk/built-onnxruntime-for-raspberrypi-linux/raw/master/wheels/bullseye/onnxruntime-1.16.0-cp39-cp39-linux_armv7l.whl || true
+        fi
         log_success "Python requirements successfully applied."
     else
         log_warning "Requirements file not found at ${active_req}. Skipping package installation."
