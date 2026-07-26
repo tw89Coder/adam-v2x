@@ -169,11 +169,16 @@ class QoSPlotter(BasePlotter):
         
         suffix = "_onnx" if self.use_onnx else "_filtered"
 
-        df_b    = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv') or self._resolve_dataframe('unpatched', 'qos_baseline.csv')
+        df_b = self._resolve_dataframe('unpatched', 'qos_attack_0.0_mode0.csv')
+        if df_b is None or df_b.empty:
+            df_b = self._resolve_dataframe('unpatched', 'qos_baseline.csv')
+
         df_un   = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
         df_unf  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
-        df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_full100.csv') or \
-                   self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_static100.csv')
+
+        df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_full100.csv')
+        if df_full is None or df_full.empty:
+            df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_static100.csv')
         df_p    = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}.csv')
         df_pf   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
