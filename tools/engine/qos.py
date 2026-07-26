@@ -158,17 +158,20 @@ class QoSPlotter(BasePlotter):
                         cpu_s = "N/A"
                         ram_mb = "N/A"
                         if transport_df is not None and not transport_df.empty:
-                            match = transport_df[
-                                (transport_df['mode'] == mode) & 
-                                (np.isclose(transport_df['rate'], rate)) & 
-                                (transport_df['filter_mode'] == f_mode)
-                            ]
-                            if not match.empty:
-                                row = match.iloc[-1]
-                                if 'cpu_time_sec' in row and pd.notnull(row['cpu_time_sec']):
-                                    cpu_s = round(float(row['cpu_time_sec']), 4)
-                                if 'peak_rss_kb' in row and pd.notnull(row['peak_rss_kb']):
-                                    ram_mb = round(float(row['peak_rss_kb']) / 1024.0, 2)
+                            try:
+                                match = transport_df[
+                                    (transport_df['mode'].astype(int) == int(mode)) & 
+                                    (np.isclose(transport_df['rate'].astype(float), float(rate))) & 
+                                    (transport_df['filter_mode'].astype(int) == int(f_mode))
+                                ]
+                                if not match.empty:
+                                    row = match.iloc[-1]
+                                    if 'cpu_time_sec' in row and pd.notnull(row['cpu_time_sec']):
+                                        cpu_s = round(float(row['cpu_time_sec']), 4)
+                                    if 'peak_rss_kb' in row and pd.notnull(row['peak_rss_kb']):
+                                        ram_mb = round(float(row['peak_rss_kb']) / 1024.0, 2)
+                            except Exception:
+                                pass
                         
                         matrix_rows.append({
                             "Scenario": f"{label} | M{mode} | {rate}%", "Env": env, "Mode": f"mode{mode}", "Rate": rate, **res,
