@@ -133,7 +133,28 @@ class QoSPlotter(BasePlotter):
             
         base_stats = self._compute_stats(df_base, is_filtered=False)
         if base_stats:
-            matrix_rows.append({"Scenario": "Baseline Optimal", "Env": "unpatched", "Mode": "N/A", "Rate": 0.0, **base_stats, "CPU_Time_s": "N/A", "Peak_RAM_MB": "N/A"})
+            cpu_s = "N/A"
+            ram_mb = "N/A"
+            if transport_df is not None and not transport_df.empty:
+                try:
+                    match = transport_df[
+                        (transport_df['mode'].astype(int) == 0) & 
+                        (np.isclose(transport_df['rate'].astype(float), 0.0)) & 
+                        (transport_df['filter_mode'].astype(int) == 0)
+                    ]
+                    if not match.empty:
+                        row = match.iloc[-1]
+                        if 'cpu_time_sec' in row and pd.notnull(row['cpu_time_sec']):
+                            cpu_s = round(float(row['cpu_time_sec']), 4)
+                        if 'peak_rss_kb' in row and pd.notnull(row['peak_rss_kb']):
+                            ram_mb = round(float(row['peak_rss_kb']) / 1024.0, 2)
+                except Exception:
+                    pass
+
+            matrix_rows.append({
+                "Scenario": "Baseline Optimal", "Env": "unpatched", "Mode": "N/A", "Rate": 0.0, **base_stats,
+                "CPU_Time_s": cpu_s, "Peak_RAM_MB": ram_mb
+            })
         else:
             LogStyle.log_warn("Target baseline verification data framework unavailable. Evaluation skipped.")
 
