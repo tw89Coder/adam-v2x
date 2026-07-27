@@ -353,29 +353,32 @@ To quantify the vulnerability, we profiled the unpatched parser under MTU-constr
 
 Under these workloads, our deployed pre-filter successfully isolates malicious structural concentration from benign structural padding. By rejecting payloads that violate the theoretical entropy--depth bound, the filter maintains a 0.00\% False Positive Rate (FPR) across all clean test sets while enforcing $\mathcal{O}(1)$ execution boundaries, thereby preempting the inflation of $E[S^2]$.
 
-\begin{table}[t]
-\caption{System-Wide QoS Comparison for Unpatched Parser under Multi-Scale Attack Rates (in ms)}
+\subsection{Tail Latency Mitigation}
+Our $\mathcal{O}(1)$ data plane successfully neutralizes QoS degradation. As shown in Table \ref{tab:master}, under a 10.0\% attack, the unpatched parser's P99 latency deteriorates to 2.0339 ms. The pre-filter compresses this to 0.0804 ms (96.0\% reduction), while reducing total receiver CPU time from 124.57 s to 66.69 s (46.5\% CPU workload savings), restoring near-pristine performance (Fig. \ref{fig:master_comparison}).
+
+\begin{table}[htbp]
+\caption{System-Wide QoS and Hardware Overhead under Multi-Scale Attack Rates}
 \label{tab:master}
 \centering
 \footnotesize
-\setlength{\tabcolsep}{4.5pt}
-\begin{tabular}{@{}p{1.8cm}rrrrr@{}}
+\setlength{\tabcolsep}{1.4pt}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Scenario} & \textbf{Mean} & \textbf{Median} & \textbf{P99} & \textbf{P99.9} & \textbf{Max} \\
+\textbf{Scenario} & \textbf{Mean(ms)} & \textbf{P99(ms)} & \textbf{P99.9(ms)} & \textbf{CPU(s)} & \textbf{RAM(MB)} \\
 \midrule
-Baseline & 0.0015 & 0.0013 & 0.0025 & 0.0133 & 0.3060 \\
+Baseline & 0.035 & 0.057 & 0.103 & 56.4 & 33.9 \\
 \midrule
 \multicolumn{6}{l}{\textbf{1.0\% Attack Rate}} \\
-Native & 0.0034 & 0.0014 & 0.0698 & 0.2254 & 2.2817 \\
-Pre-filter & 0.0024 & 0.0022 & 0.0041 & 0.0300 & 4.0475 \\
+Native & 0.085 & 1.503 & 3.482 & 74.9 & 34.3 \\
+Pre-filter & 0.045 & 0.075 & 0.126 & 67.4 & 44.6 \\
 \midrule
 \multicolumn{6}{l}{\textbf{5.0\% Attack Rate}} \\
-Native & 0.0110 & 0.0015 & 0.2033 & 0.2979 & 1.4132 \\
-Pre-filter & 0.0023 & 0.0021 & 0.0038 & 0.0170 & 0.8743 \\
+Native & 0.172 & 2.552 & 3.752 & 97.8 & 34.2 \\
+Pre-filter & 0.047 & 0.078 & 0.137 & 67.0 & 44.6 \\
 \midrule
 \multicolumn{6}{l}{\textbf{10.0\% Attack Rate}} \\
-Native & 0.0210 & 0.0016 & 0.2229 & 0.3473 & 0.8167 \\
-Pre-filter & 0.0022 & 0.0020 & 0.0035 & 0.0159 & 4.0452 \\
+Native & 0.230 & 2.034 & 3.376 & 124.6 & 34.2 \\
+Pre-filter & 0.047 & 0.080 & 0.127 & 66.7 & 44.6 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -393,15 +396,12 @@ Pre-filter & 0.0022 & 0.0020 & 0.0035 & 0.0159 & 4.0452 \\
 \label{fig:master_comparison}
 \end{figure}
 
-\subsection{Tail Latency Mitigation}
-Our $\mathcal{O}(1)$ data plane successfully neutralizes QoS degradation. As shown in Table \ref{tab:master}, under a 10.0\% attack, the unpatched parser's P99 latency deteriorates to 0.2229 ms. The pre-filter compresses this to 0.0035 ms (98.4\% reduction), restoring near-pristine performance (Fig. \ref{fig:master_comparison}).
-
 \subsection{Adaptive Shedding \& Dynamic State Timelines}
 To validate the learning behavior, the cognitive DRL agent was trained offline using the co-simulation twin environment. Under the Lagrangian reward formulation, the agent achieves stable convergence within 1,200 training episodes, establishing a robust control policy without runtime instability. To evaluate runtime attack mitigation under this optimized policy, we trace the latency timelines under Mode 1 (single pulse) and Mode 2 (periodic pulsing) attacks. 
 
-As shown in Fig. \ref{fig:recovery_timelines}a, under a severe Mode 1 attack (active between packet IDs $3.0 \times 10^4$ and $5.0 \times 10^4$), the native unpatched latency (red line) immediately saturates the queue (exceeding 0.45 ms). Conversely, our filter (blue line) detects the threat and drains the virtual budget within 10 packets, locking the FSM into $S_2$ (100\% inspection) and suppressing the latency spike back to the baseline ($\approx 0.002$ ms).
+As shown in Fig. \ref{fig:recovery_timelines}a, under a severe Mode 1 attack (active between packet IDs $3.0 \times 10^5$ and $5.0 \times 10^5$), the native unpatched latency (red line) immediately saturates the queue (exceeding 0.45 ms). Conversely, our filter (blue line) detects the threat and drains the virtual budget within 10 packets, locking the FSM into $S_2$ (100\% inspection) and suppressing the latency spike back to the baseline ($\approx 0.04$ ms).
 
-For periodic flapping in Mode 2 (Fig. \ref{fig:recovery_timelines}b), the native parser's smoothed latency (red curve) exhibits severe oscillations corresponding to the alternating 100k-packet attack windows, peaking at 0.35 ms. In contrast, our filter (blue curve) maintains a flat latency profile at the baseline ($\approx 0.002$ ms) across all $1.0 \times 10^6$ packets. This stability is enforced by the FSM's hysteresis-based recovery, which mandates a clean streak of 1,000 packets before restoring the lower sampling policy, preventing oscillation exploits and bounding the transient "first-miss penalty" spikes.
+For periodic flapping in Mode 2 (Fig. \ref{fig:recovery_timelines}b), the native parser's smoothed latency (red curve) exhibits severe oscillations corresponding to the alternating 100k-packet attack windows, peaking at 1.50 ms. In contrast, our filter (blue curve) maintains a flat latency profile at the baseline ($\approx 0.04$ ms) across all $1.0 \times 10^6$ packets. This stability is enforced by the FSM's hysteresis-based recovery, which mandates a clean streak of 1,000 packets before restoring the lower sampling policy, preventing oscillation exploits and bounding the transient "first-miss penalty" spikes.
 
 \begin{figure}[htbp]
     \centering
@@ -432,54 +432,54 @@ For periodic flapping in Mode 2 (Fig. \ref{fig:recovery_timelines}b), the native
 \midrule
 \textbf{Mode 0 (Continuous)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 21.9802 & 0.9394 & 0.0914 & 0.0422 & 0.0110 \\
+~~FNR (\%) & 20.3441 & 0.5185 & 0.0899 & 0.0000 & 0.0000 \\
 \midrule
 \textbf{Mode 1 (Pulse)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 25.5507 & 0.4098 & 0.7626 & 0.0100 & 0.0150 \\
+~~FNR (\%) & 7.1942 & 0.1511 & 0.6596 & 0.0203 & 0.0173 \\
 \midrule
 \textbf{Mode 2 (Periodic)} & & & & & \\
 ~~FPR (\%) & 0.0000 & 0.0000 & 0.0000 & 0.0000 & 0.0000 \\
-~~FNR (\%) & 22.4490 & 0.9860 & 0.3076 & 0.0241 & 0.0120 \\
+~~FNR (\%) & 16.9860 & 0.3223 & 0.0815 & 0.0374 & 0.0240 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The accuracy profile (Table~\ref{tab:fpr_fnr}) reveals an intrinsic systems-security tradeoff. Under high-intensity workloads, the filter enforces a strict FNR boundary ($\le 0.05\%$). In extremely sparse scenarios (0.1\%), FNR mathematically elevates (to $\sim22\%$). This variance is an intentional, cost-effective tradeoff: actively tolerating minor leakages protects edge CPU resources from continuous inspection fatigue during low-threat windows.
+The accuracy profile (Table~\ref{tab:fpr_fnr}) reveals an intrinsic systems-security tradeoff. Under high-intensity workloads, the filter enforces a strict FNR boundary ($\le 0.09\%$). In extremely sparse scenarios (0.1\%), FNR mathematically elevates (to $\sim17\%$--$20\%$). This variance is an intentional, cost-effective tradeoff: actively tolerating minor leakages protects edge CPU resources from continuous inspection fatigue during low-threat windows.
 
 \subsection{Control Plane Ablation Study}
 
 To isolate the contribution of the asynchronous control plane, we propose a lightweight ablation study evaluating three resource allocation configurations. The objective is to empirically demonstrate the trade-off between baseline CPU overhead and dynamic attack recovery, without blocking deterministic data-plane execution.
 
 \begin{table}[ht]
-\caption{Ablation Study of Model Components under Sparse and Heavy Threats (Mode 2 Periodic Attacks)}
+\caption{Ablation Study under Sparse (0.1\%) and Heavy (10.0\%) Attacks (Mode 2)}
 \label{tab:ablation}
 \centering
 \footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}p{2.2cm}rrrr@{}}
+\setlength{\tabcolsep}{1.2pt}
+\begin{tabular}{@{}lrrrrrr@{}}
 \toprule
-\textbf{Config.} & \textbf{P99(ms)} & \textbf{Samp.} & \textbf{FNR} & \textbf{Cost} \\
+\textbf{Config.} & \textbf{P99(ms)} & \textbf{P99.9(ms)} & \textbf{Samp.\%} & \textbf{FNR\%} & \textbf{CPU(s)} & \textbf{RAM(MB)} \\
 \midrule
-\multicolumn{5}{c}{\textbf{Sparse Threat (0.1\% Algorithmic Workload Ratio)}} \\
+\multicolumn{7}{c}{\textbf{Sparse Threat (0.1\% Attack Rate)}} \\
 \midrule
-Static (100\%) & 0.0028 & 100.00\% & 0.00\% & - \\
-FSM Only & 0.0034 & 17.22\% & 74.29\% & 43MB / - \\
-FSM + DQN & 0.0041 & 63.28\% & 22.45\% & 58MB / 0.07ms \\
+Static (100\%) & 0.078 & 0.110 & 100.0 & 0.00 & 71.8 & 33.9 \\
+FSM Only & 0.070 & 1.199 & 20.5 & 71.37 & 64.6 & 34.4 \\
+FSM + DQN & 0.073 & 0.143 & 65.9 & 16.99 & 63.9 & 44.5 \\
 \midrule
-\multicolumn{5}{c}{\textbf{Heavy Threat (10.0\% Algorithmic Workload Ratio)}} \\
+\multicolumn{7}{c}{\textbf{Heavy Threat (10.0\% Attack Rate)}} \\
 \midrule
-Static (100\%) & 0.2235 & 100.00\% & 0.00\% & - \\
-FSM Only & 0.0036 & 55.36\% & 0.06\% & 43MB / - \\
-FSM + DQN & 0.0042 & 75.71\% & 0.01\% & 58MB / 0.07ms \\
+Static (100\%) & 0.081 & 0.107 & 100.0 & 0.00 & 73.0 & 33.9 \\
+FSM Only & 0.073 & 0.123 & 55.6 & 0.05 & 60.9 & 34.4 \\
+FSM + DQN & 0.077 & 0.133 & 74.1 & 0.02 & 66.8 & 44.8 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:ablation} highlights the necessity of the RL-driven control plane. Under sparse threats (0.1\%), FSM-Only blindly drops inspections, yielding a 74.29\% FNR. Conversely, FSM+DQN prioritizes security, maintaining 63.28\% sampling to suppress FNR to 22.45\% with negligible overhead (0.03ms). Under heavy floods (10.0\%), the Static baseline collapses to a 0.2235~ms P99 latency. Notably, because our workload uses stealthy 400-byte payloads, this 0.2235~ms is a conservative lower-bound; scaling to the 1,400-byte MTU limit would exponentially amplify unpatched latency into tens of milliseconds. Both filtered approaches successfully cap P99 latency below 0.005~ms, proving the $\mathcal{O}(1)$ architecture's robust adaptation scales asymptotically with payload size.
+Table~\ref{tab:ablation} highlights the necessity of the RL-driven control plane. Under sparse threats (0.1\%), FSM-Only blindly drops inspections, yielding a 71.37\% FNR. Conversely, FSM+DQN prioritizes security, maintaining 65.87\% sampling to suppress FNR to 16.99\% with lower total CPU cost (63.9s vs 64.6s). Under heavy floods (10.0\%), the Unpatched Native baseline suffers queue breakdown with a 2.1520~ms P99 latency and 109.1s CPU time. Static (100\%) inspection caps P99 latency at 0.0807~ms but incurs a 73.0s CPU penalty. FSM+DQN achieves near-zero FNR (0.02\%) while capping P99 latency at 0.0765~ms and reducing CPU time to 66.8s (a 6.2s CPU savings over Static 100\%), proving the $\mathcal{O}(1)$ architecture's robust adaptation.
 
 \section{Conclusion}
-We propose an ultra-lightweight, $\mathcal{O}(1)$ streaming detector for recursive parser amplification on resource-constrained edge systems. By formalizing the entropy--depth tradeoff under physical MTU limits, we demonstrate that structural concentration is fundamentally unavoidable for recursive exploits. Our architecture decouples a fast-path $F_2$ data plane filter from a slow-path DRL sampling optimizer. This prevents CPU exhaustion during severe floods (reducing P99 latency from 0.2229 ms to 0.0035 ms) while minimizing inspection fatigue during sparse threats. As this structural vulnerability extends to industrial protocols like IEC 61850 GOOSE \cite{IEC61850_Goose_L2, noauthor_abstracts_2020}, our adaptive defense mechanism offers broad applicability for preserving real-time QoS in critical infrastructure.
+We propose an ultra-lightweight, $\mathcal{O}(1)$ streaming detector for recursive parser amplification on resource-constrained edge systems. By formalizing the entropy--depth tradeoff under physical MTU limits, we demonstrate that structural concentration is fundamentally unavoidable for recursive exploits. Our architecture decouples a fast-path $F_2$ data plane filter from a slow-path DRL sampling optimizer. This prevents CPU exhaustion during severe floods (reducing P99 latency from 2.0339 ms to 0.0804 ms, and CPU workload from 124.57 s to 66.69 s) while minimizing inspection fatigue during sparse threats. As this structural vulnerability extends to industrial protocols like IEC 61850 GOOSE \cite{IEC61850_Goose_L2, noauthor_abstracts_2020}, our adaptive defense mechanism offers broad applicability for preserving real-time QoS in critical infrastructure.
 
 \bibliographystyle{ieeetr}
 \bibliography{IEEEabrv, refs}
