@@ -9,18 +9,12 @@ import matplotlib.pyplot as plt
 from engine.base import BasePlotter
 from engine.logger import LogStyle
 
-def _detect_jitter_threshold():
-    arch = platform.machine().lower()
-    if "arm" in arch or "aarch" in arch or struct.calcsize("P") == 4:
-        return 50.0  # Edge / ARM architecture (e.g. Raspberry Pi)
-    return 5.0      # x86_64 PC / Laptop architecture
-
 class QoSPlotter(BasePlotter):
     """
     Evaluates multi-scenario Quality of Service indicators, processes false positive
     bounds, compiles comparative performance summaries, and renders execution timelines.
     """
-    JITTER_THRESHOLD_MS = _detect_jitter_threshold()
+    JITTER_THRESHOLD_MS = 50.0  # Fixed threshold matching Raspberry Pi hardware testbed dataset
     WARMUP = 100
     MODES = [0, 1, 2]
     RATES = [1.0, 5.0, 10.0]
@@ -309,9 +303,10 @@ class QoSPlotter(BasePlotter):
                 p99 = df['latency_ms'].quantile(0.99)
                 ax2.plot([p99, p99], [0, 0.99], color=color, linestyle=ls, linewidth=1.2, alpha=0.7)
                 
-                # Prevent text collisions on the log scale by distributing y-coordinates dynamically
-                y_pos = 0.15 + idx * 0.12
-                if label == "Baseline":
+                # Distribute y-coordinates in middle/upper region (y=0.45+) to prevent collision with lower-right legend box
+                y_pos = 0.45 + idx * 0.12
+                # If this is the rightmost line (or p99 > 1.0ms), place text to the left of the line
+                if label == "Baseline" or p99 > 1.0:
                     ax2.text(p99 / 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='right', va='center')
                 else:
                     ax2.text(p99 * 1.12, y_pos, f'{p99:.3f} ms', color=color, fontsize=8.0, ha='left', va='center')
@@ -327,7 +322,7 @@ class QoSPlotter(BasePlotter):
             min_val = np.percentile(all_lats, 0.1)
             max_val = np.percentile(all_lats, 99.9)
             x_min = max(1e-3, min_val * 0.7)
-            x_max = max(5.0, max_val * 1.5)
+            x_max = max(8.0, max_val * 2.5)
             ax2.set_xlim(x_min, x_max)
         else:
             ax2.set_xlim(1e-2, 10.0)
@@ -372,8 +367,10 @@ class QoSPlotter(BasePlotter):
         ax.plot(df_fil_zoom['packet_id'], df_fil_zoom['latency_ms'], 
                 label=filter_label, color='#1f77b4', linewidth=1.2, alpha=0.9)
 
-        ax.axvspan(start_attack, end_attack, color='gray', alpha=0.2, label='Pulse Attack Window')
-        ax.set_ylim(0, 0.45) 
+        import math
+        raw_p999_pulse = df_nat_zoom['latency_ms'].quantile(0.999)
+        y_limit_pulse = float(math.ceil(raw_p999_pulse)) if raw_p999_pulse >= 1.0 else (math.ceil(raw_p999_pulse * 10.0) / 10.0)
+        ax.set_ylim(0, max(0.45, y_limit_pulse)) 
         ax.set_xlim(window_start, window_end)
         ax.set_xlabel('Packet ID (Chronological Order)')
         ax.set_ylabel('Processing Latency (ms)')
@@ -422,9 +419,11 @@ class QoSPlotter(BasePlotter):
                 else:
                     ax.axvspan(lower_bound, upper_bound, color='gray', alpha=0.2)
 
-        # Cap Y-axis dynamically at P99.9 to filter extreme OS outliers without squashing timeline
-        max_p999 = max(df_filter['smoothed_latency'].quantile(0.999), df_native['smoothed_latency'].quantile(0.999))
-        ax.set_ylim(0, max(0.15, max_p999 * 1.15))
+        import math
+        # Dynamically set Y-axis limit using math.ceil on Native raw P99.9 quantile (rounded up for clean padding)
+        raw_p999 = df_native['latency_ms'].quantile(0.999)
+        y_limit = float(math.ceil(raw_p999)) if raw_p999 >= 1.0 else (math.ceil(raw_p999 * 10.0) / 10.0)
+        ax.set_ylim(0, max(0.45, y_limit))
         ax.set_xlim(0, total_packet_indices)
         ax.set_xlabel('Packet ID (Chronological Order)')
         ax.set_ylabel('Processing Latency (ms)')
