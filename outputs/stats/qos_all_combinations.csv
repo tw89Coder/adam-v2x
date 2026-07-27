@@ -1,49 +1,26 @@
-Scenario,Env,Mode,Rate,Mean_ms,Median_ms,P99_ms,P99.9_ms,Max_ms,FPR_%,FNR_%
-Baseline Optimal,unpatched,N/A,0.0,0.0015,0.0013,0.0025,0.0133,0.306,N/A,N/A
-Unpatched Native | M0 | 0.1%,unpatched,mode0,0.1,0.0017,0.0014,0.0028,0.1609,0.675,N/A,N/A
-Unpatched Filtered | M0 | 0.1%,unpatched,mode0,0.1,0.0023,0.0021,0.0038,0.0305,4.0453,0.0,4.2574
-Unpatched Native | M0 | 0.2%,unpatched,mode0,0.2,0.0148,0.0157,0.0493,0.1592,2.708,N/A,N/A
-Unpatched Filtered | M0 | 0.2%,unpatched,mode0,0.2,0.0198,0.018,0.0505,0.1668,4.7015,0.0,2.151
-Unpatched Native | M0 | 0.5%,unpatched,mode0,0.5,0.0023,0.0013,0.0029,0.2065,1.7613,N/A,N/A
-Unpatched Filtered | M0 | 0.5%,unpatched,mode0,0.5,0.0023,0.0022,0.0036,0.0151,0.8092,0.0,0.1021
-Unpatched Native | M0 | 0.8%,unpatched,mode0,0.8,0.017,0.0156,0.0415,0.1556,1.2894,N/A,N/A
-Unpatched Filtered | M0 | 0.8%,unpatched,mode0,0.8,0.0167,0.0178,0.0496,0.1696,3.5603,0.0,0.0536
-Unpatched Native | M0 | 1.0%,unpatched,mode0,1.0,0.0034,0.0014,0.0698,0.2254,2.2817,N/A,N/A
-Unpatched Filtered | M0 | 1.0%,unpatched,mode0,1.0,0.0024,0.0022,0.0041,0.03,4.0475,0.0,0.0
-Unpatched Native | M0 | 5.0%,unpatched,mode0,5.0,0.011,0.0015,0.2033,0.2979,1.4132,N/A,N/A
-Unpatched Filtered | M0 | 5.0%,unpatched,mode0,5.0,0.0023,0.0021,0.0038,0.017,0.8743,0.0,0.0
-Unpatched Native | M0 | 10.0%,unpatched,mode0,10.0,0.021,0.0016,0.2229,0.3473,0.8167,N/A,N/A
-Unpatched Filtered | M0 | 10.0%,unpatched,mode0,10.0,0.0022,0.002,0.0035,0.0159,4.0452,0.0,0.0
-Unpatched Native | M1 | 0.1%,unpatched,mode1,0.1,0.0015,0.0013,0.0026,0.019,0.3967,N/A,N/A
-Unpatched Filtered | M1 | 0.1%,unpatched,mode1,0.1,0.0021,0.0021,0.0035,0.0181,4.0601,0.0,3.0837
-Unpatched Native | M1 | 0.2%,unpatched,mode1,0.2,0.0126,0.0144,0.0326,0.1472,2.9422,N/A,N/A
-Unpatched Filtered | M1 | 0.2%,unpatched,mode1,0.2,0.0177,0.0165,0.0376,0.1558,2.1024,0.0,2.549
-Unpatched Native | M1 | 0.5%,unpatched,mode1,0.5,0.0017,0.0014,0.0026,0.1493,0.5672,N/A,N/A
-Unpatched Filtered | M1 | 0.5%,unpatched,mode1,0.5,0.0019,0.0019,0.0035,0.0213,4.028,0.0,0.8197
-Unpatched Native | M1 | 0.8%,unpatched,mode1,0.8,0.0125,0.0144,0.0306,0.1411,1.8196,N/A,N/A
-Unpatched Filtered | M1 | 0.8%,unpatched,mode1,0.8,0.0176,0.0165,0.0353,0.1461,2.0182,0.0,0.0
-Unpatched Native | M1 | 1.0%,unpatched,mode1,1.0,0.0018,0.0013,0.0026,0.1872,0.735,N/A,N/A
-Unpatched Filtered | M1 | 1.0%,unpatched,mode1,1.0,0.002,0.0019,0.0035,0.0226,4.0811,0.0,0.1017
-Unpatched Native | M1 | 5.0%,unpatched,mode1,5.0,0.0034,0.0014,0.1418,0.2223,0.7196,N/A,N/A
-Unpatched Filtered | M1 | 5.0%,unpatched,mode1,5.0,0.002,0.002,0.0034,0.0208,4.0462,0.0,0.3
-Unpatched Native | M1 | 10.0%,unpatched,mode1,10.0,0.0053,0.0013,0.1865,0.2617,2.496,N/A,N/A
-Unpatched Filtered | M1 | 10.0%,unpatched,mode1,10.0,0.002,0.002,0.0033,0.0243,0.3928,0.0,0.0849
-Unpatched Native | M2 | 0.1%,unpatched,mode2,0.1,0.0016,0.0014,0.0025,0.0428,0.6629,N/A,N/A
-Unpatched Filtered | M2 | 0.1%,unpatched,mode2,0.1,0.0021,0.002,0.0035,0.0288,4.0674,0.0,5.7143
-Unpatched Native | M2 | 0.2%,unpatched,mode2,0.2,0.0127,0.0145,0.0321,0.1418,1.4492,N/A,N/A
-Unpatched Filtered | M2 | 0.2%,unpatched,mode2,0.2,0.0175,0.0164,0.0352,0.1565,3.5839,0.0,1.0501
-Unpatched Native | M2 | 0.5%,unpatched,mode2,0.5,0.0019,0.0013,0.0026,0.1925,0.773,N/A,N/A
-Unpatched Filtered | M2 | 0.5%,unpatched,mode2,0.5,0.0022,0.0021,0.0035,0.0309,0.4953,0.0,0.7806
-Unpatched Native | M2 | 0.8%,unpatched,mode2,0.8,0.0125,0.0144,0.0303,0.1417,2.3522,N/A,N/A
-Unpatched Filtered | M2 | 0.8%,unpatched,mode2,0.8,0.0174,0.0163,0.0339,0.1521,2.4428,0.0,0.0534
-Unpatched Native | M2 | 1.0%,unpatched,mode2,1.0,0.0026,0.0014,0.0037,0.2296,1.4817,N/A,N/A
-Unpatched Filtered | M2 | 1.0%,unpatched,mode2,1.0,0.0022,0.0021,0.0036,0.0332,4.0681,0.0,0.0205
-Unpatched Native | M2 | 5.0%,unpatched,mode2,5.0,0.0064,0.0014,0.1921,0.2741,0.7323,N/A,N/A
-Unpatched Filtered | M2 | 5.0%,unpatched,mode2,5.0,0.0021,0.0021,0.0035,0.0208,0.59,0.0,0.0562
-Unpatched Native | M2 | 10.0%,unpatched,mode2,10.0,0.0114,0.0015,0.2105,0.3189,0.9142,N/A,N/A
-Unpatched Filtered | M2 | 10.0%,unpatched,mode2,10.0,0.0021,0.0021,0.0036,0.0171,0.6096,0.0,0.018
-Unpatched Filtered | M3 | 0.1%,unpatched,mode3,0.1,0.0175,0.0164,0.0346,0.1316,0.4863,0.0,4.7714
-Unpatched Filtered | M3 | 0.5%,unpatched,mode3,0.5,0.0168,0.0159,0.0326,0.1349,4.5836,0.0,0.9963
-Unpatched Filtered | M3 | 5.0%,unpatched,mode3,5.0,0.0172,0.016,0.0338,0.137,0.6943,0.0,0.0
-Unpatched Native | M3 | 10.0%,unpatched,mode3,10.0,0.0115,0.0014,0.2144,0.3186,0.7951,N/A,N/A
-Unpatched Filtered | M3 | 10.0%,unpatched,mode3,10.0,0.0023,0.0023,0.0039,0.0235,0.3062,0.0,0.032
+Scenario,Env,Mode,Rate,Mean_ms,Median_ms,P99_ms,P99.9_ms,Max_ms,FPR_%,FNR_%,CPU_Time_s,Peak_RAM_MB
+Baseline Optimal,unpatched,N/A,0.0,0.0345,0.0367,0.0572,0.1034,28.3658,N/A,N/A,56.3685,33.92
+ADAM Filtered (ONNX) | M0 | 0.1%,unpatched,mode0,0.1,0.0437,0.0335,0.0744,0.2825,30.4954,0.0,20.3441,65.1811,44.3
+ADAM Filtered (ONNX) | M0 | 0.5%,unpatched,mode0,0.5,0.0452,0.0385,0.0753,0.135,26.4163,0.0,0.5185,66.9486,44.6
+Unpatched Native | M0 | 1.0%,unpatched,mode0,1.0,0.0847,0.0372,1.5025,3.4819,35.6801,N/A,N/A,74.8655,34.32
+ADAM Filtered (ONNX) | M0 | 1.0%,unpatched,mode0,1.0,0.0451,0.0486,0.0754,0.1259,27.0477,0.0,0.0899,67.4104,44.6
+Unpatched Native | M0 | 5.0%,unpatched,mode0,5.0,0.172,0.0229,2.5524,3.7516,26.1858,N/A,N/A,97.7645,34.16
+ADAM Filtered (ONNX) | M0 | 5.0%,unpatched,mode0,5.0,0.0473,0.0491,0.0776,0.1372,25.9213,0.0,0.0,67.033,44.6
+Unpatched Native | M0 | 10.0%,unpatched,mode0,10.0,0.2295,0.0217,2.0339,3.376,27.5506,N/A,N/A,124.574,34.16
+ADAM Filtered (ONNX) | M0 | 10.0%,unpatched,mode0,10.0,0.0469,0.0491,0.0804,0.127,29.9696,0.0,0.0,66.6932,44.6
+ADAM Filtered (ONNX) | M1 | 0.1%,unpatched,mode1,0.1,0.0413,0.0386,0.0717,0.1258,25.2083,0.0,7.1942,64.1641,44.31
+ADAM Filtered (ONNX) | M1 | 0.5%,unpatched,mode1,0.5,0.0435,0.04,0.0722,0.1243,25.863,0.0,0.1511,66.8661,44.77
+ADAM Filtered (ONNX) | M1 | 1.0%,unpatched,mode1,1.0,0.0424,0.04,0.0713,0.1264,25.097,0.0,0.6596,66.556,44.77
+ADAM Filtered (ONNX) | M1 | 5.0%,unpatched,mode1,5.0,0.0439,0.0404,0.0731,0.1253,33.8892,0.0,0.0203,67.1893,44.77
+Unpatched Native | M1 | 10.0%,unpatched,mode1,10.0,0.138,0.0368,2.0849,3.6891,30.4416,N/A,N/A,86.453,34.17
+ADAM Filtered (ONNX) | M1 | 10.0%,unpatched,mode1,10.0,0.0428,0.0411,0.0734,0.1152,21.4656,0.0,0.0173,67.0906,44.77
+ADAM Filtered (ONNX) | M2 | 0.1%,unpatched,mode2,0.1,0.0418,0.0371,0.0732,0.1427,30.5616,0.0,16.986,63.8889,44.46
+Adaptive Filtered (FSM) | M2 | 0.1%,unpatched,mode2,0.1,0.0427,0.0394,0.0702,1.1991,23.8924,0.0,71.3725,64.583,34.38
+Static 100% Inspection | M2 | 0.1%,unpatched,mode2,0.1,0.0487,0.0546,0.0776,0.1101,24.3939,0.0,0.0,71.8386,33.92
+ADAM Filtered (ONNX) | M2 | 0.5%,unpatched,mode2,0.5,0.0435,0.0406,0.0747,0.1243,23.0782,0.0,0.3223,66.9366,44.77
+ADAM Filtered (ONNX) | M2 | 1.0%,unpatched,mode2,1.0,0.0419,0.0337,0.0738,0.1264,23.9303,0.0,0.0815,63.0682,44.6
+ADAM Filtered (ONNX) | M2 | 5.0%,unpatched,mode2,5.0,0.0461,0.0399,0.0767,0.1417,38.6247,0.0,0.0374,65.5458,44.6
+Unpatched Native | M2 | 10.0%,unpatched,mode2,10.0,0.2014,0.0226,2.152,4.0321,31.5165,N/A,N/A,109.13,34.17
+ADAM Filtered (ONNX) | M2 | 10.0%,unpatched,mode2,10.0,0.046,0.0413,0.0765,0.133,33.729,0.0,0.024,66.8433,44.77
+Adaptive Filtered (FSM) | M2 | 10.0%,unpatched,mode2,10.0,0.0413,0.0377,0.0726,0.1228,34.4077,0.0,0.0533,60.867,34.38
+Static 100% Inspection | M2 | 10.0%,unpatched,mode2,10.0,0.0513,0.0564,0.0807,0.1072,23.8374,0.0,0.0,72.9577,33.92
