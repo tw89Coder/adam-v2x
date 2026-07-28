@@ -156,6 +156,7 @@ class QoSPlotter(BasePlotter):
             for rate in self.RATES:
                 scenarios = [
                     ('unpatched', f'qos_attack_{rate}_mode{mode}.csv',          'Unpatched Native',         False, 0),
+                    ('unpatched', f'qos_attack_{rate}_mode{mode}_codel.csv',     'CoDel Baseline (RFC 8289)', True,  4),
                     ('unpatched', f'qos_attack_{rate}_mode{mode}_onnx.csv',     'ADAM Filtered (ONNX)',     True,  3),
                     ('unpatched', f'qos_attack_{rate}_mode{mode}_filtered.csv', 'Adaptive Filtered (FSM)',   True,  1),
                     ('unpatched', f'qos_attack_{rate}_mode{mode}_full100.csv',  'Static 100% Inspection',   True,  2),
@@ -219,6 +220,7 @@ class QoSPlotter(BasePlotter):
             df_b = self._resolve_dataframe('unpatched', 'qos_baseline.csv')
 
         df_un   = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}.csv')
+        df_codel= self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_codel.csv')
         df_unf  = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         df_full = self._resolve_dataframe('unpatched', f'qos_attack_{target_rate}_mode{target_mode}_full100.csv')
@@ -228,9 +230,10 @@ class QoSPlotter(BasePlotter):
         df_pf   = None if self.use_onnx else self._resolve_dataframe('patched',   f'qos_attack_{target_rate}_mode{target_mode}{suffix}.csv')
 
         series_map = [
-            ("Baseline (Peacetime)", df_b,    '#55a868', '-',  3),  # Green
+            ("Baseline (Peacetime)", df_b,     '#55a868', '-',  3),  # Green
             ("Unpatched (No Filter)", df_un,   '#c44e52', '-',  1),  # Red (No defense, tail explosion)
-            ("ADAM Filtered (ONNX)",  df_unf,  '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
+            ("CoDel Baseline (RFC 8289)", df_codel, '#ff7f0e', '-.', 2),  # Orange (CoDel AQM Queue Protection)
+            ("Proposed Fast-Path (Ours)", df_unf, '#4c72b0', ':',  2),  # Blue (Our adaptive pre-filter)
         ]
         if not self.use_onnx and not self.no_patched:
             series_map.extend([
@@ -347,6 +350,7 @@ class QoSPlotter(BasePlotter):
         LogStyle.log_stage("Generating Pulse Attack Mitigation Timeline (Mode 1)...")
         suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
         df_native = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1.csv')
+        df_codel  = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode1_codel.csv')
         df_filter = self._resolve_dataframe('unpatched', f'qos_attack_10.0_mode1{suffix}')
 
         if df_native is None or df_filter is None:
@@ -359,10 +363,14 @@ class QoSPlotter(BasePlotter):
 
         df_nat_zoom = df_native[df_native['packet_id'].between(window_start, window_end)]
         df_fil_zoom = df_filter[df_filter['packet_id'].between(window_start, window_end)]
+        df_cod_zoom = df_codel[df_codel['packet_id'].between(window_start, window_end)] if df_codel is not None else None
 
         fig, ax = plt.subplots(figsize=(14, 6))
         ax.plot(df_nat_zoom['packet_id'], df_nat_zoom['latency_ms'], 
                 label='Unpatched Native (No Defense)', color='#d62728', linewidth=1.0, alpha=0.5)
+        if df_cod_zoom is not None and not df_cod_zoom.empty:
+            ax.plot(df_cod_zoom['packet_id'], df_cod_zoom['latency_ms'],
+                    label='CoDel Baseline (RFC 8289)', color='#ff7f0e', linewidth=1.2, linestyle='-.', alpha=0.8)
         filter_label = 'Proposed Filter (ONNX)' if self.use_onnx else 'Proposed Filter (FSM)'
         ax.plot(df_fil_zoom['packet_id'], df_fil_zoom['latency_ms'], 
                 label=filter_label, color='#1f77b4', linewidth=1.2, alpha=0.9)
@@ -385,6 +393,7 @@ class QoSPlotter(BasePlotter):
         LogStyle.log_stage("Generating Periodic Flapping Resilience Timeline (Mode 2)...")
         suffix = "_onnx.csv" if self.use_onnx else "_filtered.csv"
         df_native = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode2.csv')
+        df_codel  = self._resolve_dataframe('unpatched', 'qos_attack_10.0_mode2_codel.csv')
         df_filter = self._resolve_dataframe('unpatched', f'qos_attack_10.0_mode2{suffix}')
 
         if df_native is None or df_filter is None:
@@ -394,16 +403,23 @@ class QoSPlotter(BasePlotter):
         ROLLING_WINDOW = 500
         df_native['smoothed_latency'] = df_native['latency_ms'].rolling(window=ROLLING_WINDOW, min_periods=1).mean()
         df_filter['smoothed_latency'] = df_filter['latency_ms'].rolling(window=ROLLING_WINDOW, min_periods=1).mean()
+        if df_codel is not None and not df_codel.empty:
+            df_codel['smoothed_latency'] = df_codel['latency_ms'].rolling(window=ROLLING_WINDOW, min_periods=1).mean()
 
         fig, ax = plt.subplots(figsize=(14, 6))
         ax.plot(df_filter['packet_id'], df_filter['latency_ms'], color='#1f77b4', linewidth=0.5, alpha=0.1, zorder=1)
         ax.plot(df_native['packet_id'], df_native['latency_ms'], color='#d62728', linewidth=0.5, alpha=0.1, zorder=2)
+        if df_codel is not None and not df_codel.empty:
+            ax.plot(df_codel['packet_id'], df_codel['latency_ms'], color='#ff7f0e', linewidth=0.5, alpha=0.1, zorder=2)
 
         filter_label = 'Proposed Filter (ONNX, Smoothed)' if self.use_onnx else 'Proposed Filter (FSM, Smoothed)'
         ax.plot(df_filter['packet_id'], df_filter['smoothed_latency'], 
-                label=filter_label, color='#1f77b4', linewidth=1.5, alpha=0.9, zorder=3)
+                label=filter_label, color='#1f77b4', linewidth=1.5, alpha=0.9, zorder=4)
+        if df_codel is not None and not df_codel.empty:
+            ax.plot(df_codel['packet_id'], df_codel['smoothed_latency'],
+                    label='CoDel Baseline (RFC 8289, Smoothed)', color='#ff7f0e', linewidth=1.5, linestyle='-.', alpha=0.9, zorder=3)
         ax.plot(df_native['packet_id'], df_native['smoothed_latency'], 
-                label='Unpatched Native (Smoothed)', color='#d62728', linewidth=1.5, alpha=0.9, zorder=4)
+                label='Unpatched Native (Smoothed)', color='#d62728', linewidth=1.5, alpha=0.9, zorder=5)
 
         total_packet_indices = 1000000
         stride_len = total_packet_indices // 10

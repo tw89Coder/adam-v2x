@@ -110,7 +110,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 if (rate == 0.0) {
                     std::snprintf(out_filename, sizeof(out_filename), "%s/qos_baseline.csv", csv_target_dir.c_str());
                 } else if (filter_mode != 0) {
-                    if (filter_mode == 3) {
+                    if (filter_mode == 4) {
+                        std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_codel.csv",
+                                      csv_target_dir.c_str(), rate, mode);
+                    } else if (filter_mode == 3) {
                         std::snprintf(out_filename, sizeof(out_filename), "%s/qos_attack_%.1f_mode%d_onnx.csv",
                                       csv_target_dir.c_str(), rate, mode);
                     } else if (filter_mode == 2) {
@@ -191,7 +194,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                     auto start_t = std::chrono::high_resolution_clock::now();
                     bool is_drop = false;
-                    if (filter_mode != 0) {
+                    if (filter_mode == 4) {
+                        // CoDel AQM Baseline (target = 5.0ms)
+                        double queue_delay_ms = accumulated_queue_ns / 1e6;
+                        if (queue_delay_ms > 5.0) {
+                            is_drop = true;
+                        }
+                        total_inspected++;
+                    } else if (filter_mode != 0) {
                         is_drop = filter_fsm.process_packet(packet_data);
                         if (filter_fsm.was_inspected()) {
                             total_inspected++;
