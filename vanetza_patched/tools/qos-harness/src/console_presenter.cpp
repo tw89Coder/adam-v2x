@@ -84,8 +84,13 @@ void ConsolePresenter::printUDPReceiverDaemonBanner(int port, const std::string&
 }
 
 void ConsolePresenter::printUDPSessionHeader(int mode, double rate, int total_pkts, double lambda_pps, uint32_t filter_mode) {
-    std::string f_str = (filter_mode == 0) ? "OFF (Baseline)" : (filter_mode == 2 ? "STATIC 100% FULL" : "ADAPTIVE FSM");
-    std::string f_col = (filter_mode == 0) ? crit() : (filter_mode == 2 ? warn() : safe());
+    std::string f_str = "OFF (Baseline)";
+    if (filter_mode == 4) f_str = "CODEL AQM (RFC 8289)";
+    else if (filter_mode == 3) f_str = "ONNX DRL INFERENCE";
+    else if (filter_mode == 2) f_str = "STATIC 100% FULL";
+    else if (filter_mode == 1) f_str = "ADAPTIVE FSM";
+
+    std::string f_col = (filter_mode == 0) ? crit() : (filter_mode == 4 ? warn() : safe());
 
     std::printf("\n%s[UDP SESSION INIT]%s Mode: %s%d%s | Rate: %s%.1f%%%s | Packets: %s%d%s | Pacing: %s%.0f pps%s | Filter: %s%s%s\n",
                 label().c_str(), reset().c_str(),
