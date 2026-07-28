@@ -158,8 +158,6 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--build-dataset") {
             build_dataset = true;
         } else if (arg == "--profile-amp") {
-            build_dataset = true;
-        } else if (arg == "--profile-amp") {
             profile_amp = true;
         } else if (arg == "--diagnose-flood") {
             diagnose_flood = true;

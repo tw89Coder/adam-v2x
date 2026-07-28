@@ -412,7 +412,11 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
                 if (is_malware) malware_count++;
 
                 const auto& pkt = is_malware ? attacks[i % attacks.size()] : normals[i % normals.size()];
-                sendto(sockfd, pkt.data(), pkt.size(), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+                vanetza::ByteBuffer tx_buf(4 + pkt.size());
+                uint32_t flag = is_malware ? 1 : 0;
+                std::memcpy(tx_buf.data(), &flag, sizeof(uint32_t));
+                std::memcpy(tx_buf.data() + 4, pkt.data(), pkt.size());
+                sendto(sockfd, tx_buf.data(), tx_buf.size(), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
 
                 // Real-time sender progress update
                 if ((i + 1) % print_interval == 0 || i == total_packets - 1) {
