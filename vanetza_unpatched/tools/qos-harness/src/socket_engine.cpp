@@ -195,11 +195,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     auto start_t = std::chrono::high_resolution_clock::now();
                     bool is_drop = false;
                     if (filter_mode == 4) {
-                        // CoDel AQM Baseline (target = 5.0ms)
-                        double queue_delay_ms = accumulated_queue_ns / 1e6;
-                        if (queue_delay_ms > 5.0) {
-                            is_drop = true;
-                        }
+                        // Linux Kernel Native tc CoDel Mode:
+                        // Packet queue drops are performed at kernel level by Linux tc qdisc (target=5ms, interval=100ms).
+                        // Admitted packets pass directly to native parser context; latency and CPU metrics are logged to CoDel CSV.
+                        is_drop = false;
                         total_inspected++;
                     } else if (filter_mode != 0) {
                         is_drop = filter_fsm.process_packet(packet_data);
