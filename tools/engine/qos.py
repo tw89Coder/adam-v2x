@@ -380,10 +380,11 @@ class QoSPlotter(BasePlotter):
         y_limit_pulse = float(math.ceil(raw_p999_pulse)) if raw_p999_pulse >= 1.0 else (math.ceil(raw_p999_pulse * 10.0) / 10.0)
         ax.set_ylim(0, max(0.45, y_limit_pulse)) 
         ax.set_xlim(window_start, window_end)
-        ax.set_xlabel('Packet ID (Chronological Order)')
-        ax.set_ylabel('Processing Latency (ms)')
+        ax.set_xlabel('Packet ID (Chronological Order)', fontsize=24, labelpad=8)
+        ax.set_ylabel('Processing Latency (ms)', fontsize=24, labelpad=8)
+        ax.tick_params(axis='both', which='major', labelsize=20)
         ax.grid(True, linestyle=':', alpha=0.7)
-        ax.legend(loc='upper right')
+        ax.legend(loc='upper right', fontsize=18)
 
         out_suffix = "_onnx" if self.use_onnx else ""
         self.export_figure(fig, "qos/timeline", f"pulse_recovery_timeline{out_suffix}")
@@ -407,10 +408,10 @@ class QoSPlotter(BasePlotter):
             df_codel['smoothed_latency'] = df_codel['latency_ms'].rolling(window=ROLLING_WINDOW, min_periods=1).mean()
 
         fig, ax = plt.subplots(figsize=(14, 6))
-        ax.plot(df_filter['packet_id'], df_filter['latency_ms'], color='#1f77b4', linewidth=0.5, alpha=0.1, zorder=1)
-        ax.plot(df_native['packet_id'], df_native['latency_ms'], color='#d62728', linewidth=0.5, alpha=0.1, zorder=2)
+        ax.plot(df_filter['packet_id'], df_filter['latency_ms'], color='#1f77b4', linewidth=0.6, alpha=0.2, zorder=1)
+        ax.plot(df_native['packet_id'], df_native['latency_ms'], color='#d62728', linewidth=0.7, alpha=0.25, zorder=2)
         if df_codel is not None and not df_codel.empty:
-            ax.plot(df_codel['packet_id'], df_codel['latency_ms'], color='#ff7f0e', linewidth=0.5, alpha=0.1, zorder=2)
+            ax.plot(df_codel['packet_id'], df_codel['latency_ms'], color='#ff7f0e', linewidth=0.7, alpha=0.2, zorder=2)
 
         filter_label = 'Proposed Filter (ONNX, Smoothed)' if self.use_onnx else 'Proposed Filter (FSM, Smoothed)'
         ax.plot(df_filter['packet_id'], df_filter['smoothed_latency'], 
@@ -441,10 +442,11 @@ class QoSPlotter(BasePlotter):
         y_limit = float(math.ceil(raw_p999)) if raw_p999 >= 1.0 else (math.ceil(raw_p999 * 10.0) / 10.0)
         ax.set_ylim(0, max(0.45, y_limit))
         ax.set_xlim(0, total_packet_indices)
-        ax.set_xlabel('Packet ID (Chronological Order)')
-        ax.set_ylabel('Processing Latency (ms)')
+        ax.set_xlabel('Packet ID (Chronological Order)', fontsize=24, labelpad=8)
+        ax.set_ylabel('Processing Latency (ms)', fontsize=24, labelpad=8)
+        ax.tick_params(axis='both', which='major', labelsize=20)
         ax.grid(True, linestyle=':', alpha=0.7)
-        ax.legend(loc='upper right')
+        ax.legend(loc='upper right', fontsize=18)
 
         out_suffix = "_onnx" if self.use_onnx else ""
         self.export_figure(fig, "qos/timeline", f"periodic_recovery_timeline{out_suffix}")

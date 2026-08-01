@@ -1,3 +1,4 @@
+.agents/
 .clang-format
 archive_pre_refactor/
 venv/

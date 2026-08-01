@@ -67,7 +67,7 @@ class BasePlotter:
             LogStyle.log_error(f"Target file asset not found: '{file_path}'")
             sys.exit(1)
         try:
-            return pd.read_csv(file_path, comment=comment_char)
+            return pd.read_csv(file_path, comment=comment_char, on_bad_lines='skip')
         except Exception as e:
             LogStyle.log_error(f"Failed to parse CSV matrix at '{file_path}'. Context: {str(e)}")
             sys.exit(1)
