@@ -18,7 +18,7 @@ MAGIC_SESSION_ACK   = 0x56325841
 MAGIC_SESSION_END   = 0x56325845
 MAGIC_BATCH_END     = 0x56325842
 
-HEADER_FORMAT = "<IIfIfII"  # 28-byte packed struct matching C++ UDPControlHeader
+HEADER_FORMAT = "<IIfIfIII"  # 32-byte packed struct matching C++ UDPControlHeader
 
 def load_packets_from_dir(folder_path):
     packets = []
@@ -267,7 +267,8 @@ def main():
                     args.packets,
                     float(args.lambda_pps),
                     filter_mode,
-                    1 if args.patched else 0
+                    1 if args.patched else 0,
+                    run_id
                 )
                 for _ in range(3):
                     sock.sendto(end_header, dest_tuple)
@@ -283,7 +284,7 @@ def main():
     batch_end_header = struct.pack(
         HEADER_FORMAT,
         MAGIC_BATCH_END,
-        0, 0.0, 0, 0.0, 0, 0
+        0, 0.0, 0, 0.0, 0, 0, 0
     )
     for _ in range(3):
         sock.sendto(batch_end_header, dest_tuple)
