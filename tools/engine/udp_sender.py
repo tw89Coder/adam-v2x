@@ -91,6 +91,7 @@ def main():
     parser.add_argument("-F", "--filter", action="store_true", help="Adaptive FSM Filter Mode")
     parser.add_argument("-S", "--static-100", action="store_true", help="Static 100% Full Inspection Mode")
     parser.add_argument("-C", "--codel", action="store_true", help="CoDel AQM Queue Protection Baseline Mode")
+    parser.add_argument("-o", "--onnx", action="store_true", help="Enable ONNX DRL Agent Filter Mode")
     parser.add_argument("--patched", action="store_true", help="Target kernel is patched")
 
     args = parser.parse_args()
@@ -128,14 +129,27 @@ def main():
     print(f"  └── Total Packets/Sess : {args.packets:,} | Pacing: {args.lambda_pps:.0f} pps")
     print("======================================================================")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Resolve IPv4/IPv6 address dynamically (supports fe80:: IPv6 link-local and IPv4)
+    try:
+        addr_info = socket.getaddrinfo(args.dest_ip, args.port, socket.AF_UNSPEC, socket.SOCK_DGRAM)
+        family, socktype, proto, _, dest_tuple = addr_info[0]
+        sock = socket.socket(family, socktype, proto)
+    except Exception:
+        family = socket.AF_INET
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        dest_tuple = (args.dest_ip, args.port)
+
     sock.settimeout(0.5)  # 500ms timeout for ACK validation
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 * 1024 * 1024)
     except Exception:
         pass
 
-    dest_tuple = (args.dest_ip, args.port)
+    # Explicitly bind to 0.0.0.0:0 or :::0 so socket receives ACK across IPv4/IPv6 interfaces
+    try:
+        sock.bind(('::' if family == socket.AF_INET6 else '0.0.0.0', 0))
+    except Exception:
+        pass
 
     interval_sec = (1.0 / args.lambda_pps) if args.lambda_pps > 0 else 0.0
 

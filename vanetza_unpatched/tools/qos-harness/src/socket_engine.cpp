@@ -36,20 +36,24 @@ static const std::string LOCAL_ATTACK_FOLDER = LOCAL_REPO_ROOT_STR + "/inputs/at
 namespace qos_harness {
 
 int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool no_taskset, const std::string& default_onnx_path) {
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to create socket.\n" << ConsolePresenter::reset();
         return 1;
     }
 
+    // Enable dual-stack (IPv4 and IPv6) socket binding so receiver accepts both IPv4 and IPv6 traffic
+    int no = 0;
+    setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
+
     // Set large receive buffer size (4MB) to prevent kernel packet drops during high pps bursts
     int rcvbuf = 4 * 1024 * 1024;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 
-    sockaddr_in server_addr{};
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
+    sockaddr_in6 server_addr{};
+    server_addr.sin6_family = AF_INET6;
+    server_addr.sin6_addr = in6addr_any;
+    server_addr.sin6_port = htons(port);
 
     if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to bind to port " << port << ".\n" << ConsolePresenter::reset();
@@ -61,7 +65,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
     ConsolePresenter::printUDPReceiverDaemonBanner(port, build_type);
 
     std::vector<uint8_t> buffer(65536);
-    sockaddr_in client_addr{};
+    sockaddr_storage client_addr{};
     socklen_t client_len = sizeof(client_addr);
 
     bool batch_active = true;
