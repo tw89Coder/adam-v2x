@@ -80,8 +80,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
             std::memcpy(&header, buffer.data(), sizeof(UDPControlHeader));
 
             if (header.magic == MAGIC_BATCH_END) {
-                std::cout << "\n" << ConsolePresenter::info() << "[UDP RECEIVER] Received BATCH_END control signal. Exiting receiver daemon loop.\n" << ConsolePresenter::reset();
-                break;
+                std::cout << "\n" << ConsolePresenter::info() << "[UDP RECEIVER] Received BATCH_END control signal. Daemon listening for next session...\n" << ConsolePresenter::reset();
+                continue;
             }
 
             if (header.magic == MAGIC_SESSION_START) {
@@ -90,6 +90,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 int total_pkts = header.total_packets;
                 double lambda_pps = header.lambda_pps;
                 uint32_t filter_mode = header.filter_mode; // 0=OFF, 1=ADAPTIVE, 2=STATIC100
+                uint32_t run_id = header.run_id;
 
                 // Send Handshake ACK back to Sender
                 UDPControlHeader ack_header = header;
@@ -101,14 +102,31 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 // Render session init header using ConsolePresenter
                 ConsolePresenter::printUDPSessionHeader(mode, rate, total_pkts, lambda_pps, filter_mode);
 
-                // Resolve output CSV filename
+                // Resolve output CSV filename & multi-run directory routing
                 std::string base_out_dir = LOCAL_REPO_ROOT_STR + "/outputs";
-                std::string csv_base_dir = base_out_dir + "/csv_raw";
-                std::string csv_target_dir = csv_base_dir + "/" + build_type;
+                std::string csv_target_dir;
 
                 mkdir(base_out_dir.c_str(), 0755);
-                mkdir(csv_base_dir.c_str(), 0755);
-                mkdir(csv_target_dir.c_str(), 0755);
+
+                if (run_id > 0) {
+                    std::string multi_base = base_out_dir + "/multi_runs";
+                    std::string mode_dir = multi_base + "/mode" + std::to_string(mode);
+                    char run_folder_buf[64];
+                    std::snprintf(run_folder_buf, sizeof(run_folder_buf), "/run_%02u", run_id);
+                    std::string run_dir = mode_dir + run_folder_buf;
+                    csv_target_dir = run_dir + "/" + build_type;
+
+                    mkdir(multi_base.c_str(), 0755);
+                    mkdir(mode_dir.c_str(), 0755);
+                    mkdir(run_dir.c_str(), 0755);
+                    mkdir(csv_target_dir.c_str(), 0755);
+                } else {
+                    std::string csv_base_dir = base_out_dir + "/csv_raw";
+                    csv_target_dir = csv_base_dir + "/" + build_type;
+
+                    mkdir(csv_base_dir.c_str(), 0755);
+                    mkdir(csv_target_dir.c_str(), 0755);
+                }
 
                 char out_filename[512];
                 if (rate == 0.0) {

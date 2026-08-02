@@ -38,45 +38,28 @@ def load_packets_from_dir(folder_path):
                 
                 for idx, member in enumerate(members, 1):
                     f = tar.extractfile(member)
-                    if f:
-                        content = f.read()
-                        if len(content) > 0:
-                            packets.append(content)
-                    if idx % 50000 == 0 or idx == total_m:
-                        print(f"  ├── RAM Load Progress: {idx:,} / {total_m:,} packets loaded ({idx*100//total_m}%)...")
-                        sys.stdout.flush()
-            print(f"[SUCCESS] Loaded ALL {len(packets):,} pre-sorted V2X baseline packets into RAM in {time.time() - t0:.2f} seconds!")
+                    if f is not None:
+                        packets.append(f.read())
+            print(f"\033[32m[SUCCESS] Loaded ALL {len(packets):,} pre-sorted V2X baseline packets into RAM!\033[0m")
             return packets
         except Exception as e:
-            print(f"[-] Archive read warning: {e}. Falling back to directory read...")
+            print(f"\033[33m[!] Tar fast loading failed ({e}). Falling back to directory scan...\033[0m")
+            packets = []
 
-    # 2. Fallback Path: Read from directory
+    # 2. Fallback Path: File system directory enumeration
     if not os.path.exists(folder_path):
         return packets
+    
     print(f"[*] Enumerating files in {folder_path} ...")
-    sys.stdout.flush()
-    file_list = sorted([f for f in os.listdir(folder_path) if not f.startswith(".")])
-    total_files = len(file_list)
-    print(f"  └── Directory contains {total_files:,} files. Reading to RAM...")
-    sys.stdout.flush()
+    files = sorted(os.listdir(folder_path))
+    print(f"  └── Directory contains {len(files):,} files. Reading to RAM...")
     
-    max_load = 50000
-    stride = max(1, total_files // max_load) if total_files > max_load else 1
-    selected_files = file_list[::stride][:max_load]
-    
-    t0 = time.time()
-    for idx, fname in enumerate(selected_files, 1):
-        fpath = os.path.join(folder_path, fname)
-        if os.path.isfile(fpath):
-            with open(fpath, "rb") as f:
-                content = f.read()
-                if len(content) > 0:
-                    packets.append(content)
-        if idx % 10000 == 0 or idx == len(selected_files):
-            print(f"  ├── Fast Loading Progress: {idx:,} / {len(selected_files):,} packets loaded into RAM...")
-            sys.stdout.flush()
-            
-    print(f"[SUCCESS] Loaded {len(packets):,} baseline packets into RAM in {time.time() - t0:.2f} seconds!")
+    for f in files:
+        full_path = os.path.join(folder_path, f)
+        if os.path.isfile(full_path):
+            with open(full_path, "rb") as fp:
+                packets.append(fp.read())
+    print(f"\033[32m[SUCCESS] Loaded {len(packets):,} baseline packets into RAM!\033[0m")
     return packets
 
 def main():
@@ -92,6 +75,7 @@ def main():
     parser.add_argument("-S", "--static-100", action="store_true", help="Static 100% Full Inspection Mode")
     parser.add_argument("-C", "--codel", action="store_true", help="CoDel AQM Queue Protection Baseline Mode")
     parser.add_argument("-o", "--onnx", action="store_true", help="Enable ONNX DRL Agent Filter Mode")
+    parser.add_argument("-I", "--run-range", type=str, default="0 0", help="Space-separated trial run ID range (e.g. '1 20' or '1 1')")
     parser.add_argument("--patched", action="store_true", help="Target kernel is patched")
 
     args = parser.parse_args()
@@ -110,6 +94,14 @@ def main():
     modes = [int(x) for x in args.modes.split()]
     rates = [float(x) for x in args.rates.split()]
 
+    run_parts = [int(x) for x in args.run_range.split()]
+    if len(run_parts) == 1:
+        start_run, end_run = run_parts[0], run_parts[0]
+    elif len(run_parts) >= 2:
+        start_run, end_run = run_parts[0], run_parts[1]
+    else:
+        start_run, end_run = 0, 0
+
     # Resolve inputs folder relative to repository root
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     normal_dir = os.path.join(repo_root, "inputs", "base_packets")
@@ -126,7 +118,11 @@ def main():
     print(f"\033[1;36m[UDP WINDOWS TRANSMITTER] Native OS Sender Active\033[0m")
     print(f"  ├── Target Receiver    : \033[33m{args.dest_ip}:{args.port}\033[0m")
     print(f"  ├── Matrix Sweep Scope : {len(modes)} modes x {len(rates)} rates")
-    print(f"  └── Total Packets/Sess : {args.packets:,} | Pacing: {args.lambda_pps:.0f} pps")
+    print(f"  ├── Total Packets/Sess : {args.packets:,} | Pacing: {args.lambda_pps:.0f} pps")
+    if start_run > 0:
+        print(f"  └── Multi-Run Trial Range: \033[1;33mRun {start_run} to Run {end_run}\033[0m")
+    else:
+        print(f"  └── Multi-Run Mode     : Standard Single Run (Legacy csv_raw)")
     print("======================================================================")
 
     # Resolve IPv4/IPv6 address dynamically (supports fe80:: IPv6 link-local and IPv4)
@@ -153,43 +149,52 @@ def main():
 
     interval_sec = (1.0 / args.lambda_pps) if args.lambda_pps > 0 else 0.0
 
+    run_list = range(start_run, end_run + 1) if start_run > 0 else [0]
+
     try:
-        for mode in modes:
-            for rate in rates:
-                print(f"\n\033[34m[UDP SESSION INIT]\033[0m Mode: \033[36m{mode}\033[0m | Rate: \033[33m{rate:.1f}%\033[0m | Filter Mode: {filter_mode}")
-                print(f"  [*] Connecting & sending START_SESSION handshake to Pi ({args.dest_ip}:{args.port})...")
+        for run_id in run_list:
+            if start_run > 0:
+                print(f"\n======================================================================")
+                print(f"\033[1;35m[MULTI-RUN TRIAL IN PROGRESS]\033[0m Iteration: \033[1;33mRun {run_id} / {end_run}\033[0m")
+                print(f"======================================================================")
 
-                start_header = struct.pack(
-                    HEADER_FORMAT,
-                    MAGIC_SESSION_START,
-                    mode,
-                    float(rate),
-                    args.packets,
-                    float(args.lambda_pps),
-                    filter_mode,
-                    1 if args.patched else 0
-                )
+            for mode in modes:
+                for rate in rates:
+                    print(f"\n\033[34m[UDP SESSION INIT]\033[0m Mode: \033[36m{mode}\033[0m | Rate: \033[33m{rate:.1f}%\033[0m | Filter Mode: {filter_mode} | Run ID: {run_id}")
+                    print(f"  [*] Connecting & sending START_SESSION handshake to Pi ({args.dest_ip}:{args.port})...")
 
-                ack_received = False
-                for attempt in range(1, 21):
-                    try:
-                        sock.sendto(start_header, dest_tuple)
-                        resp, _ = sock.recvfrom(28)
-                        if len(resp) == 28:
-                            magic, = struct.unpack("<I", resp[:4])
-                            if magic == MAGIC_SESSION_ACK:
-                                ack_received = True
-                                print(f"\033[32m  [+] Handshake ACK confirmed from Pi! Starting packet stream...\033[0m")
-                                break
-                    except socket.timeout:
-                        print(f"\033[33m  [!] Handshake Attempt {attempt}/20 timeout. Retrying...\r\033[0m", end="")
-                        sys.stdout.flush()
+                    start_header = struct.pack(
+                        HEADER_FORMAT,
+                        MAGIC_SESSION_START,
+                        mode,
+                        float(rate),
+                        args.packets,
+                        float(args.lambda_pps),
+                        filter_mode,
+                        1 if args.patched else 0,
+                        run_id
+                    )
 
-                if not ack_received:
-                    print(f"\n\033[31m[-] [UDP ERROR] Unable to reach Pi at {args.dest_ip}:{args.port}!\033[0m")
-                    print(f"[-] Check if receiver daemon is running on Pi.")
-                    sock.close()
-                    sys.exit(1)
+                    ack_received = False
+                    for attempt in range(1, 21):
+                        try:
+                            sock.sendto(start_header, dest_tuple)
+                            resp, _ = sock.recvfrom(32)
+                            if len(resp) == 32:
+                                magic, = struct.unpack("<I", resp[:4])
+                                if magic == MAGIC_SESSION_ACK:
+                                    ack_received = True
+                                    print(f"\033[32m  [+] Handshake ACK confirmed from Pi! Starting packet stream...\033[0m")
+                                    break
+                        except socket.timeout:
+                            print(f"\033[33m  [!] Handshake Attempt {attempt}/20 timeout. Retrying...\r\033[0m", end="")
+                            sys.stdout.flush()
+
+                    if not ack_received:
+                        print(f"\n\033[31m[-] [UDP ERROR] Unable to reach Pi at {args.dest_ip}:{args.port}!\033[0m")
+                        print(f"[-] Check if receiver daemon is running on Pi.")
+                        sock.close()
+                        sys.exit(1)
 
                 start_time = time.perf_counter()
                 print_interval = max(1, args.packets // 100)

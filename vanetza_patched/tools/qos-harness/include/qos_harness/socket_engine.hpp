@@ -22,6 +22,7 @@ struct UDPControlHeader {
     float lambda_pps;       // Arrival rate lambda (e.g. 3000.0)
     uint32_t filter_mode;   // 0 = OFF (Baseline), 1 = ADAPTIVE (FSM), 2 = STATIC100
     uint32_t is_patched;    // 0 = unpatched, 1 = patched
+    uint32_t run_id;        // 0 = legacy single run, >0 = multi-run trial ID (e.g. 1, 2, ..., 20)
 };
 #pragma pack(pop)
 
