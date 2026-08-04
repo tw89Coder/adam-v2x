@@ -8,6 +8,7 @@ from engine.logger import LogStyle
 from engine.base import BasePlotter
 from engine.amplification import AmplificationPlotter
 from engine.qos import QoSPlotter
+from engine.qos_multi import QoSMultiPlotter
 from engine.convergence import ConvergencePlotter
 from engine.pareto import ParetoPlotter
 
@@ -17,6 +18,7 @@ __all__ = [
     'BasePlotter',
     'AmplificationPlotter',
     'QoSPlotter',
+    'QoSMultiPlotter',
     'ConvergencePlotter',
     'ParetoPlotter'
 ]

@@ -163,6 +163,10 @@ def main():
                     print(f"\n\033[34m[UDP SESSION INIT]\033[0m Mode: \033[36m{mode}\033[0m | Rate: \033[33m{rate:.1f}%\033[0m | Filter Mode: {filter_mode} | Run ID: {run_id}")
                     print(f"  [*] Connecting & sending START_SESSION handshake to Pi ({args.dest_ip}:{args.port})...")
 
+                    # Restore blocking socket mode with timeout for reliable handshake ACK exchange
+                    sock.setblocking(True)
+                    sock.settimeout(0.5)
+
                     start_header = struct.pack(
                         HEADER_FORMAT,
                         MAGIC_SESSION_START,
@@ -196,84 +200,84 @@ def main():
                         sock.close()
                         sys.exit(1)
 
-                start_time = time.perf_counter()
-                print_interval = max(1, args.packets // 100)
-                malware_count = 0
-                spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+                    start_time = time.perf_counter()
+                    print_interval = max(1, args.packets // 100)
+                    malware_count = 0
+                    spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-                # Enforce non-blocking socket mode to prevent Windows afd.sys kernel driver sendto stalls
-                sock.setblocking(False)
+                    # Enforce non-blocking socket mode to prevent Windows afd.sys kernel driver sendto stalls
+                    sock.setblocking(False)
 
-                for i in range(args.packets):
-                    # Determine malware injection
-                    is_malware = False
-                    p_rnd = random.uniform(0.0, 100.0)
+                    for i in range(args.packets):
+                        # Determine malware injection
+                        is_malware = False
+                        p_rnd = random.uniform(0.0, 100.0)
 
-                    if mode == 0:
-                        is_malware = (p_rnd < rate)
-                    elif mode == 1:
-                        if args.packets * 0.3 <= i <= args.packets * 0.5:
-                            is_malware = (p_rnd < rate * 2.0)
-                    elif mode == 2:
-                        cycle = (i // (args.packets // 10)) % 2
-                        if cycle == 1:
-                            is_malware = (p_rnd < rate * 1.5)
+                        if mode == 0:
+                            is_malware = (p_rnd < rate)
+                        elif mode == 1:
+                            if args.packets * 0.3 <= i <= args.packets * 0.5:
+                                is_malware = (p_rnd < rate * 2.0)
+                        elif mode == 2:
+                            cycle = (i // (args.packets // 10)) % 2
+                            if cycle == 1:
+                                is_malware = (p_rnd < rate * 1.5)
 
-                    if is_malware:
-                        malware_count += 1
-                        pkt_data = attacks[i % len(attacks)]
-                    else:
-                        pkt_data = normals[i % len(normals)]
+                        if is_malware:
+                            malware_count += 1
+                            pkt_data = attacks[i % len(attacks)]
+                        else:
+                            pkt_data = normals[i % len(normals)]
 
-                    is_malware_flag = 1 if is_malware else 0
-                    wire_pkt = struct.pack("<I", is_malware_flag) + pkt_data
+                        is_malware_flag = 1 if is_malware else 0
+                        wire_pkt = struct.pack("<I", is_malware_flag) + pkt_data
 
-                    # Native UDP best-effort transport: non-blocking send without infinite retry stalls
-                    try:
-                        sock.sendto(wire_pkt, dest_tuple)
-                    except OSError:
-                        pass
+                        # Native UDP best-effort transport: non-blocking send without infinite retry stalls
+                        try:
+                            sock.sendto(wire_pkt, dest_tuple)
+                        except OSError:
+                            pass
 
-                    # Real-time dynamic heartbeat UI update (updates every 1,000 packets / 0.33s)
-                    if (i + 1) % 1000 == 0 or i == args.packets - 1:
-                        now_t = time.perf_counter()
-                        elapsed_s = now_t - start_time
-                        inst_pps = (i + 1) / elapsed_s if elapsed_s > 0 else args.lambda_pps
-                        est_total_s = args.packets / args.lambda_pps if args.lambda_pps > 0 else 0
-                        
-                        elapsed_str = f"{int(elapsed_s)//60:02d}:{int(elapsed_s)%60:02d}"
-                        est_str = f"{int(est_total_s)//60:02d}:{int(est_total_s)%60:02d}"
-                        spin_char = spinner_chars[(i // 1000) % len(spinner_chars)]
-                        pct = (i + 1) * 100.0 / args.packets
+                        # Real-time dynamic heartbeat UI update (updates every 1,000 packets / 0.33s)
+                        if (i + 1) % 1000 == 0 or i == args.packets - 1:
+                            now_t = time.perf_counter()
+                            elapsed_s = now_t - start_time
+                            inst_pps = (i + 1) / elapsed_s if elapsed_s > 0 else args.lambda_pps
+                            est_total_s = args.packets / args.lambda_pps if args.lambda_pps > 0 else 0
+                            
+                            elapsed_str = f"{int(elapsed_s)//60:02d}:{int(elapsed_s)%60:02d}"
+                            est_str = f"{int(est_total_s)//60:02d}:{int(est_total_s)%60:02d}"
+                            spin_char = spinner_chars[(i // 1000) % len(spinner_chars)]
+                            pct = (i + 1) * 100.0 / args.packets
 
-                        print(f"\r  \033[36m[*] Stream Progress [{spin_char} ALIVE]:\033[0m {i+1:7d}/{args.packets:7d} | \033[31mMal: {malware_count:5d}\033[0m | {pct:5.1f}% | [{elapsed_str}/{est_str}] | {inst_pps:,.0f} pps", end="")
-                        sys.stdout.flush()
+                            print(f"\r  \033[36m[*] Stream Progress [{spin_char} ALIVE]:\033[0m {i+1:7d}/{args.packets:7d} | \033[31mMal: {malware_count:5d}\033[0m | {pct:5.1f}% | [{elapsed_str}/{est_str}] | {inst_pps:,.0f} pps", end="")
+                            sys.stdout.flush()
 
-                    # Pacing
-                    if interval_sec > 0:
-                        target_t = start_time + (i + 1) * interval_sec
-                        sleep_t = target_t - time.perf_counter()
-                        if sleep_t > 0:
-                            time.sleep(sleep_t)
+                        # Pacing
+                        if interval_sec > 0:
+                            target_t = start_time + (i + 1) * interval_sec
+                            sleep_t = target_t - time.perf_counter()
+                            if sleep_t > 0:
+                                time.sleep(sleep_t)
 
-                print(f"\n\033[32m  [+] Streamed {args.packets:,} packets for Session (Mode={mode}, Rate={rate}%).\033[0m")
+                    print(f"\n\033[32m  [+] Streamed {args.packets:,} packets for Session (Mode={mode}, Rate={rate}%).\033[0m")
 
-                # Send End Session Control
-                end_header = struct.pack(
-                    HEADER_FORMAT,
-                    MAGIC_SESSION_END,
-                    mode,
-                    float(rate),
-                    args.packets,
-                    float(args.lambda_pps),
-                    filter_mode,
-                    1 if args.patched else 0,
-                    run_id
-                )
-                for _ in range(3):
-                    sock.sendto(end_header, dest_tuple)
-                    time.sleep(0.005)
-                time.sleep(0.2)
+                    # Send End Session Control
+                    end_header = struct.pack(
+                        HEADER_FORMAT,
+                        MAGIC_SESSION_END,
+                        mode,
+                        float(rate),
+                        args.packets,
+                        float(args.lambda_pps),
+                        filter_mode,
+                        1 if args.patched else 0,
+                        run_id
+                    )
+                    for _ in range(3):
+                        sock.sendto(end_header, dest_tuple)
+                        time.sleep(0.005)
+                    time.sleep(0.2)
 
     except KeyboardInterrupt:
         print(f"\n\033[31m[!] Aborted instantly by user (KeyboardInterrupt). Closing socket.\033[0m")

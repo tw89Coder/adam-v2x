@@ -36,16 +36,17 @@ def main():
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
     parser.add_argument('--onnx', action='store_true', help="Use ONNX actual deployment results instead of heuristic FSM filtered results for QoS plots.")
     parser.add_argument('--no-patched', action='store_true', help="Exclude Patched Native and Patched Filtered curves from QoS plots.")
+    parser.add_argument('-M', '--multi-run', action='store_true', help="Process N-run trial datasets from outputs/multi_runs/ and export to outputs/plots_multi_runs/")
 
     args = parser.parse_args()
 
     # Deferred initialization pass to prevent heavy library load overhead on help flags
-    from engine import AmplificationPlotter, QoSPlotter, ConvergencePlotter, ParetoPlotter
+    from engine import AmplificationPlotter, QoSPlotter, QoSMultiPlotter, ConvergencePlotter, ParetoPlotter
 
     # Enforce absolute path casting on final target boundary
     base_dir = os.path.abspath(args.output_dir)
     
-    if not (args.all or args.type):
+    if not (args.all or args.type or args.multi_run):
         LogStyle.log_warn("No specific execution pipeline flags declared. Defaulting to full processing synthesis (--all).")
         args.all = True
  
@@ -53,7 +54,19 @@ def main():
     if not os.path.exists(base_dir):
         LogStyle.log_error(f"Configured output directory boundary does not exist: '{base_dir}'")
         sys.exit(1)
- 
+
+    if args.multi_run:
+        LogStyle.log_stage("[PLOT ENGINE] Multi-Run Pipeline Active. Processing 20-Trial Datasets...")
+        qos_multi_engine = QoSMultiPlotter(root_output_dir=base_dir, use_onnx=True)
+        df_summary = qos_multi_engine.process_all_multi_runs()
+        if df_summary is not None:
+            # Generate Pooled CDF plots for key evaluation points
+            for m in [0, 1, 2]:
+                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
+                    qos_multi_engine.plot_pooled_cdf(target_mode=m, target_rate=r)
+            LogStyle.log_success("Multi-run trial evaluation, statistical aggregation, and dual-format tables completed cleanly.")
+        return
+
     amp_engine = AmplificationPlotter(root_output_dir=base_dir)
     qos_engine = QoSPlotter(root_output_dir=base_dir, use_onnx=args.onnx, no_patched=args.no_patched)
     conv_engine = ConvergencePlotter(root_output_dir=base_dir)
