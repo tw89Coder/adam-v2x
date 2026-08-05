@@ -322,6 +322,22 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
                           << " | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
+
+                // Re-bind Socket & Flush OS Receive Buffer for 100% Cold-Start Trial Isolation
+                close(sockfd);
+                sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+                if (sockfd >= 0) {
+                    int opt = 1;
+                    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#ifdef SO_REUSEPORT
+                    setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+#endif
+                    sockaddr_in rebind_addr{};
+                    rebind_addr.sin_family = AF_INET;
+                    rebind_addr.sin_addr.s_addr = INADDR_ANY;
+                    rebind_addr.sin_port = htons(port);
+                    bind(sockfd, (struct sockaddr*)&rebind_addr, sizeof(rebind_addr));
+                }
             }
         }
     }

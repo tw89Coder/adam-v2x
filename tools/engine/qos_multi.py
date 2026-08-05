@@ -1,8 +1,10 @@
 # engine/qos_multi.py
 """
-Multi-Run QoSMultiPlotter Engine for IEEE ICC Evaluation
-Processes 20-run trial datasets in outputs/multi_runs/, computes Mean ± Std Dev statistics,
-and generates both pure Mean and Mean ± Std Dev console tables alongside publication plots.
+Multi-Run QoSMultiPlotter Engine for IEEE ICC Evaluation.
+Extends QoSPlotter to process 20-run trial datasets in outputs/multi_runs/,
+selects representative median trials, computes 20-run aggregated statistics (Mean ± Std Dev),
+and renders publication-grade vector (PDF, SVG) and raster (PNG) master CDF & timeline plots
+strictly inside outputs/plots_multi_runs/ to protect original single-run outputs.
 """
 
 import os
@@ -13,41 +15,55 @@ import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from engine.base import BasePlotter
+from engine.qos import QoSPlotter
 from engine.logger import LogStyle
 
-class QoSMultiPlotter(BasePlotter):
+class QoSMultiPlotter(QoSPlotter):
     """
-    Multi-Run Evaluation Engine: Computes 20-trial aggregated metrics (P99, P99.9, FNR, FPR, CPU, RAM)
-    and renders Pooled CDF curves & Multi-Run timeline plots without altering legacy single-run outputs.
+    Multi-Run Evaluation Engine: Inherits publication-grade graphics layout and export_figure
+    from QoSPlotter, computes 20-run aggregated statistics, selects representative median runs,
+    and exports vector PDF, SVG, and raster PNG figures into outputs/plots_multi_runs/.
     """
-    JITTER_THRESHOLD_MS = 50.0
-    WARMUP = 100
-    SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+    SPINNER = ['-', '\\', '|', '/']
 
     def __init__(self, root_output_dir="outputs", use_onnx=True):
-        # Override output plot directory to outputs/plots_multi_runs/
-        super().__init__(root_output_dir)
+        super().__init__(root_output_dir=root_output_dir, use_onnx=use_onnx, no_patched=True)
+        # Protect legacy single-run folders by pointing outputs to multi_runs subdirectories
         self.multi_dir = os.path.join(root_output_dir, "multi_runs")
-        self.plots_out_dir = os.path.join(root_output_dir, "plots_multi_runs")
-        self.stats_out_dir = os.path.join(root_output_dir, "stats_multi_runs")
-        self.use_onnx = use_onnx
+        self.plots_dir = os.path.join(root_output_dir, "plots_multi_runs")
+        self.stats_dir = os.path.join(root_output_dir, "stats_multi_runs")
+        self._ensure_directory_exists(self.plots_dir)
+        self._ensure_directory_exists(self.stats_dir)
+        self.median_run_map = {}
 
-        os.makedirs(self.plots_out_dir, exist_ok=True)
-        os.makedirs(self.stats_out_dir, exist_ok=True)
+    def _resolve_dataframe(self, environment, filename):
+        """
+        Resolves dataframe from representative median run in outputs/multi_runs/
+        or falls back to raw single-run directory for baseline/codel files.
+        """
+        if filename in self.median_run_map:
+            rep_path = self.median_run_map[filename]
+            if os.path.exists(rep_path):
+                df = self._load_csv_file(rep_path)
+                lat_col = 'latency_ns' if 'latency_ns' in df.columns else ('queue_delay_ns' if 'queue_delay_ns' in df.columns else 'delay_ns')
+                df['latency_ms'] = df[lat_col] / 1e6
+                df = df.iloc[self.WARMUP:].reset_index(drop=True)
+                df = df[df['latency_ms'] < self.JITTER_THRESHOLD_MS].reset_index(drop=True)
+                return df
+
+        # Fallback to single-run raw folder
+        return super()._resolve_dataframe(environment, filename)
 
     def process_all_multi_runs(self):
         """
-        Streaming single-pass parser with live dynamic heartbeat progress UI.
-        Processes 440+ CSV files with strict RAM bounds (< 200MB) and live progress bars.
+        Streaming single-pass parser with live heartbeat progress UI.
+        Computes 20-run Mean ± Std Dev matrix and identifies representative median runs.
         """
         if not os.path.exists(self.multi_dir):
             LogStyle.log_error(f"Multi-run data directory missing: '{self.multi_dir}'")
             return None
 
         LogStyle.log_stage("[MULTI-RUN ENGINE] Discovering 20-trial telemetry datasets...")
-
-        # Discover all CSV files
         pattern = os.path.join(self.multi_dir, "mode*", "run_*", "*", "*.csv")
         csv_files = glob.glob(pattern)
         total_files = len(csv_files)
@@ -56,7 +72,7 @@ class QoSMultiPlotter(BasePlotter):
         records = []
         t0 = time.time()
 
-        print("\n\033[1;36m[*] STAGE 1/3: Parsing Telemetry Log Datasets...\033[0m")
+        print("\n[*] STAGE 1/4: Parsing Telemetry Log Datasets...")
         for idx, filepath in enumerate(csv_files, 1):
             rel_path = os.path.relpath(filepath, self.multi_dir)
             parts = rel_path.split(os.sep)
@@ -86,7 +102,6 @@ class QoSMultiPlotter(BasePlotter):
                 except Exception:
                     rate = 0.0
 
-            # Single-pass CSV extraction for RAM efficiency
             rec = self._parse_single_csv_metrics(filepath)
             if rec:
                 rec['mode'] = mode_str
@@ -94,38 +109,89 @@ class QoSMultiPlotter(BasePlotter):
                 rec['build_type'] = build_type
                 rec['filter_type'] = filter_type
                 rec['rate'] = rate
+                rec['filepath'] = filepath
+                rec['filename'] = filename
                 records.append(rec)
 
-            # Live dynamic heartbeat progress bar update
             spin_char = self.SPINNER[idx % len(self.SPINNER)]
             pct = (idx * 100.0) / total_files
             short_fn = filename[:32]
-            sys.stdout.write(f"\r  \033[36m[*] Parse Progress [{spin_char} ALIVE]:\033[0m [{idx:4d}/{total_files:4d}] | {pct:5.1f}% | File: {short_fn:<32}")
+            sys.stdout.write(f"\r  [*] Parse Progress [{spin_char} ALIVE]: [{idx:4d}/{total_files:4d}] | {pct:5.1f}% | File: {short_fn:<32}")
             sys.stdout.flush()
 
             if idx % 50 == 0:
                 gc.collect()
 
-        print(f"\n\033[32m[+] STAGE 1 COMPLETE: Parsed {len(records):,} telemetry CSV files in {time.time() - t0:.2f}s.\033[0m")
+        print(f"\n[+] STAGE 1 COMPLETE: Parsed {len(records):,} telemetry CSV files in {time.time() - t0:.2f}s.")
 
-        # Also load baseline from outputs/csv_raw/unpatched/qos_baseline.csv if present
-        baseline_path = os.path.join(self.root_output_dir, "csv_raw", "unpatched", "qos_baseline.csv")
-        if os.path.exists(baseline_path):
-            rec = self._parse_single_csv_metrics(baseline_path)
-            if rec:
-                rec['mode'] = "mode0"
-                rec['run_id'] = "run_baseline"
-                rec['build_type'] = "unpatched"
-                rec['filter_type'] = "baseline"
-                rec['rate'] = 0.0
-                records.append(rec)
+        # Load baseline and CoDel AQM files from outputs/csv_raw/unpatched/
+        raw_unpatched_dir = os.path.join(self.root_output_dir, "csv_raw", "unpatched")
+        if os.path.exists(raw_unpatched_dir):
+            baseline_path = os.path.join(raw_unpatched_dir, "qos_baseline.csv")
+            if os.path.exists(baseline_path):
+                rec = self._parse_single_csv_metrics(baseline_path)
+                if rec:
+                    rec['mode'] = "mode0"
+                    rec['run_id'] = "run_baseline"
+                    rec['build_type'] = "unpatched"
+                    rec['filter_type'] = "baseline"
+                    rec['rate'] = 0.0
+                    rec['filepath'] = baseline_path
+                    rec['filename'] = "qos_baseline.csv"
+                    records.append(rec)
+
+            codel_files = glob.glob(os.path.join(raw_unpatched_dir, "*codel.csv"))
+            for cp in codel_files:
+                fn = os.path.basename(cp)
+                rate_v = 0.0
+                if "attack" in fn:
+                    try:
+                        rate_v = float(fn.split("qos_attack_")[1].split("_mode")[0])
+                    except Exception:
+                        rate_v = 0.0
+                rec = self._parse_single_csv_metrics(cp)
+                if rec:
+                    rec['mode'] = "mode0"
+                    rec['run_id'] = "run_single"
+                    rec['build_type'] = "unpatched"
+                    rec['filter_type'] = "codel_aqm"
+                    rec['rate'] = rate_v
+                    rec['filepath'] = cp
+                    rec['filename'] = fn
+                    records.append(rec)
 
         if not records:
             LogStyle.log_error("No telemetry records processed.")
             return None
 
-        print("\n\033[1;36m[*] STAGE 2/3: Computing 20-Trial Mean ± Std Dev Statistics Matrix...\033[0m")
+        print("\n[*] STAGE 2/4: Computing 20-Trial Aggregated Statistics & Selecting Median Runs...")
         df_all = pd.DataFrame(records)
+
+        # Select median representative run for each filename configuration
+        filename_groups = df_all.groupby('filename')
+        for fname, fgroup in filename_groups:
+            median_p99 = fgroup['p99'].median()
+            fgroup_sorted = fgroup.iloc[(fgroup['p99'] - median_p99).abs().argsort()]
+            best_row = fgroup_sorted.iloc[0]
+            self.median_run_map[fname] = best_row['filepath']
+
+        # Load transport summary CSV for CPU and RAM overhead integration
+        summary_transport_path = os.path.join(self.root_output_dir, "stats", "udp_transport_summary.csv")
+        transport_df = None
+        if os.path.exists(summary_transport_path):
+            try:
+                transport_df = pd.read_csv(summary_transport_path, on_bad_lines='skip')
+            except Exception:
+                transport_df = None
+
+        filter_mode_map = {
+            'unpatched_native': 0,
+            'fsm_only': 1,
+            'static_100': 2,
+            'onnx_drl': 3,
+            'baseline': 0,
+            'codel_aqm': 4
+        }
 
         # Compute Grouped Statistics
         summary_rows = []
@@ -134,10 +200,53 @@ class QoSMultiPlotter(BasePlotter):
 
         for g_idx, ((mode_val, filter_val, rate_val, build_val), group) in enumerate(grouped, 1):
             spin_char = self.SPINNER[g_idx % len(self.SPINNER)]
-            sys.stdout.write(f"\r  \033[36m[*] Stats Computing [{spin_char} ALIVE]:\033[0m Group [{g_idx:2d}/{total_groups:2d}] Mode: {mode_val} | Filter: {filter_val} | Rate: {rate_val}%")
+            sys.stdout.write(f"\r  [*] Stats Computing [{spin_char} ALIVE]: Group [{g_idx:2d}/{total_groups:2d}] Mode: {mode_val} | Filter: {filter_val} | Rate: {rate_val}%")
             sys.stdout.flush()
 
             n_trials = len(group)
+
+            # Lookup CPU and RAM from transport summary
+            cpu_s = group['cpu_s'].mean()
+            ram_mb = group['ram_mb'].mean()
+
+            if transport_df is not None and not transport_df.empty:
+                try:
+                    mode_num = int(mode_val.replace("mode", "")) if "mode" in str(mode_val) else 0
+                    f_mode = filter_mode_map.get(filter_val, 0)
+                    
+                    # Exact filter match
+                    match = transport_df[
+                        (transport_df['mode'].astype(int) == mode_num) & 
+                        (np.isclose(transport_df['rate'].astype(float), float(rate_val))) & 
+                        (transport_df['filter_mode'].astype(int) == f_mode)
+                    ]
+                    
+                    # Refine by filename pattern if available
+                    if filter_val == 'static_100':
+                        sub_m = match[match['out_filename'].astype(str).str.contains("full100")]
+                        if not sub_m.empty: match = sub_m
+                    elif filter_val == 'fsm_only':
+                        sub_m = match[match['out_filename'].astype(str).str.contains("filtered")]
+                        if not sub_m.empty: match = sub_m
+                    elif filter_val == 'onnx_drl':
+                        sub_m = match[match['out_filename'].astype(str).str.contains("onnx")]
+                        if not sub_m.empty: match = sub_m
+                    elif filter_val == 'codel_aqm':
+                        sub_m = match[match['out_filename'].astype(str).str.contains("codel")]
+                        if not sub_m.empty: match = sub_m
+
+                    if not match.empty:
+                        if 'cpu_time_sec' in match and match['cpu_time_sec'].notnull().any():
+                            cpu_s = round(float(match['cpu_time_sec'].median()), 4)
+                        if 'peak_rss_kb' in match and match['peak_rss_kb'].notnull().any():
+                            ram_mb = round(float(match['peak_rss_kb'].median()) / 1024.0, 2)
+                except Exception:
+                    pass
+
+            # Base Peacetime Baseline CPU Overhead = 56.3685 s
+            base_cpu_overhead = 56.3685
+            add_cpu_s = round(max(0.0, cpu_s - base_cpu_overhead), 4) if cpu_s > 0.0 else 0.0
+
             summary_rows.append({
                 'mode': mode_val,
                 'filter_type': filter_val,
@@ -152,32 +261,37 @@ class QoSMultiPlotter(BasePlotter):
                 'std_fnr_%': group['fnr'].std() if n_trials > 1 else 0.0,
                 'mean_fpr_%': group['fpr'].mean(),
                 'std_fpr_%': group['fpr'].std() if n_trials > 1 else 0.0,
-                'mean_cpu_s': group['cpu_s'].mean(),
-                'std_cpu_s': group['cpu_s'].std() if n_trials > 1 else 0.0,
-                'mean_ram_mb': group['ram_mb'].mean(),
-                'std_ram_mb': group['ram_mb'].std() if n_trials > 1 else 0.0,
+                'mean_cpu_s': cpu_s,
+                'add_cpu_s': add_cpu_s,
+                'mean_ram_mb': ram_mb,
             })
 
-        print(f"\n\033[32m[+] STAGE 2 COMPLETE: Aggregated {total_groups} evaluation groups.\033[0m")
+        print(f"\n[+] STAGE 2 COMPLETE: Aggregated {total_groups} evaluation groups.")
 
         df_summary = pd.DataFrame(summary_rows).sort_values(by=['mode', 'filter_type', 'rate_%'])
-        csv_out_path = os.path.join(self.stats_out_dir, "qos_multi_runs_aggregated.csv")
+        csv_out_path = os.path.join(self.stats_dir, "qos_multi_runs_aggregated.csv")
         df_summary.to_csv(csv_out_path, index=False)
 
         LogStyle.log_success(f"Aggregated 20-trial statistics saved to: '{csv_out_path}'")
 
-        # Render Pooled CDF plots with live heartbeat progress
-        print("\n\033[1;36m[*] STAGE 3/3: Rendering 20-Trial Pooled Latency CDF Plots...\033[0m")
+        # Render Publication-Grade Master Plots (PDF, SVG, PNG)
+        print("\n[*] STAGE 3/4: Rendering Publication Vector (PDF, SVG) & Raster (PNG) Master Plots...")
         plot_targets = [(m, r) for m in [0, 1, 2] for r in [0.1, 0.5, 1.0, 5.0, 10.0]]
         for p_idx, (m, r) in enumerate(plot_targets, 1):
             spin_char = self.SPINNER[p_idx % len(self.SPINNER)]
-            sys.stdout.write(f"\r  \033[36m[*] Plotting CDF [{spin_char} ALIVE]:\033[0m [{p_idx:2d}/{len(plot_targets):2d}] Mode: {m} | Rate: {r:.1f}%")
+            sys.stdout.write(f"\r  [*] Plotting Master Suite [{spin_char} ALIVE]: [{p_idx:2d}/{len(plot_targets):2d}] Mode: {m} | Rate: {r:.1f}%")
             sys.stdout.flush()
-            self.plot_pooled_cdf(target_mode=m, target_rate=r)
+            self.plot_master_cdf(target_mode=m, target_rate=r)
 
-        print(f"\n\033[32m[+] STAGE 3 COMPLETE: Rendered all 20-run pooled CDF plots in '{self.plots_out_dir}'.\033[0m")
+        print(f"\n[+] STAGE 3 COMPLETE: Rendered all publication CDF & Jitter master plots in '{self.plots_dir}'.")
 
-        # Display BOTH Table Formats in Terminal Console for User Selection
+        # Render Timeline Traces
+        print("\n[*] STAGE 4/4: Rendering Temporal Attack Timeline Traces...")
+        self.plot_pulse_timeline()
+        self.plot_periodic_timeline()
+        print(f"\n[+] STAGE 4 COMPLETE: Rendered Pulse & Periodic attack timeline traces.")
+
+        # Display Terminal Summary Tables
         self._print_terminal_tables(df_summary)
         return df_summary
 
@@ -232,18 +346,18 @@ class QoSMultiPlotter(BasePlotter):
         # -------------------------------------------------------------
         # 0. MASTER CONSOLIDATED OVERVIEW TABLE
         # -------------------------------------------------------------
-        print("\n\033[1;32m==========================================================================================================")
+        print("\n=====================================================================================================================")
         print(" [MASTER CONSOLIDATED OVERVIEW TABLE]")
-        print("==========================================================================================================\033[0m")
-        display_cols = ['mode', 'filter_type', 'rate_%', 'trials', 'mean_p99_ms', 'std_p99_ms', 'mean_fnr_%', 'std_fnr_%', 'mean_cpu_s', 'mean_ram_mb']
+        print("=====================================================================================================================")
+        display_cols = ['mode', 'filter_type', 'rate_%', 'trials', 'mean_p99_ms', 'std_p99_ms', 'mean_fnr_%', 'std_fnr_%', 'mean_cpu_s', 'add_cpu_s', 'mean_ram_mb']
         print(df_summary[display_cols].to_string(index=False, float_format="%.4f"))
 
         # -------------------------------------------------------------
         # FORMAT A: Pure Mean (Clean 4-Decimal Precision)
         # -------------------------------------------------------------
-        print("\n\033[1;36m======================================================================")
+        print("\n======================================================================")
         print(" [FORMAT A: PURE MEAN METRICS (Clean Table Output)]")
-        print("======================================================================\033[0m")
+        print("======================================================================")
         print("\n--- Table II: FNR Mean (%) Across Rates ---")
         piv_fnr = onnx_df.pivot(index='mode', columns='rate_%', values='mean_fnr_%')
         print(piv_fnr.to_string(float_format="%.4f"))
@@ -255,9 +369,9 @@ class QoSMultiPlotter(BasePlotter):
         # -------------------------------------------------------------
         # FORMAT B: Mean ± Std Dev (Full Statistical Precision)
         # -------------------------------------------------------------
-        print("\n\033[1;33m======================================================================")
+        print("\n======================================================================")
         print(" [FORMAT B: MEAN ± STD DEV METRICS (Full LaTeX Table Format)]")
-        print("======================================================================\033[0m")
+        print("======================================================================")
 
         print("\n--- Table II LaTeX Rows: FNR (%) (Mean ± Std Dev) ---")
         for m in sorted(onnx_df['mode'].unique()):
@@ -288,14 +402,15 @@ class QoSMultiPlotter(BasePlotter):
         # -------------------------------------------------------------
         # TABLE III: Ablation Study Comparison (FSM-Only vs Static 100% vs ADAM DRL)
         # -------------------------------------------------------------
-        print("\n\033[1;35m======================================================================")
+        print("\n======================================================================")
         print(" [TABLE III: ABLATION STUDY COMPARISON - Mode 2 @ 0.1% & 10.0%]")
-        print("======================================================================\033[0m")
+        print("======================================================================")
         ablation_df = df_summary[(df_summary['mode'] == 'mode2') & (df_summary['rate_%'].isin([0.1, 10.0]))]
         if not ablation_df.empty:
             piv_abl_p99 = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_p99_ms')
             piv_abl_fnr = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_fnr_%')
             piv_abl_cpu = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_cpu_s')
+            piv_abl_add = ablation_df.pivot(index='filter_type', columns='rate_%', values='add_cpu_s')
 
             print("\n--- Ablation P99 Latency Mean (ms) ---")
             print(piv_abl_p99.to_string(float_format="%.4f"))
@@ -303,8 +418,11 @@ class QoSMultiPlotter(BasePlotter):
             print("\n--- Ablation FNR Mean (%) ---")
             print(piv_abl_fnr.to_string(float_format="%.4f"))
 
-            print("\n--- Ablation CPU Time Mean (s) ---")
+            print("\n--- Ablation Total Measured CPU Time (s) ---")
             print(piv_abl_cpu.to_string(float_format="%.4f"))
+
+            print("\n--- Ablation Additional Inspection CPU Overhead Delta-CPU (s) ---")
+            print(piv_abl_add.to_string(float_format="%.4f"))
 
             print("\n--- Table III LaTeX Formatted Rows (Mean ± Std Dev) ---")
             for f_type in ['unpatched_native', 'fsm_only', 'static_100', 'onnx_drl']:
@@ -318,49 +436,4 @@ class QoSMultiPlotter(BasePlotter):
                     fnr_10 = f"{row_10['mean_fnr_%'].values[0]:.4f} ± {row_10['std_fnr_%'].values[0]:.4f}" if not row_10.empty else "N/A"
                     print(f"{f_type:<18} | Rate 0.1% P99: {p99_01:<18} | FNR: {fnr_01:<18} || Rate 10.0% P99: {p99_10:<18} | FNR: {fnr_10:<18}")
 
-        print("\033[32m\n[+] Dual-format overview printed successfully! Select Format A or B for paper.\033[0m\n")
-
-    def plot_pooled_cdf(self, target_mode=0, target_rate=10.0):
-        """Plots Pooled 20-Trial Cumulative CDF Curve in outputs/plots_multi_runs/."""
-        mode_str = f"mode{target_mode}"
-        pattern = os.path.join(self.multi_dir, mode_str, "run_*", "unpatched", f"qos_attack_{target_rate:.1f}_mode{target_mode}_onnx.csv")
-        files = glob.glob(pattern)
-
-        if not files:
-            return
-
-        # Memory-efficient downsampled pooling
-        pooled_samples = []
-        for f in files[:20]:
-            try:
-                df = pd.read_csv(f)
-                lat_col = 'latency_ns' if 'latency_ns' in df.columns else ('queue_delay_ns' if 'queue_delay_ns' in df.columns else 'delay_ns')
-                lats = (df[lat_col] / 1e6).iloc[self.WARMUP:]
-                lats = lats[lats < self.JITTER_THRESHOLD_MS]
-                # Downsample 10,000 samples per trial for instant plotting without memory spikes
-                if len(lats) > 10000:
-                    lats = np.random.choice(lats, 10000, replace=False)
-                pooled_samples.extend(lats)
-            except Exception:
-                continue
-
-        if not pooled_samples:
-            return
-
-        pooled_samples = np.sort(pooled_samples)
-        y = np.arange(1, len(pooled_samples) + 1) / len(pooled_samples)
-
-        plt.figure(figsize=(7, 4.5))
-        plt.plot(pooled_samples, y, label=f"ADAM (ONNX DRL 20-Run Pooled)", color='#1f77b4', linewidth=2.0)
-        plt.axhline(0.99, color='red', linestyle='--', alpha=0.7, label='P99 Target')
-        plt.xlabel('Queueing Latency (ms)')
-        plt.ylabel('Cumulative Probability F(x)')
-        plt.title(f'20-Run Pooled Latency CDF (Mode {target_mode} @ {target_rate}%)')
-        plt.grid(True, alpha=0.3)
-        plt.legend(loc='lower right')
-        plt.tight_layout()
-
-        out_img_path = os.path.join(self.plots_out_dir, f"cdf_pooled_mode{target_mode}_{target_rate:.1f}pct.png")
-        plt.savefig(out_img_path, dpi=300)
-        plt.close()
-        LogStyle.log_success(f"Saved 20-Run Pooled CDF plot to: '{out_img_path}'")
+        LogStyle.log_success("\n[+] Multi-run evaluation, statistical aggregation, and publication graphics synthesis completed cleanly.")

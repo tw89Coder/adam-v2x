@@ -60,10 +60,6 @@ def main():
         qos_multi_engine = QoSMultiPlotter(root_output_dir=base_dir, use_onnx=True)
         df_summary = qos_multi_engine.process_all_multi_runs()
         if df_summary is not None:
-            # Generate Pooled CDF plots for key evaluation points
-            for m in [0, 1, 2]:
-                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
-                    qos_multi_engine.plot_pooled_cdf(target_mode=m, target_rate=r)
             LogStyle.log_success("Multi-run trial evaluation, statistical aggregation, and dual-format tables completed cleanly.")
         return
 
