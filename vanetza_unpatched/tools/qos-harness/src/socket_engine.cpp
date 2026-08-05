@@ -320,7 +320,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 }
 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
-                          << " | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
+                          << " | CPU Time: " << cpu_time_sec << " s | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
 
                 // Re-bind Socket & Flush OS Receive Buffer for 100% Cold-Start Trial Isolation
