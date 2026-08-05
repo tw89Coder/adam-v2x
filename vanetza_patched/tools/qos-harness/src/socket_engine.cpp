@@ -336,7 +336,12 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     rebind_addr.sin_family = AF_INET;
                     rebind_addr.sin_addr.s_addr = INADDR_ANY;
                     rebind_addr.sin_port = htons(port);
-                    bind(sockfd, (struct sockaddr*)&rebind_addr, sizeof(rebind_addr));
+                    for (int b_try = 0; b_try < 20; ++b_try) {
+                        if (bind(sockfd, (struct sockaddr*)&rebind_addr, sizeof(rebind_addr)) == 0) {
+                            break;
+                        }
+                        usleep(50000); // 50ms pause for Linux kernel socket cleanup
+                    }
                 }
             }
         }

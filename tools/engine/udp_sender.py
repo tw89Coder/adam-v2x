@@ -261,6 +261,7 @@ def main():
                                 time.sleep(sleep_t)
 
                     print(f"\n\033[32m  [+] Streamed {args.packets:,} packets for Session (Mode={mode}, Rate={rate}%).\033[0m")
+                    time.sleep(0.5)  # Pause 0.5s to allow RPi receiver socket re-bind & cleanup
 
                     # Send End Session Control
                     end_header = struct.pack(
