@@ -325,17 +325,22 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                 // Re-bind Socket & Flush OS Receive Buffer for 100% Cold-Start Trial Isolation
                 close(sockfd);
-                sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+                sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
                 if (sockfd >= 0) {
+                    int no = 0;
+                    setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
                     int opt = 1;
                     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 #ifdef SO_REUSEPORT
                     setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 #endif
-                    sockaddr_in rebind_addr{};
-                    rebind_addr.sin_family = AF_INET;
-                    rebind_addr.sin_addr.s_addr = INADDR_ANY;
-                    rebind_addr.sin_port = htons(port);
+                    int rcvbuf = 4 * 1024 * 1024;
+                    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+
+                    sockaddr_in6 rebind_addr{};
+                    rebind_addr.sin6_family = AF_INET6;
+                    rebind_addr.sin6_addr = in6addr_any;
+                    rebind_addr.sin6_port = htons(port);
                     for (int b_try = 0; b_try < 20; ++b_try) {
                         if (bind(sockfd, (struct sockaddr*)&rebind_addr, sizeof(rebind_addr)) == 0) {
                             break;
