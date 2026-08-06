@@ -300,7 +300,12 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double fnr_pct = (false_negatives + true_positives > 0) ? (static_cast<double>(false_negatives) / (false_negatives + true_positives)) * 100.0 : 0.0;
 
                 bool exists = (access(summary_csv_path.c_str(), F_OK) == 0);
-                std::ofstream sum_file(summary_csv_path, std::ios::out | std::ios::app);
+                std::ios_base::openmode mode_flags = std::ios::out | std::ios::app;
+                if (run_id == 1) {
+                    mode_flags = std::ios::out | std::ios::trunc;
+                    exists = false;
+                }
+                std::ofstream sum_file(summary_csv_path, mode_flags);
                 if (sum_file.is_open()) {
                     if (!exists) {
                         sum_file << "mode,rate,filter_mode,total_sent,received_pkts,dropped_pkts,drop_rate_pct,total_inspected,inspection_rate_pct,malware_count,tp,tn,fp,fn,fpr_pct,fnr_pct,cpu_time_sec,peak_rss_kb,out_filename\n";

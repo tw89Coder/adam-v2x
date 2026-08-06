@@ -181,6 +181,8 @@ class QoSMultiPlotter(QoSPlotter):
         if os.path.exists(summary_transport_path):
             try:
                 transport_df = pd.read_csv(summary_transport_path, on_bad_lines='skip')
+                if transport_df is not None and not transport_df.empty and 'out_filename' in transport_df.columns:
+                    transport_df = transport_df.drop_duplicates(subset=['out_filename'], keep='last')
             except Exception:
                 transport_df = None
 
@@ -208,6 +210,9 @@ class QoSMultiPlotter(QoSPlotter):
             # Lookup CPU and RAM from transport summary
             cpu_s = group['cpu_s'].mean()
             ram_mb = group['ram_mb'].mean()
+
+            std_cpu_s = 0.0
+            std_ram_mb = 0.0
 
             if transport_df is not None and not transport_df.empty:
                 try:
@@ -238,8 +243,12 @@ class QoSMultiPlotter(QoSPlotter):
                     if not match.empty:
                         if 'cpu_time_sec' in match and match['cpu_time_sec'].notnull().any():
                             cpu_s = round(float(match['cpu_time_sec'].median()), 4)
+                            if len(match) > 1:
+                                std_cpu_s = round(float(match['cpu_time_sec'].std()), 4)
                         if 'peak_rss_kb' in match and match['peak_rss_kb'].notnull().any():
                             ram_mb = round(float(match['peak_rss_kb'].median()) / 1024.0, 2)
+                            if len(match) > 1:
+                                std_ram_mb = round(float((match['peak_rss_kb'] / 1024.0).std()), 2)
                 except Exception:
                     pass
 
@@ -262,8 +271,10 @@ class QoSMultiPlotter(QoSPlotter):
                 'mean_fpr_%': group['fpr'].mean(),
                 'std_fpr_%': group['fpr'].std() if n_trials > 1 else 0.0,
                 'mean_cpu_s': cpu_s,
+                'std_cpu_s': std_cpu_s,
                 'add_cpu_s': add_cpu_s,
                 'mean_ram_mb': ram_mb,
+                'std_ram_mb': std_ram_mb,
             })
 
         print(f"\n[+] STAGE 2 COMPLETE: Aggregated {total_groups} evaluation groups.")
@@ -273,6 +284,9 @@ class QoSMultiPlotter(QoSPlotter):
         df_summary.to_csv(csv_out_path, index=False)
 
         LogStyle.log_success(f"Aggregated 20-trial statistics saved to: '{csv_out_path}'")
+
+        # Display Terminal Summary Tables immediately so user sees the table without waiting for plot rendering
+        self._print_terminal_tables(df_summary)
 
         # Render Publication-Grade Master Plots (PDF, SVG, PNG)
         print("\n[*] STAGE 3/4: Rendering Publication Vector (PDF, SVG) & Raster (PNG) Master Plots...")
@@ -291,13 +305,24 @@ class QoSMultiPlotter(QoSPlotter):
         self.plot_periodic_timeline()
         print(f"\n[+] STAGE 4 COMPLETE: Rendered Pulse & Periodic attack timeline traces.")
 
-        # Display Terminal Summary Tables
-        self._print_terminal_tables(df_summary)
         return df_summary
 
     def _parse_single_csv_metrics(self, filepath):
         try:
-            df = pd.read_csv(filepath)
+            # Fast header check to read ONLY necessary columns and prevent GIL/memory freezes
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                header_line = f.readline()
+            headers = [h.strip() for h in header_line.split(',')]
+
+            target_cols = [c for c in ['latency_ns', 'queue_delay_ns', 'delay_ns', 'is_malware', 'was_dropped', 'cpu_time_sec', 'ram_usage_mb'] if c in headers]
+            dtypes = {}
+            for c in target_cols:
+                if c in ['is_malware', 'was_dropped']:
+                    dtypes[c] = 'int8'
+                elif c in ['latency_ns', 'queue_delay_ns', 'delay_ns']:
+                    dtypes[c] = 'float64'
+
+            df = pd.read_csv(filepath, usecols=target_cols, dtype=dtypes, engine='c')
             if len(df) == 0:
                 return None
 
@@ -349,7 +374,7 @@ class QoSMultiPlotter(QoSPlotter):
         print("\n=====================================================================================================================")
         print(" [MASTER CONSOLIDATED OVERVIEW TABLE]")
         print("=====================================================================================================================")
-        display_cols = ['mode', 'filter_type', 'rate_%', 'trials', 'mean_p99_ms', 'std_p99_ms', 'mean_fnr_%', 'std_fnr_%', 'mean_cpu_s', 'add_cpu_s', 'mean_ram_mb']
+        display_cols = ['mode', 'filter_type', 'rate_%', 'trials', 'mean_p99_ms', 'std_p99_ms', 'mean_fnr_%', 'std_fnr_%', 'mean_cpu_s', 'std_cpu_s', 'add_cpu_s', 'mean_ram_mb', 'std_ram_mb']
         print(df_summary[display_cols].to_string(index=False, float_format="%.4f"))
 
         # -------------------------------------------------------------
