@@ -164,22 +164,26 @@ bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     // - budget <= 40 (TAU_2): sampling_rate = 1.00 (100%)
     double sampling_rate = get_sampling_rate();
     
-    bool inspect = (fast_rand() % 100 < static_cast<int>(sampling_rate * 100.0));
-
-    bool is_anomalous = false;
-    int max_sum_sq = 0;
-
-    // Run sliding window inspection if selected by the sampling gate
-    if (inspect) {
-        last_inspected_ = true;
-        uint64_t start_ticks = get_hardware_ticks();
-        max_sum_sq = calculate_max_sum_sq(buf);
-        uint64_t end_ticks = get_hardware_ticks();
-        last_latency_ticks_ = (end_ticks >= start_ticks) ? (end_ticks - start_ticks) : 0;
-        
-        is_anomalous = (max_sum_sq > SQ_THRESHOLD);
+    bool inspect = true;
+    if (sampling_rate < 1.0) {
+        inspect = ((fast_rand() & 0xFF) < static_cast<int>(sampling_rate * 256.0));
     }
 
+    // Fast-path early exit for non-inspected packets (95% of peacetime traffic in ONNX mode)
+    if (!inspect) {
+        clean_streak++;
+        double rate = (clean_streak > STREAK_THRESHOLD) ? RECOVERY_RATE * 6.0 : RECOVERY_RATE;
+        current_budget = std::min(MAX_BUDGET, current_budget + rate);
+        return false;
+    }
+
+    last_inspected_ = true;
+    uint64_t start_ticks = get_hardware_ticks();
+    int max_sum_sq = calculate_max_sum_sq(buf);
+    uint64_t end_ticks = get_hardware_ticks();
+    last_latency_ticks_ = (end_ticks >= start_ticks) ? (end_ticks - start_ticks) : 0;
+    
+    bool is_anomalous = (max_sum_sq > SQ_THRESHOLD);
     last_max_sum_sq_ = max_sum_sq;
 
     // Dynamic budget recovery and depletion based on detection outcome
