@@ -226,8 +226,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     }
 
                     if (!is_drop) {
-                        vanetza::ByteBuffer pkt_copy = packet_data;
-                        context.indicate(std::move(pkt_copy));
+                        context.indicate(std::move(packet_data));
                     }
                     auto end_t = std::chrono::high_resolution_clock::now();
 
@@ -323,30 +322,6 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
                           << " | CPU Time: " << cpu_time_sec << " s | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
-
-                // Re-bind Socket & Flush OS Receive Buffer for 100% Cold-Start Trial Isolation
-                close(sockfd);
-                sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
-                if (sockfd >= 0) {
-                    int no = 0;
-                    setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
-                    int opt = 1;
-                    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#ifdef SO_REUSEPORT
-                    setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
-#endif
-
-                    sockaddr_in6 rebind_addr{};
-                    rebind_addr.sin6_family = AF_INET6;
-                    rebind_addr.sin6_addr = in6addr_any;
-                    rebind_addr.sin6_port = htons(port);
-                    for (int b_try = 0; b_try < 20; ++b_try) {
-                        if (bind(sockfd, (struct sockaddr*)&rebind_addr, sizeof(rebind_addr)) == 0) {
-                            break;
-                        }
-                        usleep(50000); // 50ms pause for Linux kernel socket cleanup
-                    }
-                }
             }
         }
     }
