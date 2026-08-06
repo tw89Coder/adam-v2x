@@ -163,6 +163,14 @@ def main():
                     print(f"\n\033[34m[UDP SESSION INIT]\033[0m Mode: \033[36m{mode}\033[0m | Rate: \033[33m{rate:.1f}%\033[0m | Filter Mode: {filter_mode} | Run ID: {run_id}")
                     print(f"  [*] Connecting & sending START_SESSION handshake to Pi ({args.dest_ip}:{args.port})...")
 
+                    # Drain any stale ACKs in local socket buffer before initiating new session handshake
+                    sock.setblocking(False)
+                    try:
+                        while True:
+                            sock.recv(4096)
+                    except OSError:
+                        pass
+
                     # Restore blocking socket mode with timeout for reliable handshake ACK exchange
                     sock.setblocking(True)
                     sock.settimeout(0.5)
@@ -185,8 +193,8 @@ def main():
                             sock.sendto(start_header, dest_tuple)
                             resp, _ = sock.recvfrom(32)
                             if len(resp) == 32:
-                                magic, = struct.unpack("<I", resp[:4])
-                                if magic == MAGIC_SESSION_ACK:
+                                magic, ack_m, ack_r, ack_n, ack_l, ack_f, ack_p, ack_run = struct.unpack(HEADER_FORMAT, resp)
+                                if magic == MAGIC_SESSION_ACK and ack_m == mode and abs(ack_r - float(rate)) < 0.01 and ack_run == run_id:
                                     ack_received = True
                                     print(f"\033[32m  [+] Handshake ACK confirmed from Pi! Starting packet stream...\033[0m")
                                     break
