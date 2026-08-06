@@ -18,15 +18,16 @@ MAGIC_SESSION_ACK   = 0x56325841
 MAGIC_SESSION_END   = 0x56325845
 MAGIC_BATCH_END     = 0x56325842
 
-HEADER_FORMAT = "<IIfIfIII"  # 32-byte packed struct matching C++ UDPControlHeader
+HEADER_FORMAT = "<IIfIfIIII"  # 36-byte packed struct matching C++ UDPControlHeader
 
-def load_packets_from_dir(folder_path):
+def load_packets_from_dir(folder_path, is_malware_header=0):
     packets = []
     repo_root = os.path.abspath(os.path.join(folder_path, ".."))
     tar_path = os.path.join(repo_root, "base_packets_full.tar.gz")
+    header_bytes = struct.pack("<I", is_malware_header)
     
     # 1. Fast Path: Read directly from pre-sorted base_packets_full.tar.gz (0.2s instant read)
-    if os.path.exists(tar_path):
+    if is_malware_header == 0 and os.path.exists(tar_path):
         print(f"[*] Fast Loading dataset directly from archive: {os.path.basename(tar_path)} ...")
         t0 = time.time()
         try:
@@ -38,8 +39,13 @@ def load_packets_from_dir(folder_path):
                 
                 for idx, member in enumerate(members, 1):
                     f = tar.extractfile(member)
-                    if f is not None:
-                        packets.append(f.read())
+                    if f:
+                        content = f.read()
+                        if len(content) > 0:
+                            packets.append(header_bytes + content)
+                    if idx % 50000 == 0 or idx == total_m:
+                        print(f"  ├── RAM Load Progress: {idx:,} / {total_m:,} packets loaded ({idx*100//total_m}%)...")
+                        sys.stdout.flush()
             print(f"\033[32m[SUCCESS] Loaded ALL {len(packets):,} pre-sorted V2X baseline packets into RAM!\033[0m")
             return packets
         except Exception as e:
@@ -58,8 +64,10 @@ def load_packets_from_dir(folder_path):
         full_path = os.path.join(folder_path, f)
         if os.path.isfile(full_path):
             with open(full_path, "rb") as fp:
-                packets.append(fp.read())
-    print(f"\033[32m[SUCCESS] Loaded {len(packets):,} baseline packets into RAM!\033[0m")
+                content = fp.read()
+                if len(content) > 0:
+                    packets.append(header_bytes + content)
+    print(f"\033[32m[SUCCESS] Loaded {len(packets):,} packets into RAM!\033[0m")
     return packets
 
 def main():
@@ -107,8 +115,8 @@ def main():
     normal_dir = os.path.join(repo_root, "inputs", "base_packets")
     attack_dir = os.path.join(repo_root, "inputs", "attack_vectors", "malware")
 
-    normals = load_packets_from_dir(normal_dir)
-    attacks = load_packets_from_dir(attack_dir)
+    normals = load_packets_from_dir(normal_dir, is_malware_header=0)
+    attacks = load_packets_from_dir(attack_dir, is_malware_header=1)
 
     if not normals or not attacks:
         print(f"\033[31m[-] Error: Base packet datasets missing in inputs/ folder ({repo_root})\033[0m")
@@ -150,6 +158,7 @@ def main():
     interval_sec = (1.0 / args.lambda_pps) if args.lambda_pps > 0 else 0.0
 
     run_list = range(start_run, end_run + 1) if start_run > 0 else [0]
+    is_first_session = 1
 
     try:
         for run_id in run_list:
@@ -184,17 +193,19 @@ def main():
                         float(args.lambda_pps),
                         filter_mode,
                         1 if args.patched else 0,
-                        run_id
+                        run_id,
+                        is_first_session
                     )
+                    is_first_session = 0
 
                     ack_received = False
                     for attempt in range(1, 21):
                         try:
                             sock.sendto(start_header, dest_tuple)
-                            resp, _ = sock.recvfrom(32)
-                            if len(resp) == 32:
-                                magic, ack_m, ack_r, ack_n, ack_l, ack_f, ack_p, ack_run = struct.unpack(HEADER_FORMAT, resp)
-                                if magic == MAGIC_SESSION_ACK and ack_m == mode and abs(ack_r - float(rate)) < 0.01 and ack_run == run_id:
+                            resp, _ = sock.recvfrom(36)
+                            if len(resp) >= 32:
+                                magic = struct.unpack("<I", resp[:4])[0]
+                                if magic == MAGIC_SESSION_ACK:
                                     ack_received = True
                                     print(f"\033[32m  [+] Handshake ACK confirmed from Pi! Starting packet stream...\033[0m")
                                     break
@@ -211,6 +222,7 @@ def main():
                     start_time = time.perf_counter()
                     print_interval = max(1, args.packets // 100)
                     malware_count = 0
+                    spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
                     for i in range(args.packets):
                         # Determine malware injection
                         is_malware = False
@@ -228,12 +240,9 @@ def main():
 
                         if is_malware:
                             malware_count += 1
-                            pkt_data = attacks[i % len(attacks)]
+                            wire_pkt = attacks[i % len(attacks)]
                         else:
-                            pkt_data = normals[i % len(normals)]
-
-                        is_malware_flag = 1 if is_malware else 0
-                        wire_pkt = struct.pack("<I", is_malware_flag) + pkt_data
+                            wire_pkt = normals[i % len(normals)]
 
                         # Native UDP best-effort transport: non-blocking send without infinite retry stalls
                         try:

@@ -87,6 +87,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double lambda_pps = header.lambda_pps;
                 uint32_t filter_mode = header.filter_mode; // 0=OFF, 1=ADAPTIVE, 2=STATIC100
                 uint32_t run_id = header.run_id;
+                uint32_t is_batch_start = header.is_batch_start;
 
                 // Send Handshake ACK back to Sender
                 UDPControlHeader ack_header = header;
@@ -296,7 +297,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                 bool exists = (access(summary_csv_path.c_str(), F_OK) == 0);
                 std::ios_base::openmode mode_flags = std::ios::out | std::ios::app;
-                if (run_id == 1) {
+                if (is_batch_start == 1) {
                     mode_flags = std::ios::out | std::ios::trunc;
                     exists = false;
                 }
@@ -317,6 +318,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 // Print industrial security report if filter was active
                 if (filter_mode != 0) {
                     ConsolePresenter::printSecurityReport(received_pkts, malware_count, true_positives, true_negatives, false_positives, false_negatives);
+                }
+
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
                           << " | CPU Time: " << cpu_time_sec << " s | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
@@ -394,7 +397,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
             bool ack_received = false;
             std::cout << ConsolePresenter::warn() << "  [*] Connecting & sending START_SESSION handshake to Pi (" << dest_ip << ":" << port << ")..." << ConsolePresenter::reset() << "\n";
 
-            for (int attempt = 1; attempt <= 20; ++attempt) {
+            for (int attempt = 1; attempt <= 20; ++attempt) { // Try for up to 10 seconds
                 sendto(sockfd, &start_header, sizeof(start_header), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
                 ssize_t ack_bytes = recvfrom(sockfd, ack_buf.data(), ack_buf.size(), 0, (struct sockaddr*)&reply_addr, &reply_len);
                 if (ack_bytes == sizeof(UDPControlHeader)) {

@@ -87,6 +87,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double lambda_pps = header.lambda_pps;
                 uint32_t filter_mode = header.filter_mode; // 0=OFF, 1=ADAPTIVE, 2=STATIC100
                 uint32_t run_id = header.run_id;
+                uint32_t is_batch_start = header.is_batch_start;
 
                 // Send Handshake ACK back to Sender
                 UDPControlHeader ack_header = header;
@@ -296,7 +297,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
 
                 bool exists = (access(summary_csv_path.c_str(), F_OK) == 0);
                 std::ios_base::openmode mode_flags = std::ios::out | std::ios::app;
-                if (run_id == 1) {
+                if (is_batch_start == 1) {
                     mode_flags = std::ios::out | std::ios::trunc;
                     exists = false;
                 }
