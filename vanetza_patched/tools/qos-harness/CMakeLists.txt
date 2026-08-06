@@ -25,6 +25,20 @@ get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE
 
 target_compile_definitions(qos-harness PRIVATE REPO_ROOT="${REPO_ROOT}")
 
+# Dynamic Architecture Auto-Detection & Optimization (x86_64 vs RPi 4B ARM32 / ARM64)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    # Raspberry Pi 4B (64-bit OS)
+    message(STATUS "[QoS-Harness] Auto-detected ARM64 (Raspberry Pi 4B Cortex-A72). Enabling NEON SIMD flags.")
+    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -ftree-vectorize)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|armv7l|armv8l")
+    # Raspberry Pi 4B (32-bit OS)
+    message(STATUS "[QoS-Harness] Auto-detected ARM32 (Raspberry Pi 4B Cortex-A72). Enabling NEON SIMD flags.")
+    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize)
+else()
+    # x86_64 / PC / WSL
+    message(STATUS "[QoS-Harness] Auto-detected x86_64 host architecture.")
+endif()
+
 # Dynamic ONNX Runtime detection and linking
 set(ONNXRT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/onnxruntime")
 

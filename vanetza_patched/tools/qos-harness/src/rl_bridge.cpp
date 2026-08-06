@@ -724,46 +724,9 @@ std::vector<int> RLBridge::get_allowed_cores() {
 }
 
 void RLBridge::onnx_worker_loop() {
-    // 1. Thread Pinning to Core B (the secondary allowed core, Modulo wrapped)
-    std::vector<int> allowed_cores = get_allowed_cores();
-    int target_core = -1;
-    
-    if (allowed_cores.size() >= 2) {
-        // We have at least 2 cores assigned to the process via taskset
-        // Core A is allowed_cores[0], Core B is allowed_cores[1]
-        target_core = allowed_cores[1];
-        
-        // Pin the main thread (from which we were spawned) to allowed_cores[0] just to be absolutely sure
-        // they are physically separated.
-        cpu_set_t main_mask;
-        CPU_ZERO(&main_mask);
-        CPU_SET(allowed_cores[0], &main_mask);
-        // Note: pthread_self() here refers to the spawned thread. We should pin the main thread.
-        // Wait, how do we get the main thread's pthread_t? In Linux, the main thread's thread ID (TID) is equal to the PID.
-        // But actually, we don't necessarily have to pin the main thread from here, or we can pin it from the main thread during initialize_onnx.
-        // Alternatively, the process affinity mask already restricts the process to {allowed_cores[0], allowed_cores[1]}.
-        // If we pin the ONNX thread to allowed_cores[1], the main thread is still free to run on either. But if the main thread's affinity
-        // is modified, it won't run on Core B.
-        // Let's do it safely: we can pin the calling thread (main thread) during initialize_onnx, or just pin this thread to Core B here.
-        // Pinning this thread to Core B (allowed_cores[1]) is already 100% sufficient to prevent it from competing on Core A!
-    } else if (!allowed_cores.empty()) {
-        // Only 1 core is set in process affinity (e.g. taskset -c 9)
-        // Wrap core index to find the next physical CPU core
-        long num_system_cores = sysconf(_SC_NPROCESSORS_ONLN);
-        if (num_system_cores > 0) {
-            target_core = (allowed_cores[0] + 1) % num_system_cores;
-        }
-    }
-
-    if (target_core >= 0) {
-        cpu_set_t onnx_mask;
-        CPU_ZERO(&onnx_mask);
-        CPU_SET(target_core, &onnx_mask);
-        pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &onnx_mask);
-        std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread pinned to CPU Core: " << target_core << ConsolePresenter::reset() << "\n";
-    } else {
-        std::cout << ConsolePresenter::warn() << "[INIT] ONNX Control Thread running on dynamic core (affinity pinning failed/bypassed)" << ConsolePresenter::reset() << "\n";
-    }
+    // Dynamic thread scheduling: allow Linux CFS scheduler to place ONNX worker thread naturally
+    // without enforcing rigid cross-core affinity pinning that causes ARM L2 cache snooping overhead.
+    std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread Active (Dynamic OS CFS Scheduler Enabled)" << ConsolePresenter::reset() << "\n";
 
     // 2. Execution Loop
     while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {
