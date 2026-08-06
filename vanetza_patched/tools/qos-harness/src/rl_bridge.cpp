@@ -464,13 +464,16 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // are loaded and compiled exactly once on the first call (lazy initialization).
         // This is safe since the simulation engine runs on a single main thread.
         static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "V2X_ONNX_Inference");
-        static Ort::SessionOptions session_options;
-        
-        // Single-threaded configuration: 
-        // Force ONNX Runtime to use exactly 1 thread for internal operators. This eliminates OS scheduling jitter,
-        // context-switch overhead, and potential CPU resource contention with the V2X simulator's main thread.
-        session_options.SetIntraOpNumThreads(1);
-        session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        static Ort::SessionOptions session_options = []() {
+            Ort::SessionOptions opts;
+            opts.SetIntraOpNumThreads(1);
+            opts.SetInterOpNumThreads(1);
+            opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+            opts.EnableCpuMemArena();
+            opts.EnableMemPattern();
+            opts.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+            return opts;
+        }();
         
         // Load the ONNX model from the specified filesystem path and instantiate the session.
         static Ort::Session session(env, onnx_model_path_.c_str(), session_options);
