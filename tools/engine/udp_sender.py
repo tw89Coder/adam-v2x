@@ -211,11 +211,6 @@ def main():
                     start_time = time.perf_counter()
                     print_interval = max(1, args.packets // 100)
                     malware_count = 0
-                    spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
-                    # Enforce non-blocking socket mode to prevent Windows afd.sys kernel driver sendto stalls
-                    sock.setblocking(False)
-
                     for i in range(args.packets):
                         # Determine malware injection
                         is_malware = False

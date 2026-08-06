@@ -46,10 +46,6 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
     int no = 0;
     setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
 
-    // Set large receive buffer size (4MB) to prevent kernel packet drops during high pps bursts
-    int rcvbuf = 4 * 1024 * 1024;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-
     sockaddr_in6 server_addr{};
     server_addr.sin6_family = AF_INET6;
     server_addr.sin6_addr = in6addr_any;
