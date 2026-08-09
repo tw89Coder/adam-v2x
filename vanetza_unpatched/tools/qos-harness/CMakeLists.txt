@@ -29,14 +29,15 @@ target_compile_definitions(qos-harness PRIVATE REPO_ROOT="${REPO_ROOT}")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     # Raspberry Pi 4B (64-bit OS)
     message(STATUS "[QoS-Harness] Auto-detected ARM64 (Raspberry Pi 4B Cortex-A72). Enabling NEON SIMD flags.")
-    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -ftree-vectorize)
+    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -ffast-math -funroll-loops -fomit-frame-pointer -ftree-vectorize)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|armv7l|armv8l")
     # Raspberry Pi 4B (32-bit OS)
     message(STATUS "[QoS-Harness] Auto-detected ARM32 (Raspberry Pi 4B Cortex-A72). Enabling NEON SIMD flags.")
-    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ftree-vectorize)
+    target_compile_options(qos-harness PRIVATE -O3 -mcpu=cortex-a72 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ffast-math -funroll-loops -fomit-frame-pointer -ftree-vectorize)
 else()
     # x86_64 / PC / WSL
     message(STATUS "[QoS-Harness] Auto-detected x86_64 host architecture.")
+    target_compile_options(qos-harness PRIVATE -O3 -march=native -ffast-math -funroll-loops -ftree-vectorize)
 endif()
 
 # Dynamic ONNX Runtime detection and linking

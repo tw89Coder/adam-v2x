@@ -122,7 +122,7 @@ int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
             active_vals[n_active++] = cur;
         }
         histogram[cur]++;
-        ring_idx = (ring_idx + 1) % WINDOW_SIZE;
+        ring_idx = (ring_idx + 1) & (WINDOW_SIZE - 1);
 
         if (items_in_window == WINDOW_SIZE) {
             int sum_sq = 0;

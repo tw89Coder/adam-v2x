@@ -60,10 +60,12 @@ public:
         if (current_budget <= TAU_2) {
             return 1.0;
         } else if (current_budget <= TAU_1) {
-            double range_ratio = (current_budget - TAU_2) / (TAU_1 - TAU_2);
+            constexpr double INV_TAU_SPAN = 1.0 / 30.0;
+            double range_ratio = (current_budget - TAU_2) * INV_TAU_SPAN;
             return 1.0 - 0.5 * range_ratio;
         } else if (current_budget < MAX_BUDGET) {
-            double range_ratio = (current_budget - TAU_1) / (MAX_BUDGET - TAU_1);
+            constexpr double INV_TAU_SPAN = 1.0 / 30.0;
+            double range_ratio = (current_budget - TAU_1) * INV_TAU_SPAN;
             return 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio;
         }
         return BASE_SAMPLING_RATE;

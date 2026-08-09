@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
+#if defined(__linux__)
+#include <malloc.h>
+#endif
 
 #include <chrono>
 #include <thread>
@@ -180,6 +183,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 long long accumulated_queue_ns = 0;
 
                 int print_interval = std::max(1, total_pkts / 100);
+                int window_sync_counter = 0;
 
                 struct timespec session_cpu_start, session_cpu_end;
                 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_start);
@@ -255,7 +259,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         rl_bridge.collect_packet_telemetry(packet_data.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
                                                            static_cast<int>(filter_fsm.get_state()), is_drop, is_malware,
                                                            filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
-                        if (received_pkts % 500 == 0) {
+                        if (++window_sync_counter >= 500) {
+                            window_sync_counter = 0;
                             rl_bridge.check_and_sync_window(received_pkts, filter_fsm);
                         }
                     }
@@ -318,6 +323,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
                           << " | CPU Time: " << cpu_time_sec << " s | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
+
+#if defined(__linux__)
+                malloc_trim(0);
+#endif
             }
         }
     }
