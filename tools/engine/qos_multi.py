@@ -207,14 +207,16 @@ class QoSMultiPlotter(QoSPlotter):
 
             n_trials = len(group)
 
-            # Lookup CPU and RAM from transport summary
-            cpu_s = group['cpu_s'].mean()
-            ram_mb = group['ram_mb'].mean()
+            # Direct calculation from parsed per-file metadata headers across 20 trials
+            if 'cpu_s' in group and group['cpu_s'].sum() > 0:
+                cpu_s = round(float(group['cpu_s'].mean()), 4)
+                std_cpu_s = round(float(group['cpu_s'].std()), 4) if n_trials > 1 else 0.0
+            if 'ram_mb' in group and group['ram_mb'].sum() > 0:
+                ram_mb = round(float(group['ram_mb'].mean()), 2)
+                std_ram_mb = round(float(group['ram_mb'].std()), 2) if n_trials > 1 else 0.0
 
-            std_cpu_s = 0.0
-            std_ram_mb = 0.0
-
-            if transport_df is not None and not transport_df.empty:
+            # Fallback lookup from transport summary if header metadata was absent in legacy files
+            if cpu_s == 0.0 and transport_df is not None and not transport_df.empty:
                 try:
                     mode_num = int(mode_val.replace("mode", "")) if "mode" in str(mode_val) else 0
                     f_mode = filter_mode_map.get(filter_val, 0)
@@ -226,7 +228,6 @@ class QoSMultiPlotter(QoSPlotter):
                         (transport_df['filter_mode'].astype(int) == f_mode)
                     ]
                     
-                    # Refine by filename pattern if available
                     if filter_val == 'static_100':
                         sub_m = match[match['out_filename'].astype(str).str.contains("full100")]
                         if not sub_m.empty: match = sub_m
@@ -242,11 +243,11 @@ class QoSMultiPlotter(QoSPlotter):
 
                     if not match.empty:
                         if 'cpu_time_sec' in match and match['cpu_time_sec'].notnull().any():
-                            cpu_s = round(float(match['cpu_time_sec'].median()), 4)
+                            cpu_s = round(float(match['cpu_time_sec'].mean()), 4)
                             if len(match) > 1:
                                 std_cpu_s = round(float(match['cpu_time_sec'].std()), 4)
                         if 'peak_rss_kb' in match and match['peak_rss_kb'].notnull().any():
-                            ram_mb = round(float(match['peak_rss_kb'].median()) / 1024.0, 2)
+                            ram_mb = round(float(match['peak_rss_kb'].mean()) / 1024.0, 2)
                             if len(match) > 1:
                                 std_ram_mb = round(float((match['peak_rss_kb'] / 1024.0).std()), 2)
                 except Exception:
@@ -309,9 +310,25 @@ class QoSMultiPlotter(QoSPlotter):
 
     def _parse_single_csv_metrics(self, filepath):
         try:
-            # Fast header check to read ONLY necessary columns and prevent GIL/memory freezes
+            # Fast header check to read METADATA comment and column structure
+            cpu_s = 0.0
+            ram_mb = 0.0
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                header_line = f.readline()
+                first_line = f.readline()
+                if first_line.startswith('# METADATA:'):
+                    meta_str = first_line.replace('# METADATA:', '').strip()
+                    for kv in meta_str.split(','):
+                        if '=' in kv:
+                            k, v = kv.split('=', 1)
+                            k = k.strip()
+                            if k == 'cpu_time_sec':
+                                cpu_s = float(v.strip())
+                            elif k == 'peak_rss_kb':
+                                ram_mb = float(v.strip()) / 1024.0
+                    header_line = f.readline()
+                else:
+                    header_line = first_line
+
             headers = [h.strip() for h in header_line.split(',')]
 
             target_cols = [c for c in ['latency_ns', 'queue_delay_ns', 'delay_ns', 'is_malware', 'was_dropped', 'cpu_time_sec', 'ram_usage_mb'] if c in headers]
@@ -322,7 +339,7 @@ class QoSMultiPlotter(QoSPlotter):
                 elif c in ['latency_ns', 'queue_delay_ns', 'delay_ns']:
                     dtypes[c] = 'float64'
 
-            df = pd.read_csv(filepath, usecols=target_cols, dtype=dtypes, engine='c')
+            df = pd.read_csv(filepath, usecols=target_cols, dtype=dtypes, comment='#', engine='c')
             if len(df) == 0:
                 return None
 
@@ -345,8 +362,10 @@ class QoSMultiPlotter(QoSPlotter):
             fnr = (fn / total_malware * 100.0) if total_malware > 0 else 0.0
             fpr = (fp / total_normal * 100.0) if total_normal > 0 else 0.0
 
-            cpu_s = df['cpu_time_sec'].max() if 'cpu_time_sec' in df.columns else 0.0
-            ram_mb = df['ram_usage_mb'].max() if 'ram_usage_mb' in df.columns else 0.0
+            if cpu_s == 0.0 and 'cpu_time_sec' in df.columns:
+                cpu_s = df['cpu_time_sec'].max()
+            if ram_mb == 0.0 and 'ram_usage_mb' in df.columns:
+                ram_mb = df['ram_usage_mb'].max()
 
             return {
                 'p95': p95,

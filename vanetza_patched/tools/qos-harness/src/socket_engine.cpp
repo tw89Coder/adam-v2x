@@ -271,22 +271,21 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         );
                     }
                 }
-
                 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_end);
                 double cpu_time_sec = (session_cpu_end.tv_sec - session_cpu_start.tv_sec) + 
                                          (session_cpu_end.tv_nsec - session_cpu_start.tv_nsec) * 1e-9;
 
-                // Export CSV Log
-                collector.exportToCSV(out_filename);
+                struct rusage usage;
+                getrusage(RUSAGE_SELF, &usage);
+                long peak_rss_kb = usage.ru_maxrss;
+
+                // Export CSV Log with process-level metadata header
+                collector.exportToCSV(out_filename, cpu_time_sec, peak_rss_kb, total_pkts, total_inspected);
 
                 // Append session transport telemetry to summary CSV
                 std::string stats_summary_dir = LOCAL_REPO_ROOT_STR + "/outputs/stats";
                 mkdir(stats_summary_dir.c_str(), 0755);
                 std::string summary_csv_path = stats_summary_dir + "/udp_transport_summary.csv";
-
-                struct rusage usage;
-                getrusage(RUSAGE_SELF, &usage);
-                long peak_rss_kb = usage.ru_maxrss;
 
                 int total_sent = total_pkts;
                 int dropped_pkts = (total_sent > received_pkts) ? (total_sent - received_pkts) : 0;

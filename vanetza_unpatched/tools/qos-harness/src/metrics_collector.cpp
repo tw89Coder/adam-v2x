@@ -61,9 +61,16 @@ void MetricsCollector::recordPacket(int id, bool is_malware, bool was_dropped, l
  * @param filename Target file output path.
  * @return true if file writing succeeded, false otherwise.
  */
-bool MetricsCollector::exportToCSV(const std::string& filename) const {
+bool MetricsCollector::exportToCSV(const std::string& filename, double cpu_time_sec, long peak_rss_kb, int total_sent, int total_inspected) const {
     std::ofstream csv_out(filename);
     if (!csv_out.is_open()) return false;
+
+    if (cpu_time_sec > 0.0 || peak_rss_kb > 0 || total_sent > 0 || total_inspected > 0) {
+        csv_out << "# METADATA: cpu_time_sec=" << cpu_time_sec
+                << ",peak_rss_kb=" << peak_rss_kb
+                << ",total_sent=" << total_sent
+                << ",total_inspected=" << total_inspected << "\n";
+    }
 
     csv_out << "packet_id,is_malware,was_dropped,latency_ns\n";
     for (const auto& log : logs_) {

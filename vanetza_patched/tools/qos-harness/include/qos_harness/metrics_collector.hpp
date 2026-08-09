@@ -29,11 +29,15 @@ public:
     void recordPacket(int id, bool is_malware, bool was_dropped, long long latency_ns);
 
     /**
-     * @brief Exports all recorded telemetry logs into a standard CSV format.
+     * @brief Exports all recorded telemetry logs into a standard CSV format with process-level metadata header.
      * @param filename Target destination path for the CSV file.
+     * @param cpu_time_sec Process CPU execution time in seconds.
+     * @param peak_rss_kb Peak DRAM memory RSS in KB.
+     * @param total_sent Total packets sent by transmitter.
+     * @param total_inspected Total packets inspected by filter.
      * @return true If file write succeeds.
      */
-    bool exportToCSV(const std::string& filename) const;
+    bool exportToCSV(const std::string& filename, double cpu_time_sec = 0.0, long peak_rss_kb = 0, int total_sent = 0, int total_inspected = 0) const;
 
     /**
      * @brief Prints a formatted, high-visibility security and performance report to stdout.
