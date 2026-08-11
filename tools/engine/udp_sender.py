@@ -84,6 +84,7 @@ def main():
     parser.add_argument("-C", "--codel", action="store_true", help="CoDel AQM Queue Protection Baseline Mode")
     parser.add_argument("-o", "--onnx", action="store_true", help="Enable ONNX DRL Agent Filter Mode")
     parser.add_argument("-I", "--run-range", type=str, default="0 0", help="Space-separated trial run ID range (e.g. '1 20' or '1 1')")
+    parser.add_argument("-M", "--pure-memory", action="store_true", help="Enable pure production RAM benchmarking mode (saves to pure_memory_runs)")
     parser.add_argument("--patched", action="store_true", help="Target kernel is patched")
 
     args = parser.parse_args()
@@ -115,12 +116,8 @@ def main():
     normal_dir = os.path.join(repo_root, "inputs", "base_packets")
     attack_dir = os.path.join(repo_root, "inputs", "attack_vectors", "malware")
 
-    normals = load_packets_from_dir(normal_dir, is_malware_header=0)
-    attacks = load_packets_from_dir(attack_dir, is_malware_header=1)
-
-    if not normals or not attacks:
-        print(f"\033[31m[-] Error: Base packet datasets missing in inputs/ folder ({repo_root})\033[0m")
-        sys.exit(1)
+    normals = []
+    attacks = []
 
     print("======================================================================")
     print(f"\033[1;36m[UDP WINDOWS TRANSMITTER] Native OS Sender Active\033[0m")
@@ -219,6 +216,15 @@ def main():
                         sock.close()
                         sys.exit(1)
 
+                    # Lazy-load packet datasets into RAM on first successful connection
+                    if not normals or not attacks:
+                        normals = load_packets_from_dir(normal_dir, is_malware_header=0)
+                        attacks = load_packets_from_dir(attack_dir, is_malware_header=1)
+                        if not normals or not attacks:
+                            print(f"\033[31m[-] Error: Base packet datasets missing in inputs/ folder ({repo_root})\033[0m")
+                            sock.close()
+                            sys.exit(1)
+
                     start_time = time.perf_counter()
                     print_interval = max(1, args.packets // 100)
                     malware_count = 0
@@ -251,11 +257,11 @@ def main():
                             pass
 
                         # Real-time dynamic heartbeat UI update (updates every 1,000 packets / 0.33s)
-                        if (i + 1) % 1000 == 0 or i == args.packets - 1:
-                            now_t = time.perf_counter()
-                            elapsed_s = now_t - start_time
-                            inst_pps = (i + 1) / elapsed_s if elapsed_s > 0 else args.lambda_pps
-                            est_total_s = args.packets / args.lambda_pps if args.lambda_pps > 0 else 0
+                        if (i + 1) % print_interval == 0 or (i + 1) == args.packets:
+                            elapsed_s = time.perf_counter() - start_time
+                            inst_pps = (i + 1) / elapsed_s if elapsed_s > 0 else 0.0
+                            rem_pkts = args.packets - (i + 1)
+                            est_total_s = args.packets / args.lambda_pps if args.lambda_pps > 0 else 0.0
                             
                             elapsed_str = f"{int(elapsed_s)//60:02d}:{int(elapsed_s)%60:02d}"
                             est_str = f"{int(est_total_s)//60:02d}:{int(est_total_s)%60:02d}"
@@ -285,7 +291,8 @@ def main():
                         float(args.lambda_pps),
                         filter_mode,
                         1 if args.patched else 0,
-                        run_id
+                        run_id,
+                        0
                     )
                     for _ in range(3):
                         sock.sendto(end_header, dest_tuple)
@@ -301,7 +308,7 @@ def main():
     batch_end_header = struct.pack(
         HEADER_FORMAT,
         MAGIC_BATCH_END,
-        0, 0.0, 0, 0.0, 0, 0, 0
+        0, 0.0, 0, 0.0, 0, 0, 0, 0
     )
     for _ in range(3):
         sock.sendto(batch_end_header, dest_tuple)

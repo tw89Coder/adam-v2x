@@ -166,8 +166,13 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::DYNAMIC_ADAPTIVE_FSM);
                 }
 
+                const char* pure_mem_env = std::getenv("PURE_MEMORY_BENCH");
+                bool pure_memory_mode = (pure_mem_env != nullptr && (std::string(pure_mem_env) == "1" || std::string(pure_mem_env) == "true"));
+
                 MetricsCollector collector;
-                collector.reserve(total_pkts);
+                if (!pure_memory_mode) {
+                    collector.reserve(total_pkts);
+                }
 
                 vanetza::RouterFuzzingContext context;
                 context.initialize();
@@ -251,8 +256,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                         if (is_malware) false_negatives++; else true_negatives++;
                     }
 
-                    // Record metric
-                    collector.recordPacket(received_pkts, is_malware, is_drop, total_latency_ns);
+                    // Record metric only in standard mode (bypass in pure memory bench)
+                    if (!pure_memory_mode) {
+                        collector.recordPacket(received_pkts, is_malware, is_drop, total_latency_ns);
+                    }
 
                     // Sync RL telemetry and ONNX window update for DRL control plane
                     if (filter_mode == 3) {
@@ -281,9 +288,22 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double cpu_time_sec = (session_cpu_end.tv_sec - session_cpu_start.tv_sec) + 
                                          (session_cpu_end.tv_nsec - session_cpu_start.tv_nsec) * 1e-9;
 
-                struct rusage usage;
-                getrusage(RUSAGE_SELF, &usage);
-                long peak_rss_kb = usage.ru_maxrss;
+                long peak_rss_kb = 0;
+#if defined(__linux__)
+                std::ifstream status_file("/proc/self/status");
+                std::string status_line;
+                while (std::getline(status_file, status_line)) {
+                    if (status_line.rfind("VmRSS:", 0) == 0) {
+                        std::sscanf(status_line.c_str(), "VmRSS: %ld kB", &peak_rss_kb);
+                        break;
+                    }
+                }
+#endif
+                if (peak_rss_kb <= 0) {
+                    struct rusage usage;
+                    getrusage(RUSAGE_SELF, &usage);
+                    peak_rss_kb = usage.ru_maxrss;
+                }
 
                 // Export CSV Log with process-level metadata header
                 collector.exportToCSV(out_filename, cpu_time_sec, peak_rss_kb, total_pkts, total_inspected);
