@@ -102,6 +102,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 // Render session init header using ConsolePresenter
                 ConsolePresenter::printUDPSessionHeader(mode, rate, total_pkts, lambda_pps, filter_mode);
 
+                // Check for PURE_MEMORY_BENCH mode
+                const char* pure_mem_env = std::getenv("PURE_MEMORY_BENCH");
+                bool pure_memory_mode = (pure_mem_env != nullptr && (std::string(pure_mem_env) == "1" || std::string(pure_mem_env) == "true"));
+
                 // Resolve output CSV filename & multi-run directory routing
                 std::string base_out_dir = LOCAL_REPO_ROOT_STR + "/outputs";
                 std::string csv_target_dir;
@@ -109,7 +113,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 mkdir(base_out_dir.c_str(), 0755);
 
                 if (run_id > 0) {
-                    std::string multi_base = base_out_dir + "/multi_runs";
+                    std::string multi_base = base_out_dir + (pure_memory_mode ? "/pure_memory_runs" : "/multi_runs");
                     std::string mode_dir = multi_base + "/mode" + std::to_string(mode);
                     char run_folder_buf[64];
                     std::snprintf(run_folder_buf, sizeof(run_folder_buf), "/run_%02u", run_id);
@@ -165,9 +169,6 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 } else if (filter_mode == 1) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::DYNAMIC_ADAPTIVE_FSM);
                 }
-
-                const char* pure_mem_env = std::getenv("PURE_MEMORY_BENCH");
-                bool pure_memory_mode = (pure_mem_env != nullptr && (std::string(pure_mem_env) == "1" || std::string(pure_mem_env) == "true"));
 
                 MetricsCollector collector;
                 if (!pure_memory_mode) {

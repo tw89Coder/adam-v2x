@@ -171,21 +171,6 @@ def main():
 
                     # Drain any stale ACKs in local socket buffer before initiating new session handshake
                     sock.setblocking(False)
-                    try:
-                        while True:
-                            sock.recv(4096)
-                    except OSError:
-                        pass
-
-                    # Restore blocking socket mode with timeout for reliable handshake ACK exchange
-                    sock.setblocking(True)
-                    sock.settimeout(0.5)
-
-                    start_header = struct.pack(
-                        HEADER_FORMAT,
-                        MAGIC_SESSION_START,
-                        mode,
-                        float(rate),
                         args.packets,
                         float(args.lambda_pps),
                         filter_mode,
