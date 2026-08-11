@@ -75,12 +75,12 @@ def main():
     parser.add_argument("--dest-ip", type=str, default="127.0.0.1", help="Target Receiver IP Address")
     parser.add_argument("-P", "--port", type=int, default=9999, help="Target UDP Port")
     parser.add_argument("-m", "--modes", type=str, default="0", help="Space-separated attack modes (e.g. '0 1 2')")
-    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated pollution rates (e.g. '0.0 5.0')")
+    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated pollution rates (e.g. '0.0%% 5.0%%')")
     parser.add_argument("-N", "--packets", type=int, default=1000000, help="Total packets per session")
     parser.add_argument("-l", "--lambda-pps", type=float, default=3000.0, help="Arrival rate lambda (pps)")
     parser.add_argument("-B", "--baseline", action="store_true", help="Baseline mode (Filter OFF)")
     parser.add_argument("-F", "--filter", action="store_true", help="Adaptive FSM Filter Mode")
-    parser.add_argument("-S", "--static-100", action="store_true", help="Static 100% Full Inspection Mode")
+    parser.add_argument("-S", "--static-100", action="store_true", help="Static 100%% Full Inspection Mode")
     parser.add_argument("-C", "--codel", action="store_true", help="CoDel AQM Queue Protection Baseline Mode")
     parser.add_argument("-o", "--onnx", action="store_true", help="Enable ONNX DRL Agent Filter Mode")
     parser.add_argument("-I", "--run-range", type=str, default="0 0", help="Space-separated trial run ID range (e.g. '1 20' or '1 1')")
@@ -124,6 +124,8 @@ def main():
     print(f"  ├── Target Receiver    : \033[33m{args.dest_ip}:{args.port}\033[0m")
     print(f"  ├── Matrix Sweep Scope : {len(modes)} modes x {len(rates)} rates")
     print(f"  ├── Total Packets/Sess : {args.packets:,} | Pacing: {args.lambda_pps:.0f} pps")
+    if args.pure_memory:
+        print(f"  ├── Pure Memory Mode   : \033[1;32mACTIVE (-M -> Target: outputs/pure_memory_runs)\033[0m")
     if start_run > 0:
         print(f"  └── Multi-Run Trial Range: \033[1;33mRun {start_run} to Run {end_run}\033[0m")
     else:
@@ -140,7 +142,7 @@ def main():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         dest_tuple = (args.dest_ip, args.port)
 
-    sock.settimeout(0.5)  # 500ms timeout for ACK validation
+    sock.settimeout(1.5)  # 1.5s timeout for ACK validation
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 * 1024 * 1024)
     except Exception:
@@ -171,6 +173,21 @@ def main():
 
                     # Drain any stale ACKs in local socket buffer before initiating new session handshake
                     sock.setblocking(False)
+                    try:
+                        while True:
+                            sock.recv(4096)
+                    except OSError:
+                        pass
+
+                    # Restore blocking socket mode with 1.5s timeout for ultra-reliable handshake ACK exchange
+                    sock.setblocking(True)
+                    sock.settimeout(1.5)
+
+                    start_header = struct.pack(
+                        HEADER_FORMAT,
+                        MAGIC_SESSION_START,
+                        mode,
+                        float(rate),
                         args.packets,
                         float(args.lambda_pps),
                         filter_mode,
@@ -181,7 +198,8 @@ def main():
                     is_first_session = 0
 
                     ack_received = False
-                    for attempt in range(1, 21):
+                    sock.settimeout(0.1)  # 100ms ultra-fast retry poll
+                    for attempt in range(1, 51):  # Wait up to 5 seconds for RPi file write cleanup
                         try:
                             sock.sendto(start_header, dest_tuple)
                             resp, _ = sock.recvfrom(36)
@@ -192,8 +210,9 @@ def main():
                                     print(f"\033[32m  [+] Handshake ACK confirmed from Pi! Starting packet stream...\033[0m")
                                     break
                         except socket.timeout:
-                            print(f"\033[33m  [!] Handshake Attempt {attempt}/20 timeout. Retrying...\r\033[0m", end="")
-                            sys.stdout.flush()
+                            if attempt % 10 == 0:
+                                print(f"\033[33m  [!] Handshake Poll {attempt}/50 (waiting for RPi session ready)...\r\033[0m", end="")
+                                sys.stdout.flush()
 
                     if not ack_received:
                         print(f"\n\033[31m[-] [UDP ERROR] Unable to reach Pi at {args.dest_ip}:{args.port}!\033[0m")
@@ -264,7 +283,7 @@ def main():
                                 time.sleep(sleep_t)
 
                     print(f"\n\033[32m  [+] Streamed {args.packets:,} packets for Session (Mode={mode}, Rate={rate}%).\033[0m")
-                    time.sleep(0.5)  # Pause 0.5s to allow RPi receiver socket re-bind & cleanup
+                    time.sleep(1.2)  # Pause 1.2s to allow RPi receiver socket re-bind & OS cleanup
 
                     # Send End Session Control
                     end_header = struct.pack(
@@ -282,7 +301,7 @@ def main():
                     for _ in range(3):
                         sock.sendto(end_header, dest_tuple)
                         time.sleep(0.005)
-                    time.sleep(0.2)
+                    time.sleep(0.5)
 
     except KeyboardInterrupt:
         print(f"\n\033[31m[!] Aborted instantly by user (KeyboardInterrupt). Closing socket.\033[0m")

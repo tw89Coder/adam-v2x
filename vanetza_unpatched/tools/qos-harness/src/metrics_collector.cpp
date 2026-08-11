@@ -65,6 +65,13 @@ bool MetricsCollector::exportToCSV(const std::string& filename, double cpu_time_
     std::ofstream csv_out(filename);
     if (!csv_out.is_open()) return false;
 
+    if (logs_.empty()) {
+        // Pure Memory Benchmark Mode: Write strictly ONLY peak_rss_kb memory metadata for 0 side-effect purity
+        csv_out << "# METADATA: peak_rss_kb=" << peak_rss_kb << "\n";
+        csv_out.close();
+        return true;
+    }
+
     if (cpu_time_sec > 0.0 || peak_rss_kb > 0 || total_sent > 0 || total_inspected > 0) {
         csv_out << "# METADATA: cpu_time_sec=" << cpu_time_sec
                 << ",peak_rss_kb=" << peak_rss_kb
