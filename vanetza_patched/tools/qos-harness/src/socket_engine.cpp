@@ -49,6 +49,10 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
     int no = 0;
     setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
 
+    // Align receiver socket buffer to 4MB with sender SO_SNDBUF
+    int rcvbuf_sz = 4 * 1024 * 1024;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf_sz, sizeof(rcvbuf_sz));
+
     sockaddr_in6 server_addr{};
     server_addr.sin6_family = AF_INET6;
     server_addr.sin6_addr = in6addr_any;
