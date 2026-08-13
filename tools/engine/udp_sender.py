@@ -20,6 +20,14 @@ MAGIC_BATCH_END     = 0x56325842
 
 HEADER_FORMAT = "<IIfIfIIII"  # 36-byte packed struct matching C++ UDPControlHeader
 
+# Enable high-resolution Windows OS timer (1ms tick granularity)
+if sys.platform == "win32":
+    import ctypes
+    try:
+        ctypes.windll.winmm.timeBeginPeriod(1)
+    except Exception:
+        pass
+
 def load_packets_from_dir(folder_path, is_malware_header=0):
     packets = []
     repo_root = os.path.abspath(os.path.join(folder_path, ".."))
@@ -275,12 +283,11 @@ def main():
                             print(f"\r  \033[36m[*] Stream Progress [{spin_char} ALIVE]:\033[0m {i+1:7d}/{args.packets:7d} | \033[31mMal: {malware_count:5d}\033[0m | {pct:5.1f}% | [{elapsed_str}/{est_str}] | {inst_pps:,.0f} pps", end="")
                             sys.stdout.flush()
 
-                        # Pacing
+                        # High-Precision Microsecond Pacing (Windows/Linux spinlock)
                         if interval_sec > 0:
                             target_t = start_time + (i + 1) * interval_sec
-                            sleep_t = target_t - time.perf_counter()
-                            if sleep_t > 0:
-                                time.sleep(sleep_t)
+                            while time.perf_counter() < target_t:
+                                pass
 
                     print(f"\n\033[32m  [+] Streamed {args.packets:,} packets for Session (Mode={mode}, Rate={rate}%).\033[0m")
                     time.sleep(1.2)  # Pause 1.2s to allow RPi receiver socket re-bind & OS cleanup

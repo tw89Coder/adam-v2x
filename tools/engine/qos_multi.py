@@ -104,6 +104,9 @@ class QoSMultiPlotter(QoSPlotter):
                 except Exception:
                     rate = 0.0
 
+            if rate == 0.0 and filter_type == "unpatched_native":
+                filter_type = "baseline"
+
             rec = self._parse_single_csv_metrics(filepath)
             if rec:
                 rec['mode'] = mode_str
@@ -178,18 +181,15 @@ class QoSMultiPlotter(QoSPlotter):
             n_trials = len(group)
             cpu_s = 0.0
             std_cpu_s = 0.0
-            ram_mb = 0.0
-            std_ram_mb = 0.0
+            ram_mb = np.nan
+            std_ram_mb = np.nan
 
-            # Direct calculation from parsed per-file metadata headers across 20 trials
+            # Direct calculation of CPU time from parsed per-file metadata headers across 20 trials
             if 'cpu_s' in group and group['cpu_s'].sum() > 0:
                 cpu_s = round(float(group['cpu_s'].mean()), 4)
                 std_cpu_s = round(float(group['cpu_s'].std()), 4) if n_trials > 1 else 0.0
-            if 'ram_mb' in group and group['ram_mb'].sum() > 0:
-                ram_mb = round(float(group['ram_mb'].mean()), 2)
-                std_ram_mb = round(float(group['ram_mb'].std()), 2) if n_trials > 1 else 0.0
 
-            # Fallback lookup from transport summary if header metadata was absent in legacy files
+            # Fallback lookup from transport summary for CPU if header metadata was absent in legacy files
             if cpu_s == 0.0 and transport_df is not None and not transport_df.empty:
                 try:
                     mode_num = int(mode_val.replace("mode", "")) if "mode" in str(mode_val) else 0
@@ -220,14 +220,10 @@ class QoSMultiPlotter(QoSPlotter):
                             cpu_s = round(float(match['cpu_time_sec'].mean()), 4)
                             if len(match) > 1:
                                 std_cpu_s = round(float(match['cpu_time_sec'].std()), 4)
-                        if 'peak_rss_kb' in match and match['peak_rss_kb'].notnull().any():
-                            ram_mb = round(float(match['peak_rss_kb'].mean()) / 1024.0, 2)
-                            if len(match) > 1:
-                                std_ram_mb = round(float((match['peak_rss_kb'] / 1024.0).std()), 2)
                 except Exception:
                     pass
 
-            # Pure production RAM lookup from outputs/pure_memory_runs/ if available
+            # EXCLUSIVE pure production RAM lookup from outputs/pure_memory_runs/ ONLY (NO FALLBACKS!)
             pure_ram_dir = os.path.join(self.root_output_dir, "pure_memory_runs")
             if os.path.exists(pure_ram_dir):
                 try:
@@ -241,30 +237,28 @@ class QoSMultiPlotter(QoSPlotter):
                         elif filter_val == 'static_100' and 'full100' in fn: is_match = True
                         elif filter_val == 'fsm_only' and 'filtered' in fn: is_match = True
                         elif filter_val == 'codel_aqm' and 'codel' in fn: is_match = True
-                        elif filter_val == 'unpatched_native' and 'attack' in fn and not any(k in fn for k in ['onnx', 'full100', 'filtered', 'codel']): is_match = True
+                        elif filter_val in ['unpatched_native', 'baseline']:
+                            if 'baseline' in fn: is_match = True
+                            elif 'attack' in fn and not any(k in fn for k in ['onnx', 'full100', 'filtered', 'codel']): is_match = True
                         
                         if is_match:
-                            # check rate
+                            r_val = 0.0
                             if "attack" in fn:
                                 try:
                                     r_val = float(fn.split("qos_attack_")[1].split("_mode")[0])
-                                    if np.isclose(r_val, float(rate_val)):
-                                        rec_p = self._parse_single_csv_metrics(pf)
-                                        if rec_p and 'ram_mb' in rec_p and rec_p['ram_mb'] > 0:
-                                            matched_ram_vals.append(rec_p['ram_mb'])
                                 except Exception:
-                                    pass
+                                    r_val = 0.0
+                            
+                            if np.isclose(r_val, float(rate_val)):
+                                rec_p = self._parse_single_csv_metrics(pf)
+                                if rec_p and 'ram_mb' in rec_p and rec_p['ram_mb'] > 0:
+                                    matched_ram_vals.append(rec_p['ram_mb'])
 
                     if matched_ram_vals:
                         ram_mb = round(float(np.mean(matched_ram_vals)), 2)
                         std_ram_mb = round(float(np.std(matched_ram_vals)), 2) if len(matched_ram_vals) > 1 else 0.0
                 except Exception:
                     pass
-
-            # Final fall-back: if RAM still reflects daemon high-water mark (> 60 MB), adjust to production RAM
-            if ram_mb > 60.0:
-                ram_mb = 44.60 if filter_val == 'onnx_drl' else 34.10
-                std_ram_mb = 0.05 if filter_val == 'onnx_drl' else 0.02
 
             # Base Peacetime Baseline CPU Overhead = 56.3685 s
             base_cpu_overhead = 56.3685
@@ -352,8 +346,25 @@ class QoSMultiPlotter(QoSPlotter):
                 elif c in ['latency_ns', 'queue_delay_ns', 'delay_ns']:
                     dtypes[c] = 'float64'
 
-            df = pd.read_csv(filepath, usecols=target_cols, dtype=dtypes, comment='#', engine='c')
+            if target_cols:
+                try:
+                    df = pd.read_csv(filepath, usecols=target_cols, dtype=dtypes, comment='#', engine='c')
+                except Exception:
+                    df = pd.DataFrame()
+            else:
+                df = pd.DataFrame()
+
             if len(df) == 0:
+                if ram_mb > 0.0:
+                    return {
+                        'p95': 0.0,
+                        'p99': 0.0,
+                        'p999': 0.0,
+                        'fnr': 0.0,
+                        'fpr': 0.0,
+                        'cpu_s': cpu_s,
+                        'ram_mb': ram_mb
+                    }
                 return None
 
             lat_col = 'latency_ns' if 'latency_ns' in df.columns else ('queue_delay_ns' if 'queue_delay_ns' in df.columns else 'delay_ns')
@@ -393,104 +404,124 @@ class QoSMultiPlotter(QoSPlotter):
             return None
 
     def _print_terminal_tables(self, df_summary):
-        """Prints Master Consolidated Table, Table I, Table II, and Table III for User Selection."""
-        LogStyle.log_stage("\n" + "="*75)
-        LogStyle.log_stage(" [IEEE ICC 20-TRIAL AGGREGATED METRICS - DUAL FORMAT OVERVIEW]")
-        LogStyle.log_stage("="*75)
+        """Prints Master Consolidated Table, Table I, Table II, and Table III with high-contrast ANSI colors."""
+        C_RESET   = "\033[0m"
+        C_BOLD    = "\033[1m"
+        C_CYAN    = "\033[1;36m"  # ADAM ONNX DRL
+        C_GREEN   = "\033[1;32m"  # FSM Only
+        C_YELLOW  = "\033[1;33m"  # Static 100%
+        C_RED     = "\033[1;31m"  # Unpatched Native Danger
+        C_MAGENTA = "\033[1;35m"  # CoDel AQM
+        C_WHITE   = "\033[1;37m"  # Peacetime Baseline
 
-        onnx_df = df_summary[df_summary['filter_type'] == 'onnx_drl']
+        color_map = {
+            'baseline': C_WHITE,
+            'unpatched_native': C_RED,
+            'fsm_only': C_GREEN,
+            'static_100': C_YELLOW,
+            'onnx_drl': C_CYAN,
+            'codel_aqm': C_MAGENTA,
+        }
+
+        print("\n" + C_BOLD + C_CYAN + "="*115 + C_RESET)
+        print(C_BOLD + C_CYAN + " [IEEE ICC 20-TRIAL AGGREGATED METRICS - INDUSTRIAL HIGH-CONTRAST MANUSCRIPT TABLES]" + C_RESET)
+        print(C_BOLD + C_CYAN + "="*115 + C_RESET)
 
         # -------------------------------------------------------------
         # 0. MASTER CONSOLIDATED OVERVIEW TABLE
         # -------------------------------------------------------------
-        print("\n=====================================================================================================================")
-        print(" [MASTER CONSOLIDATED OVERVIEW TABLE]")
-        print("=====================================================================================================================")
-        display_cols = ['mode', 'filter_type', 'rate_%', 'trials', 'mean_p99_ms', 'std_p99_ms', 'mean_fnr_%', 'std_fnr_%', 'mean_cpu_s', 'std_cpu_s', 'add_cpu_s', 'mean_ram_mb', 'std_ram_mb']
-        print(df_summary[display_cols].to_string(index=False, float_format="%.4f"))
+        print("\n" + C_BOLD + C_YELLOW + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + C_YELLOW + " [MASTER CONSOLIDATED OVERVIEW TABLE]" + C_RESET)
+        print(C_BOLD + C_YELLOW + "=====================================================================================================================" + C_RESET)
+        
+        header_str = f"{'mode':<8} {'filter_type':<20} {'rate_%':<8} {'trials':<8} {'mean_p99_ms':<12} {'std_p99_ms':<12} {'mean_fnr_%':<12} {'std_fnr_%':<12} {'mean_cpu_s':<12} {'std_cpu_s':<12} {'add_cpu_s':<12} {'mean_ram_mb':<12} {'std_ram_mb':<12}"
+        print(C_BOLD + header_str + C_RESET)
+        print("-" * 155)
+
+        for _, row in df_summary.iterrows():
+            f_type = row['filter_type']
+            c_code = color_map.get(f_type, C_RESET)
+            row_line = f"{row['mode']:<8} {f_type:<20} {row['rate_%']:<8.4f} {int(row['trials']):<8} {row['mean_p99_ms']:<12.4f} {row['std_p99_ms']:<12.4f} {row['mean_fnr_%']:<12.4f} {row['std_fnr_%']:<12.4f} {row['mean_cpu_s']:<12.4f} {row['std_cpu_s']:<12.4f} {row['add_cpu_s']:<12.4f} {row['mean_ram_mb']:<12.2f} {row['std_ram_mb']:<12.2f}"
+            print(c_code + row_line + C_RESET)
 
         # -------------------------------------------------------------
-        # FORMAT A: Pure Mean (Clean 4-Decimal Precision)
+        # TABLE I: P99 TAIL LATENCY MANUSCRIPT GRID (Mean ± Std Dev)
         # -------------------------------------------------------------
-        print("\n======================================================================")
-        print(" [FORMAT A: PURE MEAN METRICS (Clean Table Output)]")
-        print("======================================================================")
-        print("\n--- Table II: FNR Mean (%) Across Rates ---")
-        piv_fnr = onnx_df.pivot(index='mode', columns='rate_%', values='mean_fnr_%')
-        print(piv_fnr.to_string(float_format="%.4f"))
+        print("\n" + C_BOLD + C_CYAN + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + C_CYAN + " [TABLE I: P99 TAIL LATENCY OVERVIEW (ms)] (Mean ± Std Dev Across 20 Trials)" + C_RESET)
+        print(C_BOLD + C_CYAN + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + f"{'Mode':<8} {'Mechanism':<20} {'0.1%':<22} {'0.5%':<22} {'1.0%':<22} {'5.0%':<22} {'10.0%':<22}" + C_RESET)
+        print("-" * 130)
 
-        print("\n--- Table I: P99 Tail Latency Mean (ms) Across Rates ---")
-        piv_p99 = onnx_df.pivot(index='mode', columns='rate_%', values='mean_p99_ms')
-        print(piv_p99.to_string(float_format="%.4f"))
-
-        # -------------------------------------------------------------
-        # FORMAT B: Mean ± Std Dev (Full Statistical Precision)
-        # -------------------------------------------------------------
-        print("\n======================================================================")
-        print(" [FORMAT B: MEAN ± STD DEV METRICS (Full LaTeX Table Format)]")
-        print("======================================================================")
-
-        print("\n--- Table II LaTeX Rows: FNR (%) (Mean ± Std Dev) ---")
-        for m in sorted(onnx_df['mode'].unique()):
-            row_str = f"{m:<8}"
-            for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
-                sub = onnx_df[(onnx_df['mode'] == m) & (onnx_df['rate_%'] == r)]
-                if not sub.empty:
-                    mean_v = sub['mean_fnr_%'].values[0]
-                    std_v = sub['std_fnr_%'].values[0]
-                    row_str += f" | {mean_v:.4f} ± {std_v:.4f}"
-                else:
-                    row_str += " | N/A"
-            print(row_str)
-
-        print("\n--- Table I LaTeX Rows: P99 Latency (ms) (Mean ± Std Dev) ---")
-        for m in sorted(onnx_df['mode'].unique()):
-            row_str = f"{m:<8}"
-            for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
-                sub = onnx_df[(onnx_df['mode'] == m) & (onnx_df['rate_%'] == r)]
-                if not sub.empty:
-                    mean_v = sub['mean_p99_ms'].values[0]
-                    std_v = sub['std_p99_ms'].values[0]
-                    row_str += f" | {mean_v:.4f} ± {std_v:.4f}"
-                else:
-                    row_str += " | N/A"
-            print(row_str)
+        for m in ['mode0', 'mode1', 'mode2']:
+            sub_m = df_summary[df_summary['mode'] == m]
+            if sub_m.empty: continue
+            for f_type in ['baseline', 'unpatched_native', 'codel_aqm', 'fsm_only', 'static_100', 'onnx_drl']:
+                sub_f = sub_m[sub_m['filter_type'] == f_type]
+                if sub_f.empty: continue
+                c_code = color_map.get(f_type, C_RESET)
+                row_cells = []
+                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
+                    match_r = sub_f[np.isclose(sub_f['rate_%'].astype(float), r)]
+                    if not match_r.empty:
+                        m_val = match_r['mean_p99_ms'].values[0]
+                        s_val = match_r['std_p99_ms'].values[0]
+                        row_cells.append(f"{m_val:.4f} ± {s_val:.4f}")
+                    else:
+                        row_cells.append(f"{'-':^18}")
+                cell_str = " | ".join([f"{c:<20}" for c in row_cells])
+                print(f"{m:<8} " + c_code + f"{f_type:<20}" + C_RESET + " | " + cell_str)
+            print("-" * 130)
 
         # -------------------------------------------------------------
-        # TABLE III: Ablation Study Comparison (FSM-Only vs Static 100% vs ADAM DRL)
+        # TABLE II: FNR MALWARE LEAKAGE MANUSCRIPT GRID (Mean ± Std Dev)
         # -------------------------------------------------------------
-        print("\n======================================================================")
-        print(" [TABLE III: ABLATION STUDY COMPARISON - Mode 2 @ 0.1% & 10.0%]")
-        print("======================================================================")
+        print("\n" + C_BOLD + C_GREEN + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + C_GREEN + " [TABLE II: FNR MALWARE LEAKAGE OVERVIEW (%)] (Mean ± Std Dev Across 20 Trials)" + C_RESET)
+        print(C_BOLD + C_GREEN + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + f"{'Mode':<8} {'Mechanism':<20} {'0.1%':<22} {'0.5%':<22} {'1.0%':<22} {'5.0%':<22} {'10.0%':<22}" + C_RESET)
+        print("-" * 130)
+
+        for m in ['mode0', 'mode1', 'mode2']:
+            sub_m = df_summary[df_summary['mode'] == m]
+            if sub_m.empty: continue
+            for f_type in ['baseline', 'unpatched_native', 'codel_aqm', 'fsm_only', 'static_100', 'onnx_drl']:
+                sub_f = sub_m[sub_m['filter_type'] == f_type]
+                if sub_f.empty: continue
+                c_code = color_map.get(f_type, C_RESET)
+                row_cells = []
+                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
+                    match_r = sub_f[np.isclose(sub_f['rate_%'].astype(float), r)]
+                    if not match_r.empty:
+                        m_val = match_r['mean_fnr_%'].values[0]
+                        s_val = match_r['std_fnr_%'].values[0]
+                        row_cells.append(f"{m_val:.4f} ± {s_val:.4f}")
+                    else:
+                        row_cells.append(f"{'-':^18}")
+                cell_str = " | ".join([f"{c:<20}" for c in row_cells])
+                print(f"{m:<8} " + c_code + f"{f_type:<20}" + C_RESET + " | " + cell_str)
+            print("-" * 130)
+
+        # -------------------------------------------------------------
+        # TABLE III: ABLATION STUDY COMPARISON (Mode 2 @ 0.1% & 10.0%)
+        # -------------------------------------------------------------
+        print("\n" + C_BOLD + C_MAGENTA + "=====================================================================================================================" + C_RESET)
+        print(C_BOLD + C_MAGENTA + " [TABLE III: ABLATION STUDY COMPARISON - Mode 2 @ 0.1% & 10.0%]" + C_RESET)
+        print(C_BOLD + C_MAGENTA + "=====================================================================================================================" + C_RESET)
         ablation_df = df_summary[(df_summary['mode'] == 'mode2') & (df_summary['rate_%'].isin([0.1, 10.0]))]
         if not ablation_df.empty:
-            piv_abl_p99 = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_p99_ms')
-            piv_abl_fnr = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_fnr_%')
-            piv_abl_cpu = ablation_df.pivot(index='filter_type', columns='rate_%', values='mean_cpu_s')
-            piv_abl_add = ablation_df.pivot(index='filter_type', columns='rate_%', values='add_cpu_s')
-
-            print("\n--- Ablation P99 Latency Mean (ms) ---")
-            print(piv_abl_p99.to_string(float_format="%.4f"))
-
-            print("\n--- Ablation FNR Mean (%) ---")
-            print(piv_abl_fnr.to_string(float_format="%.4f"))
-
-            print("\n--- Ablation Total Measured CPU Time (s) ---")
-            print(piv_abl_cpu.to_string(float_format="%.4f"))
-
-            print("\n--- Ablation Additional Inspection CPU Overhead Delta-CPU (s) ---")
-            print(piv_abl_add.to_string(float_format="%.4f"))
-
-            print("\n--- Table III LaTeX Formatted Rows (Mean ± Std Dev) ---")
+            print(C_BOLD + f"{'Mechanism':<20} | {'Rate 0.1% P99 (ms)':<22} | {'Rate 0.1% FNR (%)':<22} || {'Rate 10.0% P99 (ms)':<22} | {'Rate 10.0% FNR (%)':<22}" + C_RESET)
+            print("-" * 125)
             for f_type in ['unpatched_native', 'fsm_only', 'static_100', 'onnx_drl']:
                 sub = ablation_df[ablation_df['filter_type'] == f_type]
                 if not sub.empty:
-                    row_01 = sub[sub['rate_%'] == 0.1]
-                    row_10 = sub[sub['rate_%'] == 10.0]
-                    p99_01 = f"{row_01['mean_p99_ms'].values[0]:.4f} ± {row_01['std_p99_ms'].values[0]:.4f}" if not row_01.empty else "N/A"
-                    fnr_01 = f"{row_01['mean_fnr_%'].values[0]:.4f} ± {row_01['std_fnr_%'].values[0]:.4f}" if not row_01.empty else "N/A"
-                    p99_10 = f"{row_10['mean_p99_ms'].values[0]:.4f} ± {row_10['std_p99_ms'].values[0]:.4f}" if not row_10.empty else "N/A"
-                    fnr_10 = f"{row_10['mean_fnr_%'].values[0]:.4f} ± {row_10['std_fnr_%'].values[0]:.4f}" if not row_10.empty else "N/A"
-                    print(f"{f_type:<18} | Rate 0.1% P99: {p99_01:<18} | FNR: {fnr_01:<18} || Rate 10.0% P99: {p99_10:<18} | FNR: {fnr_10:<18}")
+                    c_code = color_map.get(f_type, C_RESET)
+                    row_01 = sub[np.isclose(sub['rate_%'].astype(float), 0.1)]
+                    row_10 = sub[np.isclose(sub['rate_%'].astype(float), 10.0)]
+                    p99_01 = f"{row_01['mean_p99_ms'].values[0]:.4f} ± {row_01['std_p99_ms'].values[0]:.4f}" if not row_01.empty else "-"
+                    fnr_01 = f"{row_01['mean_fnr_%'].values[0]:.4f} ± {row_01['std_fnr_%'].values[0]:.4f}" if not row_01.empty else "-"
+                    p99_10 = f"{row_10['mean_p99_ms'].values[0]:.4f} ± {row_10['std_p99_ms'].values[0]:.4f}" if not row_10.empty else "-"
+                    fnr_10 = f"{row_10['mean_fnr_%'].values[0]:.4f} ± {row_10['std_fnr_%'].values[0]:.4f}" if not row_10.empty else "-"
+                    print(c_code + f"{f_type:<20}" + C_RESET + f" | {p99_01:<22} | {fnr_01:<22} || {p99_10:<22} | {fnr_10:<22}")
 
-        LogStyle.log_success("\n[+] Multi-run evaluation, statistical aggregation, and publication graphics synthesis completed cleanly.")
+        print(C_BOLD + C_CYAN + "\n[+] Multi-run evaluation, statistical aggregation, and publication graphics synthesis completed cleanly." + C_RESET)

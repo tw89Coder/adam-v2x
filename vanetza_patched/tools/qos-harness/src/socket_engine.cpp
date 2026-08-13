@@ -183,6 +183,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 context.initialize();
 
                 int received_pkts = 0;
+                int duplicate_session_starts = 0;
                 int malware_count = 0;
                 int total_inspected = 0;
                 int true_positives = 0, false_positives = 0, true_negatives = 0, false_negatives = 0;
@@ -213,6 +214,16 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                             session_running = false;
                             batch_active = false;
                             break;
+                        } else if (ctrl.magic == MAGIC_SESSION_START) {
+                            UDPControlHeader ack_header = ctrl;
+                            ack_header.magic = MAGIC_SESSION_ACK;
+                            for (int ack_try = 0; ack_try < 3; ++ack_try) {
+                                sendto(sockfd, &ack_header, sizeof(ack_header), 0, (struct sockaddr*)&client_addr, client_len);
+                            }
+                            duplicate_session_starts++;
+                            continue;
+                        } else if (ctrl.magic == MAGIC_SESSION_ACK) {
+                            continue;
                         }
                     }
 
@@ -325,6 +336,13 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 double fpr_pct = (false_positives + true_negatives > 0) ? (static_cast<double>(false_positives) / (false_positives + true_negatives)) * 100.0 : 0.0;
                 double fnr_pct = (false_negatives + true_positives > 0) ? (static_cast<double>(false_negatives) / (false_negatives + true_positives)) * 100.0 : 0.0;
 
+                if (received_pkts != total_pkts) {
+                    std::cout << ConsolePresenter::warn() << "[UDP RECEIVER WARNING] Payload integrity mismatch: expected "
+                              << total_pkts << " payload frames, received " << received_pkts
+                              << " payload frames; duplicate SESSION_START controls: " << duplicate_session_starts
+                              << "." << ConsolePresenter::reset() << "\n";
+                }
+
                 bool exists = (access(summary_csv_path.c_str(), F_OK) == 0);
                 std::ofstream sum_file(summary_csv_path, std::ios::out | std::ios::app);
                 if (sum_file.is_open()) {
@@ -346,7 +364,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                 }
 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename
-                          << " | CPU Time: " << cpu_time_sec << " s | Received: " << received_pkts << " frames | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
+                          << " | CPU Time: " << cpu_time_sec << " s | Payload Received: " << received_pkts
+                          << " frames | Duplicate START: " << duplicate_session_starts
+                          << " | Transport Loss: " << dropped_pkts << " (" << drop_rate_pct << "%)" << ConsolePresenter::reset() << "\n";
                 ConsolePresenter::printHorizontalSeparator();
 
 #if defined(__linux__)
