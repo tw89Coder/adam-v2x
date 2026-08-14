@@ -58,7 +58,7 @@ class DQNDeploymentWrapper(nn.Module):
         current_rate = full_observation[:, input_dim - 3]
         
         # 5. Compute new rate and enforce safety boundaries in-graph
-        new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)
+        new_rate = torch.clamp(current_rate + delta, min=0.05, max=0.20)
         
         # 6. Construct 4D output policy matching C++ expectation scaling
         batch_size = full_observation.shape[0]
@@ -100,7 +100,7 @@ class DiscretePPODeploymentWrapper(nn.Module):
 
         # The newest stacked frame occupies the final three features.
         current_rate = full_observation[:, full_observation.shape[1] - 3]
-        new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)
+        new_rate = torch.clamp(current_rate + delta, min=0.05, max=0.20)
 
         batch_size = full_observation.shape[0]
         device = full_observation.device

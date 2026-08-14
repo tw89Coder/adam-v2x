@@ -61,8 +61,9 @@ class DqnActionTranslator(ActionTranslator):
         action_index = max(0, min(len(self.action_map) - 1, action_index))
         delta = self.action_map[action_index]
         
-        # Calculate new sampling rate, clamp between [0.05, 1.0] to maintain baseline FSM responsiveness
-        new_rate = max(0.05, min(1.0, current_sampling_rate + delta))
+        # DRL controls only the nominal S0 range; FSM risk states can still raise
+        # the effective inspection rate up to 100%.
+        new_rate = max(0.05, min(0.20, current_sampling_rate + delta))
         
         # Return 4D policy: [recovery_rate, penalty_multiplier, sq_threshold, new_sampling_rate]
         # Rest of the parameters are set to default baseline FSM settings

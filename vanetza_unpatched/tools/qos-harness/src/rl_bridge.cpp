@@ -49,6 +49,15 @@
 
 namespace qos_harness {
 
+namespace {
+constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.05;
+constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.20;
+
+double clamp_drl_s0_sampling_rate(double rate) {
+    return std::clamp(rate, MIN_DRL_S0_SAMPLING_RATE, MAX_DRL_S0_SAMPLING_RATE);
+}
+}  // namespace
+
 RLBridge::RLBridge(const std::string& repo_root, int port)
     : repo_root_(repo_root),
       port_(port),
@@ -299,6 +308,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
             if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
             if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
         }
+        policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier, policy.sq_threshold,
                                     policy.base_sampling_rate);
         new_policy_available_.store(false, std::memory_order_release);
@@ -341,6 +351,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                 if (next_policy.recovery_rate > 0.10) next_policy.recovery_rate = 0.10;
                 if (next_policy.base_sampling_rate < 0.05) next_policy.base_sampling_rate = 0.05;
             }
+            next_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(next_policy.base_sampling_rate);
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
@@ -393,6 +404,7 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
             if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
         }
+        policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
                                     policy.sq_threshold, policy.base_sampling_rate);
         new_policy_available_.store(false, std::memory_order_release);
@@ -598,7 +610,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 float delta = dqn_action_map_[best_action_idx];
                 float new_rate = telemetry.instant_sampling_rate + delta;
                 if (new_rate < 0.05f) new_rate = 0.05f;
-                if (new_rate > 1.0f) new_rate = 1.0f;
+                if (new_rate > 0.20f) new_rate = 0.20f;
 
                 out_policy.recovery_rate = 0.05;
                 out_policy.penalty_multiplier = 50.0;
@@ -666,6 +678,9 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
             if (out_policy.base_sampling_rate < 0.05) out_policy.base_sampling_rate = 0.05;
         }
+        // Architectural invariant: DRL controls only the nominal S0 range.
+        // Higher effective inspection rates remain exclusively FSM budget decisions.
+        out_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(out_policy.base_sampling_rate);
 
         return true;
     } catch (const std::exception& e) {
