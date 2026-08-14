@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -723,10 +724,38 @@ std::vector<int> RLBridge::get_allowed_cores() {
 }
 
 void RLBridge::onnx_worker_loop() {
-    // Dynamic thread scheduling: allow Linux CFS scheduler to place ONNX worker thread naturally
-    // without enforcing rigid cross-core affinity pinning that causes ARM L2 cache snooping overhead.
-    std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread Active (Dynamic OS CFS Scheduler Enabled)"
-              << ConsolePresenter::reset() << "\n";
+    // pthreads inherit their creator's affinity. The receiver is already pinned
+    // to the data core, so the worker must explicitly replace that inherited mask.
+    if (control_core_ >= 0) {
+        cpu_set_t mask;
+        CPU_ZERO(&mask);
+        CPU_SET(control_core_, &mask);
+        const int rc = pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
+        if (rc != 0) {
+            std::cerr << ConsolePresenter::crit()
+                      << "[FATAL] Failed to pin ONNX control thread to CPU " << control_core_
+                      << ": " << std::strerror(rc) << ConsolePresenter::reset() << "\n";
+            std::exit(EXIT_FAILURE);
+        }
+
+        cpu_set_t verified_mask;
+        CPU_ZERO(&verified_mask);
+        const int verify_rc = pthread_getaffinity_np(pthread_self(), sizeof(verified_mask), &verified_mask);
+        if (verify_rc != 0 || !CPU_ISSET(control_core_, &verified_mask)) {
+            std::cerr << ConsolePresenter::crit()
+                      << "[FATAL] ONNX control thread affinity verification failed for CPU "
+                      << control_core_ << ConsolePresenter::reset() << "\n";
+            std::exit(EXIT_FAILURE);
+        }
+
+        std::cout << ConsolePresenter::info() << "[INIT] ONNX control thread pinned to CPU "
+                  << control_core_ << " (running on CPU " << sched_getcpu() << ")"
+                  << ConsolePresenter::reset() << "\n";
+    } else {
+        std::cout << ConsolePresenter::info()
+                  << "[INIT] ONNX control thread using OS scheduler (affinity disabled)"
+                  << ConsolePresenter::reset() << "\n";
+    }
 
     // 2. Execution Loop
     while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {

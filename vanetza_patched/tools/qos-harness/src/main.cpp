@@ -229,6 +229,13 @@ int main(int argc, char* argv[]) {
         } else {
             control_core = ((control_core % cpu_count) + cpu_count) % cpu_count;
         }
+        if (cpu_count > 1 && control_core == data_core) {
+            control_core = (data_core + 1) % cpu_count;
+            // Prefer a non-housekeeping CPU when at least three CPUs exist.
+            if (control_core == 0 && cpu_count > 2) control_core = 1;
+            std::cerr << "[WARNING] Control core matched data core; reassigned ONNX control to CPU "
+                      << control_core << "\n";
+        }
     } else {
         data_core = -1;
         control_core = -1;
