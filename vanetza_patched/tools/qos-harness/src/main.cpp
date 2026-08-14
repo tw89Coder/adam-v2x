@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,9 @@ void printHelp(const char* progName) {
               << "  -f               Enable Proposed Fast Pre-Filter\n"
               << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
+              << "  --data-core      Pin the packet-processing thread to this CPU (Default: 2)\n"
+              << "  --control-core   Pin the ONNX worker to this CPU (Default: next usable CPU)\n"
+              << "  --no-affinity    Disable explicit thread affinity\n"
               << "  --recovery       Override FSM Recovery Rate (AI/Custom)\n"
               << "  --penalty        Override FSM Penalty Multiplier (AI/Custom)\n"
               << "  --sq-thresh      Override FSM SQ Threshold (AI/Custom)\n"
@@ -102,6 +106,9 @@ int main(int argc, char* argv[]) {
     bool enable_trace = false;
     unsigned int seed = 42;
     double lambda_pps = -1.0;
+    int data_core = 2;
+    int control_core = -1;
+    bool affinity_enabled = true;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -133,6 +140,12 @@ int main(int argc, char* argv[]) {
             }
         } else if (arg == "--dest-ip" && i + 1 < argc) {
             dest_ip = argv[++i];
+        } else if (arg == "--data-core" && i + 1 < argc) {
+            data_core = std::atoi(argv[++i]);
+        } else if (arg == "--control-core" && i + 1 < argc) {
+            control_core = std::atoi(argv[++i]);
+        } else if (arg == "--no-affinity") {
+            affinity_enabled = false;
         } else if (arg == "--port" && i + 1 < argc) {
             udp_port = std::atoi(argv[++i]);
         } else if (arg == "--modes" && i + 1 < argc) {
@@ -203,6 +216,23 @@ int main(int argc, char* argv[]) {
             lambda_pps = std::atof(argv[++i]);
         }
     }
+
+    const long detected_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    const int cpu_count = detected_cpus > 0 ? static_cast<int>(detected_cpus) : 1;
+    if (affinity_enabled) {
+        data_core = ((data_core % cpu_count) + cpu_count) % cpu_count;
+        if (control_core < 0) {
+            control_core = (data_core + 1) % cpu_count;
+            // CPU 0 commonly handles Linux housekeeping. Skip it when a third
+            // CPU exists; on one/two-CPU systems a distinct CPU takes priority.
+            if (control_core == 0 && cpu_count > 2) control_core = 1;
+        } else {
+            control_core = ((control_core % cpu_count) + cpu_count) % cpu_count;
+        }
+    } else {
+        data_core = -1;
+        control_core = -1;
+    }
     
     // Configure simulation random seed
     srand(seed);
@@ -242,7 +272,7 @@ int main(int argc, char* argv[]) {
         if (onnx_model_path.empty()) {
             onnx_model_path = REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx";
         }
-        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, true, onnx_model_path);
+        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core, onnx_model_path);
     }
     if (is_udp_sender) {
         int f_mode = 0; // 0=OFF
@@ -357,6 +387,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize socket co-simulation bridge for active DRL co-processing
     qos_harness::RLBridge rl_bridge(REPO_ROOT_STR);
+    rl_bridge.set_control_core(control_core);
     if (disable_safety) {
         rl_bridge.set_safety_guards(false);
     }

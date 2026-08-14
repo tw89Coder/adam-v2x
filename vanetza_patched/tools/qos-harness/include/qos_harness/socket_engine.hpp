@@ -34,7 +34,8 @@ public:
      * Listens on UDP port, handles session handshakes with ACK, processes streaming V2X frames,
      * computes M/G/1 queueing delay, and saves raw telemetry CSV.
      */
-    static int run_receiver(int port, const std::string& build_type, bool no_taskset, const std::string& default_onnx_path = "");
+    static int run_receiver(int port, const std::string& build_type, int data_core, int control_core,
+                            const std::string& default_onnx_path = "");
 
     /**
      * @brief Runs UDP sender on Laptop / WSL Traffic Generator.

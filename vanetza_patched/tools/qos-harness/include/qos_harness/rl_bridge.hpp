@@ -93,6 +93,9 @@ public:
      */
     void initialize_onnx(bool enable_onnx, const std::string& model_path);
 
+    /** Configure the dedicated Linux CPU for the asynchronous ONNX worker. */
+    void set_control_core(int core_id) { control_core_ = core_id; }
+
     /**
      * @brief Set safety guards (heuristic boundaries) status.
      * @param enabled If true, safety boundaries clamp RL outputs.
@@ -147,6 +150,7 @@ private:
     bool onnx_enabled_;
     std::string onnx_model_path_;
     bool safety_guards_enabled_ = true;
+    int control_core_ = -1;
     
     // Instance-level variables for frame stacking to prevent cross-node data leakage
     bool history_initialized_ = false;

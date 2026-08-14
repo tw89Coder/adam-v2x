@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
+#include <sched.h>
+#include <pthread.h>
 #if defined(__linux__)
 #include <malloc.h>
 #endif
@@ -38,7 +40,27 @@ static const std::string LOCAL_ATTACK_FOLDER = LOCAL_REPO_ROOT_STR + "/inputs/at
 
 namespace qos_harness {
 
-int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool no_taskset, const std::string& default_onnx_path) {
+namespace {
+bool pin_current_thread(int core_id, const char* role) {
+    if (core_id < 0) return true;
+    cpu_set_t mask;
+    CPU_ZERO(&mask);
+    CPU_SET(core_id, &mask);
+    const int rc = pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
+    if (rc != 0) {
+        std::cerr << "[FATAL] Failed to pin " << role << " thread to CPU " << core_id
+                  << ": " << std::strerror(rc) << "\n";
+        return false;
+    }
+    std::cout << "[INIT] " << role << " thread pinned to CPU " << core_id
+              << " (running on CPU " << sched_getcpu() << ")\n";
+    return true;
+}
+} // namespace
+
+int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int data_core, int control_core,
+                                  const std::string& default_onnx_path) {
+    if (!pin_current_thread(data_core, "Data-plane receiver")) return 1;
     int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         std::cerr << ConsolePresenter::crit() << "[UDP RECEIVER ERROR] Failed to create socket.\n" << ConsolePresenter::reset();
@@ -165,6 +187,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, bool 
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 0.10);
                     std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
+                    rl_bridge.set_control_core(control_core);
                     rl_bridge.initialize_onnx(true, model_to_use);
                     rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {

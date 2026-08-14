@@ -1,54 +1,60 @@
 /**
  * @file rl_bridge.cpp
  * @brief Implementation of the reinforcement learning socket bridge interface.
- * 
+ *
  * DESIGN CONTEXT & WORKFLOW IPC LINK:
  * This class coordinates the telemetry gathering and bidirectional IPC synchronization
  * between the C++ simulator engine and the Python PyTorch/PPO training agent.
- * 
+ *
  * TELEMETRY LOGGING (EPISODIC TRACES):
  * Writes per-packet metrics (packet size, max similarity square, budget, state, anomalies)
- * to a CSV training trace. Each run routes to a rate-specific and mode-specific log 
+ * to a CSV training trace. Each run routes to a rate-specific and mode-specific log
  * file to prevent cross-run trace contamination.
- * 
+ *
  * CONTROL WINDOW & SOCKET HANDSHAKE:
  * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (100) packets.
  * - At window boundaries, it opens a blocking TCP socket loopback connection to port 8080.
  * - Sends a serialized telemetry observation string: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
- * - Blocks execution waiting for the DRL policy decision, which is received as a serialized 
+ * - Blocks execution waiting for the DRL policy decision, which is received as a serialized
  *   comma-separated control string: "recovery,penalty,sq_threshold,s0_sampling_rate\n"
  * - Dynamically updates the FSM parameters with the newly received policy.
  */
 
 #include "qos_harness/rl_bridge.hpp"
-#include "qos_harness/console_presenter.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <sched.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <sched.h>
-#include <pthread.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <sstream>
-#include <fstream>
-#include <algorithm>
+
+#include "qos_harness/console_presenter.hpp"
 
 #ifdef USE_ONNX
 #include <onnxruntime_cxx_api.h>
-#include <vector>
+
 #include <cmath>
+#include <vector>
 #endif
 
 namespace qos_harness {
 
 RLBridge::RLBridge(const std::string& repo_root, int port)
-    : repo_root_(repo_root), port_(port), socket_enabled_(false), server_fd_(-1),
-      onnx_enabled_(false), onnx_model_path_("") {}
+    : repo_root_(repo_root),
+      port_(port),
+      socket_enabled_(false),
+      server_fd_(-1),
+      onnx_enabled_(false),
+      onnx_model_path_("") {}
 
 RLBridge::~RLBridge() {
     stop_onnx_thread_ = true;
@@ -71,7 +77,7 @@ RLBridge::~RLBridge() {
 
 /**
  * @brief Configures simulation outputs directory and routes traces to dynamic files.
- * 
+ *
  * @param enable_socket Enables active loopback TCP handshake updates if true.
  * @param pollution_rate Anomaly flow percentage representing fuzzer intensity.
  * @param attack_mode Selected traffic generator schedule index.
@@ -113,10 +119,10 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
 
     char file_path[512];
     char win_file_path[512];
-    std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d_%s.csv", dir_path.c_str(), pollution_rate,
-                  attack_mode, suffix.c_str());
-    std::snprintf(win_file_path, sizeof(win_file_path), "%s/window_trace_%.1f_mode%d_%s.csv", dir_path.c_str(), pollution_rate,
-                  attack_mode, suffix.c_str());
+    std::snprintf(file_path, sizeof(file_path), "%s/training_trace_%.1f_mode%d_%s.csv", dir_path.c_str(),
+                  pollution_rate, attack_mode, suffix.c_str());
+    std::snprintf(win_file_path, sizeof(win_file_path), "%s/window_trace_%.1f_mode%d_%s.csv", dir_path.c_str(),
+                  pollution_rate, attack_mode, suffix.c_str());
 
     if (csv_file_.is_open()) csv_file_.close();
     if (enable_trace || socket_enabled_) {
@@ -128,7 +134,8 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
     if (enable_trace || socket_enabled_) {
         window_csv_file_.open(win_file_path, std::ios::out);
         if (window_csv_file_.is_open()) {
-            window_csv_file_ << "window_index,actual_inspection_rate,target_sampling_rate,attack_intensity,fpr,fnr,avg_sq,tp,tn,fp,fn\n";
+            window_csv_file_ << "window_index,actual_inspection_rate,target_sampling_rate,attack_intensity,fpr,fnr,avg_"
+                                "sq,tp,tn,fp,fn\n";
         }
     }
 }
@@ -140,12 +147,10 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
     if (onnx_enabled_) {
         // Fallback to default ONNX checkpoint path if no explicit path provided
         if (onnx_model_path_.empty()) {
-            std::vector<std::string> candidates = {
-                repo_root_ + "/checkpoints/v2x_agent_dqn.onnx",
-                repo_root_ + "/checkpoints/v2x_agent_discrete_ppo.onnx",
-                repo_root_ + "/checkpoints/v2x_agent_ppo.onnx",
-                repo_root_ + "/tools/rl_bridge/checkpoints/v2x_agent_dqn.onnx"
-            };
+            std::vector<std::string> candidates = {repo_root_ + "/checkpoints/v2x_agent_dqn.onnx",
+                                                   repo_root_ + "/checkpoints/v2x_agent_discrete_ppo.onnx",
+                                                   repo_root_ + "/checkpoints/v2x_agent_ppo.onnx",
+                                                   repo_root_ + "/tools/rl_bridge/checkpoints/v2x_agent_dqn.onnx"};
             for (const auto& cand : candidates) {
                 struct stat st_cand;
                 if (stat(cand.c_str(), &st_cand) == 0) {
@@ -164,8 +169,8 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
         }
 
         // 2. Dynamically parse agent.yaml to read algorithm and action_map
-        algorithm_ = "dqn"; // Default fallback
-        dqn_action_map_ = {-0.20f, -0.10f, 0.0f, 0.10f, 0.20f}; // Default fallback
+        algorithm_ = "dqn";                                      // Default fallback
+        dqn_action_map_ = {-0.20f, -0.10f, 0.0f, 0.10f, 0.20f};  // Default fallback
 
         std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
         std::ifstream config_file(config_path);
@@ -250,7 +255,7 @@ void RLBridge::write_csv_header() {
 
 /**
  * @brief Logs packet-level observations and updates sliding window statisticians.
- * 
+ *
  * @param pkt_size Length of the raw packet.
  * @param max_sum_sq The maximum F2 sketch similarity count.
  * @param budget Virtual CPU budget value of the FSM.
@@ -258,30 +263,29 @@ void RLBridge::write_csv_header() {
  * @param is_anomalous True if the packet was dropped.
  */
 
-void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware, bool inspected, uint64_t latency_ticks) {
+void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous,
+                                        bool is_malware, bool inspected, uint64_t latency_ticks) {
     if (csv_file_.is_open()) {
-        // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on IO),
-        // we store the data in an in-memory buffer and batch-flush it.
+        // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on
+        // IO), we store the data in an in-memory buffer and batch-flush it.
         packet_buffer_.push_back({pkt_size, max_sum_sq, budget, state, is_anomalous});
         if (packet_buffer_.size() >= static_cast<size_t>(CTRL_WINDOW_SIZE)) {
             flush_telemetry_buffer();
         }
     }
-    
-
 
     // Classify packet into confusion matrix categories for structural byte dumping
     if (is_malware) {
         if (is_anomalous) {
             window_tp_count_++;
         } else {
-            window_fn_count_++; // Malware allowed = Leakage
+            window_fn_count_++;  // Malware allowed = Leakage
         }
     } else {
         if (is_anomalous) {
-            window_fp_count_++; // Benign dropped = False Positive
+            window_fp_count_++;  // Benign dropped = False Positive
         } else {
-            window_tn_count_++; // Benign allowed = True Negative
+            window_tn_count_++;  // Benign allowed = True Negative
         }
     }
 
@@ -295,7 +299,7 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
 
 /**
  * @brief Synchronizes policy parameters with the python DRL brain at window boundary splits.
- * 
+ *
  * @param current_packet_idx The index of the packet in the main loop.
  * @param filter The active FSM instance to modify.
  */
@@ -313,8 +317,8 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
             if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
             if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
         }
-        filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
-                                    policy.sq_threshold, policy.base_sampling_rate);
+        filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier, policy.sq_threshold,
+                                    policy.base_sampling_rate);
         new_policy_available_.store(false, std::memory_order_release);
     }
 
@@ -336,12 +340,10 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
         // Asynchronously hand off telemetry to the background ONNX thread
         {
             std::lock_guard<std::mutex> lock(onnx_mutex_);
-            shared_telemetry_ = WindowTelemetry{
-                static_cast<double>(window_sq_sum_) / total_packets,
-                filter.get_sampling_rate(),
-                static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
-                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets
-            };
+            shared_telemetry_ =
+                WindowTelemetry{static_cast<double>(window_sq_sum_) / total_packets, filter.get_sampling_rate(),
+                                static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
+                                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets};
         }
         new_telemetry_available_.store(true, std::memory_order_release);
         onnx_cv_.notify_one();
@@ -365,25 +367,20 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     if (window_csv_file_.is_open()) {
         double actual_insp = (total_packets > 0) ? (static_cast<double>(window_inspected_count_) / total_packets) : 0.0;
         double target_samp = filter.get_sampling_rate();
-        double attack_int = (total_packets > 0) ? (static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets) : 0.0;
-        
-        double fpr = (window_fp_count_ + window_tn_count_ > 0) ? 
-            (static_cast<double>(window_fp_count_) / (window_fp_count_ + window_tn_count_)) : 0.0;
-        double fnr = (window_tp_count_ + window_fn_count_ > 0) ? 
-            (static_cast<double>(window_fn_count_) / (window_tp_count_ + window_fn_count_)) : 0.0;
+        double attack_int =
+            (total_packets > 0) ? (static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets) : 0.0;
+
+        double fpr = (window_fp_count_ + window_tn_count_ > 0)
+                         ? (static_cast<double>(window_fp_count_) / (window_fp_count_ + window_tn_count_))
+                         : 0.0;
+        double fnr = (window_tp_count_ + window_fn_count_ > 0)
+                         ? (static_cast<double>(window_fn_count_) / (window_tp_count_ + window_fn_count_))
+                         : 0.0;
         double avg_sq = (total_packets > 0) ? (static_cast<double>(window_sq_sum_) / total_packets) : 0.0;
 
-        window_csv_file_ << window_idx_++ << ","
-                         << actual_insp << ","
-                         << target_samp << ","
-                         << attack_int << ","
-                         << fpr << ","
-                         << fnr << ","
-                         << avg_sq << ","
-                         << window_tp_count_ << ","
-                         << window_tn_count_ << ","
-                         << window_fp_count_ << ","
-                         << window_fn_count_ << "\n";
+        window_csv_file_ << window_idx_++ << "," << actual_insp << "," << target_samp << "," << attack_int << "," << fpr
+                         << "," << fnr << "," << avg_sq << "," << window_tp_count_ << "," << window_tn_count_ << ","
+                         << window_fp_count_ << "," << window_fn_count_ << "\n";
     }
     // Reset window statistical accumulators
     window_tp_count_ = 0;
@@ -397,7 +394,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
 
 /**
  * @brief Connects to loopback port and executes a synchronous telemetry/policy handshake.
- * 
+ *
  * @param telemetry Aggregate input features.
  * @param out_policy Structured policy buffer to write model responses to.
  * @return true if communication succeeded and parameters were verified, false otherwise.
@@ -474,10 +471,10 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             opts.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
             return opts;
         }();
-        
+
         // Load the ONNX model from the specified filesystem path and instantiate the session.
         static Ort::Session session(env, onnx_model_path_.c_str(), session_options);
-        
+
         // Inspect model input/output metadata.
         // We retrieve the static input and output names using the default allocator.
         static Ort::AllocatorWithDefaultOptions allocator;
@@ -485,14 +482,14 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         static Ort::AllocatedStringPtr output_name_ptr = session.GetOutputNameAllocated(0, allocator);
         const char* input_name = input_name_ptr.get();
         const char* output_name = output_name_ptr.get();
-        
+
         // Dynamic Dimension Inspection:
         // Read output tensor description to determine the model's action dimension dynamically.
         // This allows C++ to seamlessly support 2D, 3D, or 4D models without code modifications.
         auto output_type_info = session.GetOutputTypeInfo(0);
         auto output_tensor_info = output_type_info.GetTensorTypeAndShapeInfo();
         std::vector<int64_t> output_shape = output_tensor_info.GetShape();
-        
+
         // The last element of output shape vector is the action dimension (e.g. 2, 3, or 4).
         size_t action_dim = output_shape.back();
 
@@ -503,21 +500,19 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // [0]: instant_sampling_rate (0.0 to 1.0)
         // [1]: normalized_max_f2_similarity (0.0 to 1.0)
         // [2]: raw_anomaly_rate (0.0 to 1.0)
-        std::vector<float> current_features = {
-            static_cast<float>(telemetry.instant_sampling_rate),
-            static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
-            static_cast<float>(telemetry.anomaly_rate)
-        };
+        std::vector<float> current_features = {static_cast<float>(telemetry.instant_sampling_rate),
+                                               static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
+                                               static_cast<float>(telemetry.anomaly_rate)};
 
         // --- NEW: DYNAMIC DIMENSION INSPECTION ---
         static auto input_type_info = session.GetInputTypeInfo(0);
         static auto input_tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
         static std::vector<int64_t> model_input_shape = input_tensor_info.GetShape();
-        static int64_t model_input_dim = model_input_shape.back(); // e.g. 3 or 12
-        
+        static int64_t model_input_dim = model_input_shape.back();  // e.g. 3 or 12
+
         const size_t FEATURE_DIM = 3;
         static size_t K = model_input_dim / FEATURE_DIM;
-        
+
         // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION INSTANCE BUFFER ---
         if (input_history_buffer_.empty()) {
             input_history_buffer_.resize(model_input_dim, 0.0f);
@@ -527,19 +522,17 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         if (!history_initialized_) {
             // Fill history buffer by repeating the first frame K times
             for (size_t i = 0; i < K; ++i) {
-                std::copy(current_features.begin(), current_features.end(), 
+                std::copy(current_features.begin(), current_features.end(),
                           input_history_buffer_.begin() + i * FEATURE_DIM);
             }
             history_initialized_ = true;
         } else {
             if (K > 1) {
                 // Shift older frames to the left by FEATURE_DIM
-                std::copy(input_history_buffer_.begin() + FEATURE_DIM, 
-                          input_history_buffer_.end(), 
+                std::copy(input_history_buffer_.begin() + FEATURE_DIM, input_history_buffer_.end(),
                           input_history_buffer_.begin());
                 // Place new frame at the end of the history
-                std::copy(current_features.begin(), current_features.end(), 
-                          input_history_buffer_.end() - FEATURE_DIM);
+                std::copy(current_features.begin(), current_features.end(), input_history_buffer_.end() - FEATURE_DIM);
             } else {
                 input_history_buffer_ = current_features;
             }
@@ -548,21 +541,18 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // 3. Prepare Input Tensor (Using the contiguous flat history vector)
         std::vector<int64_t> input_shape = {1, static_cast<int64_t>(model_input_dim)};
         auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, input_history_buffer_.data(), input_history_buffer_.size(),
-            input_shape.data(), input_shape.size()
-        );
+        Ort::Value input_tensor =
+            Ort::Value::CreateTensor<float>(memory_info, input_history_buffer_.data(), input_history_buffer_.size(),
+                                            input_shape.data(), input_shape.size());
 
         // 2. Execute ONNX Model Inference (Synchronous feedforward pass)
         const char* input_names[] = {input_name};
         const char* output_names[] = {output_name};
-        
+
         auto start_time = std::chrono::high_resolution_clock::now();
-        
-        auto output_tensors = session.Run(
-            Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1
-        );
-        
+
+        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1);
+
         auto end_time = std::chrono::high_resolution_clock::now();
         uint64_t elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
         total_inference_time_us_ += elapsed_us;
@@ -595,8 +585,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.penalty_multiplier = 50.0;
                 out_policy.sq_threshold = 600;
                 out_policy.base_sampling_rate = new_rate;
-            }
-            else if (action_dim == 4) {
+            } else if (action_dim == 4) {
                 // ==========================================
                 // [Wrapped DQN Model Mapping] DQNDeploymentWrapper
                 // ==========================================
@@ -604,14 +593,12 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
                 out_policy.base_sampling_rate = float_output[3];
-            }
-            else {
-                std::cerr << "[FATAL] ONNX DQN model returned unexpected action dimensions: " << action_dim 
+            } else {
+                std::cerr << "[FATAL] ONNX DQN model returned unexpected action dimensions: " << action_dim
                           << " (Expected raw=" << dqn_action_map_.size() << " or wrapped=4)\n";
                 std::exit(1);
             }
-        }
-        else if (algorithm_ == "discrete_ppo") {
+        } else if (algorithm_ == "discrete_ppo") {
             if (action_dim == 4) {
                 // Deterministic categorical PPO export wrapper. The wrapper
                 // embeds the probability-weighted expected action delta and
@@ -620,14 +607,12 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
                 out_policy.base_sampling_rate = float_output[3];
-            }
-            else {
-                std::cerr << "[FATAL] ONNX Discrete PPO model returned unexpected action dimensions: "
-                          << action_dim << " (Expected wrapped=4)\n";
+            } else {
+                std::cerr << "[FATAL] ONNX Discrete PPO model returned unexpected action dimensions: " << action_dim
+                          << " (Expected wrapped=4)\n";
                 std::exit(1);
             }
-        }
-        else if (algorithm_ == "ppo") {
+        } else if (algorithm_ == "ppo") {
             if (action_dim == 4) {
                 // ==========================================
                 // [PPO Model Mapping] Continuous Action Space
@@ -636,25 +621,21 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
                 out_policy.base_sampling_rate = float_output[3];
-            } 
-            else if (action_dim == 3) {
+            } else if (action_dim == 3) {
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
                 out_policy.base_sampling_rate = telemetry.instant_sampling_rate;
-            } 
-            else if (action_dim == 2) {
+            } else if (action_dim == 2) {
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = 650;
                 out_policy.base_sampling_rate = 0.05;
-            }
-            else {
+            } else {
                 std::cerr << "[FATAL] ONNX PPO model returned unexpected action dimensions: " << action_dim << "\n";
                 std::exit(1);
             }
-        }
-        else {
+        } else {
             std::cerr << "[FATAL] ONNX C++ Bridge: Unrecognized algorithm name: " << algorithm_ << "\n";
             std::exit(1);
         }
@@ -668,10 +649,10 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         }
 
         return true;
-    } 
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << "\n[FATAL] ONNX C++ Inference session failure: " << e.what() << "\n";
-        std::cerr << "[FATAL] The ONNX model failed to load or execute. Exiting immediately to prevent silent heuristic fallback.\n";
+        std::cerr << "[FATAL] The ONNX model failed to load or execute. Exiting immediately to prevent silent "
+                     "heuristic fallback.\n";
         std::exit(1);
         return false;
     }
@@ -726,7 +707,8 @@ std::vector<int> RLBridge::get_allowed_cores() {
 void RLBridge::onnx_worker_loop() {
     // Dynamic thread scheduling: allow Linux CFS scheduler to place ONNX worker thread naturally
     // without enforcing rigid cross-core affinity pinning that causes ARM L2 cache snooping overhead.
-    std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread Active (Dynamic OS CFS Scheduler Enabled)" << ConsolePresenter::reset() << "\n";
+    std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread Active (Dynamic OS CFS Scheduler Enabled)"
+              << ConsolePresenter::reset() << "\n";
 
     // 2. Execution Loop
     while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {
@@ -734,7 +716,7 @@ void RLBridge::onnx_worker_loop() {
         {
             std::unique_lock<std::mutex> lock(onnx_mutex_);
             onnx_cv_.wait(lock, [this]() {
-                return stop_onnx_thread_.load(std::memory_order_relaxed) || 
+                return stop_onnx_thread_.load(std::memory_order_relaxed) ||
                        new_telemetry_available_.load(std::memory_order_relaxed);
             });
 

@@ -54,8 +54,9 @@ print_usage() {
     echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable heuristic safety clamping boundaries for RL agent"
     echo -e ""
     echo -e "${C_BOLD}C++ Simulation Specific Modifiers:${C_RESET}"
-    echo -e "  ${C_INFO}-c, --core <id>${C_RESET}       Hardware CPU core index for taskset processor locking (Default: 9)"
-    echo -e "  ${C_INFO}-n, --no-taskset${C_RESET}      Disable taskset core pinning (Bypasses core locking; recommended for RL)"
+    echo -e "  ${C_INFO}-c, --core, --data-core <id>${C_RESET}  Data-plane CPU core (Default: 2)"
+    echo -e "  ${C_INFO}--control-core <id>${C_RESET}    ONNX worker CPU (Default: next non-zero core when possible)"
+    echo -e "  ${C_INFO}-n, --no-taskset${C_RESET}      Disable explicit process/thread CPU affinity"
     echo -e "  ${C_INFO}-B, --baseline-only${C_RESET}   Execute ONLY Filter=OFF simulation steps (No mitigation)"
     echo -e "  ${C_INFO}-F, --filter-only${C_RESET}     Execute ONLY Filter=ON simulation steps (Mitigation active)"
     echo -e "  ${C_INFO}-m, --modes <\"modes\">${C_RESET}   Override default simulation scenario modes (Default: \"0 1 2\")."
@@ -163,7 +164,8 @@ fi
 shift 2
 
 # Initialize baseline default states and matrix parameters
-PIN_CORE=${PIN_CORE:-9}
+PIN_CORE=${PIN_CORE:-2}
+CONTROL_CORE=""
 USE_TASKSET=true
 TOTAL_PACKETS=1000000
 RUN_FILTER_OFF=true
@@ -195,12 +197,21 @@ while [[ $# -gt 0 ]]; do
             RUN_TRACE=true
             shift
             ;;
-        -c|--core)
+        -c|--core|--data-core)
             if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
                 PIN_CORE="$2"
                 shift 2
             else
                 echo -e "${C_ERROR}[ERROR] -c/--core demands a valid numeric CPU index value.${C_RESET}"
+                exit 1
+            fi
+            ;;
+        --control-core)
+            if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
+                CONTROL_CORE="$2"
+                shift 2
+            else
+                echo -e "${C_ERROR}[ERROR] --control-core demands a valid numeric CPU index value.${C_RESET}"
                 exit 1
             fi
             ;;
@@ -360,7 +371,19 @@ execute_cmd() {
         num_cores=$(nproc)
         local pin_core_wrapped=$(( PIN_CORE % num_cores ))
         if [ "$RUN_ONNX" = true ]; then
-            local onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+            local onnx_core
+            if [ -n "$CONTROL_CORE" ]; then
+                onnx_core=$(( CONTROL_CORE % num_cores ))
+            elif [ "$num_cores" -le 1 ]; then
+                onnx_core=0
+            else
+                onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+                # Preserve a distinct core on two-core systems. With 3+ CPUs,
+                # avoid CPU 0 because it commonly handles Linux housekeeping.
+                if [ "$onnx_core" -eq 0 ] && [ "$num_cores" -gt 2 ]; then
+                    onnx_core=1
+                fi
+            fi
             taskset -c "${pin_core_wrapped},${onnx_core}" "$@"
         else
             taskset -c "$pin_core_wrapped" "$@"
@@ -412,7 +435,17 @@ get_core_info() {
         num_cores=$(nproc)
         local pin_core_wrapped=$(( PIN_CORE % num_cores ))
         if [ "$RUN_ONNX" = true ]; then
-            local onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+            local onnx_core
+            if [ -n "$CONTROL_CORE" ]; then
+                onnx_core=$(( CONTROL_CORE % num_cores ))
+            elif [ "$num_cores" -le 1 ]; then
+                onnx_core=0
+            else
+                onnx_core=$(( (pin_core_wrapped + 1) % num_cores ))
+                if [ "$onnx_core" -eq 0 ] && [ "$num_cores" -gt 2 ]; then
+                    onnx_core=1
+                fi
+            fi
             echo "Cores: ${pin_core_wrapped},${onnx_core}"
         else
             echo "Core: ${pin_core_wrapped}"
@@ -625,7 +658,27 @@ case "$ACTION" in
                 exit 1
             fi
             echo -e "${C_INFO}[RECEIVER] Starting UDP Daemon on target [${tgt}] on port ${UDP_PORT:-9999}...${C_RESET}"
-            execute_cmd "$bin" "--receive-udp" "${UDP_PORT:-9999}"
+            local receiver_args=("--receive-udp" "${UDP_PORT:-9999}")
+            if [ "$USE_TASKSET" = true ]; then
+                local num_cores
+                num_cores=$(nproc)
+                local data_core=$(( PIN_CORE % num_cores ))
+                local control_core
+                if [ -n "$CONTROL_CORE" ]; then
+                    control_core=$(( CONTROL_CORE % num_cores ))
+                elif [ "$num_cores" -le 1 ]; then
+                    control_core=0
+                else
+                    control_core=$(( (data_core + 1) % num_cores ))
+                    if [ "$control_core" -eq 0 ] && [ "$num_cores" -gt 2 ]; then
+                        control_core=1
+                    fi
+                fi
+                receiver_args+=("--data-core" "$data_core" "--control-core" "$control_core")
+            else
+                receiver_args+=("--no-affinity")
+            fi
+            execute_cmd "$bin" "${receiver_args[@]}"
         }
         if [ "$TARGET" == "all" ]; then
             execute_receive "unpatched"

@@ -724,9 +724,24 @@ std::vector<int> RLBridge::get_allowed_cores() {
 }
 
 void RLBridge::onnx_worker_loop() {
-    // Dynamic thread scheduling: allow Linux CFS scheduler to place ONNX worker thread naturally
-    // without enforcing rigid cross-core affinity pinning that causes ARM L2 cache snooping overhead.
-    std::cout << ConsolePresenter::info() << "[INIT] ONNX Control Thread Active (Dynamic OS CFS Scheduler Enabled)" << ConsolePresenter::reset() << "\n";
+    if (control_core_ >= 0) {
+        cpu_set_t mask;
+        CPU_ZERO(&mask);
+        CPU_SET(control_core_, &mask);
+        const int rc = pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
+        if (rc != 0) {
+            std::cerr << "[FATAL] Failed to pin ONNX control thread to CPU " << control_core_
+                      << ": " << std::strerror(rc) << "\n";
+            std::exit(1);
+        }
+        std::cout << ConsolePresenter::info() << "[INIT] ONNX control thread pinned to CPU "
+                  << control_core_ << " (running on CPU " << sched_getcpu() << ")"
+                  << ConsolePresenter::reset() << "\n";
+    } else {
+        std::cout << ConsolePresenter::info()
+                  << "[INIT] ONNX control thread uses the OS scheduler (affinity disabled)"
+                  << ConsolePresenter::reset() << "\n";
+    }
 
     // 2. Execution Loop
     while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {
