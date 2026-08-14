@@ -54,7 +54,8 @@ constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.05;
 constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.20;
 
 double clamp_drl_s0_sampling_rate(double rate) {
-    return std::clamp(rate, MIN_DRL_S0_SAMPLING_RATE, MAX_DRL_S0_SAMPLING_RATE);
+    return std::max(MIN_DRL_S0_SAMPLING_RATE,
+                    std::min(rate, MAX_DRL_S0_SAMPLING_RATE));
 }
 }  // namespace
 
