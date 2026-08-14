@@ -95,7 +95,6 @@ public:
 
     /** Configure the dedicated Linux CPU for the asynchronous ONNX worker. */
     void set_control_core(int core_id) { control_core_ = core_id; }
-    void enable_onnx_runtime_fast_path() noexcept { runtime_fast_path_active_ = true; }
 
     /**
      * @brief Set safety guards (heuristic boundaries) status.
@@ -140,11 +139,18 @@ public:
 
     /** Production ONNX fast path: preserve policy inputs without trace-only bookkeeping. */
     inline void collect_onnx_runtime_telemetry(int max_sum_sq, bool is_anomalous,
-                                               bool inspected) noexcept {
-        ++runtime_packet_count_;
-        runtime_anomaly_count_ += static_cast<uint32_t>(is_anomalous);
+                                               bool is_malware, bool inspected,
+                                               uint64_t latency_ticks) noexcept {
+        if (is_malware) {
+            if (is_anomalous) ++window_tp_count_;
+            else ++window_fn_count_;
+        } else {
+            if (is_anomalous) ++window_fp_count_;
+            else ++window_tn_count_;
+        }
         window_inspected_count_ += static_cast<uint32_t>(inspected);
         window_sq_sum_ += static_cast<uint64_t>(max_sum_sq);
+        window_latency_ticks_ += latency_ticks;
     }
 
     /**
@@ -181,9 +187,6 @@ private:
     uint32_t window_inspected_count_ = 0;
     uint64_t window_sq_sum_ = 0;
     uint64_t window_latency_ticks_ = 0;
-    bool runtime_fast_path_active_ = false;
-    uint32_t runtime_packet_count_ = 0;
-    uint32_t runtime_anomaly_count_ = 0;
     
     std::ofstream csv_file_;
     std::ofstream window_csv_file_;

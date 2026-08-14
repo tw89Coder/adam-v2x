@@ -190,7 +190,6 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                     rl_bridge.set_control_core(control_core);
                     rl_bridge.initialize_onnx(true, model_to_use);
                     rl_bridge.initialize(false, rate, mode, false);
-                    rl_bridge.enable_onnx_runtime_fast_path();
                 } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 1.0);
@@ -304,7 +303,8 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                     // Sync RL telemetry and ONNX window update for DRL control plane
                     if (filter_mode == 3) {
                         rl_bridge.collect_onnx_runtime_telemetry(
-                            filter_fsm.get_last_sq(), is_drop, filter_fsm.was_inspected());
+                            filter_fsm.get_last_sq(), is_drop, is_malware,
+                            filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
                         if (++window_sync_counter >= 500) {
                             window_sync_counter = 0;
                             rl_bridge.check_and_sync_window(received_pkts, filter_fsm);
