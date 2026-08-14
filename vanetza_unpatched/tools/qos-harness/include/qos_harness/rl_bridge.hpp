@@ -137,6 +137,22 @@ public:
      */
     void collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double budget, int state, bool is_anomalous, bool is_malware, bool inspected, uint64_t latency_ticks);
 
+    /** Production ONNX fast path: preserve policy inputs without trace-only bookkeeping. */
+    inline void collect_onnx_runtime_telemetry(int max_sum_sq, bool is_anomalous,
+                                               bool is_malware, bool inspected,
+                                               uint64_t latency_ticks) noexcept {
+        if (is_malware) {
+            if (is_anomalous) ++window_tp_count_;
+            else ++window_fn_count_;
+        } else {
+            if (is_anomalous) ++window_fp_count_;
+            else ++window_tn_count_;
+        }
+        window_inspected_count_ += static_cast<uint32_t>(inspected);
+        window_sq_sum_ += static_cast<uint64_t>(max_sum_sq);
+        window_latency_ticks_ += latency_ticks;
+    }
+
     /**
      * @brief Checks window boundaries and synchronizes parameters with the RL controller.
      */

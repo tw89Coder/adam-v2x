@@ -302,9 +302,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
 
                     // Sync RL telemetry and ONNX window update for DRL control plane
                     if (filter_mode == 3) {
-                        rl_bridge.collect_packet_telemetry(packet_data.size(), filter_fsm.get_last_sq(), filter_fsm.current_budget,
-                                                           static_cast<int>(filter_fsm.get_state()), is_drop, is_malware,
-                                                           filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
+                        rl_bridge.collect_onnx_runtime_telemetry(
+                            filter_fsm.get_last_sq(), is_drop, is_malware,
+                            filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
                         if (++window_sync_counter >= 500) {
                             window_sync_counter = 0;
                             rl_bridge.check_and_sync_window(received_pkts, filter_fsm);

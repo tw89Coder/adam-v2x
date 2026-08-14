@@ -274,27 +274,8 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
         }
     }
 
-    // Classify packet into confusion matrix categories for structural byte dumping
-    if (is_malware) {
-        if (is_anomalous) {
-            window_tp_count_++;
-        } else {
-            window_fn_count_++;  // Malware allowed = Leakage
-        }
-    } else {
-        if (is_anomalous) {
-            window_fp_count_++;  // Benign dropped = False Positive
-        } else {
-            window_tn_count_++;  // Benign allowed = True Negative
-        }
-    }
-
-    if (inspected) {
-        window_inspected_count_++;
-    }
-
-    window_sq_sum_ += max_sum_sq;
-    window_latency_ticks_ += latency_ticks;
+    collect_onnx_runtime_telemetry(max_sum_sq, is_anomalous, is_malware,
+                                   inspected, latency_ticks);
 }
 
 /**
