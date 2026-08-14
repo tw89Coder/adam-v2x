@@ -98,6 +98,9 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
     window_inspected_count_ = 0;
     window_sq_sum_ = 0;
     window_latency_ticks_ = 0;
+    runtime_fast_path_active_ = false;
+    runtime_packet_count_ = 0;
+    runtime_anomaly_count_ = 0;
 
     std::string build_type = "unpatched";
     std::string source_file = __FILE__;
@@ -274,8 +277,16 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
         }
     }
 
-    collect_onnx_runtime_telemetry(max_sum_sq, is_anomalous, is_malware,
-                                   inspected, latency_ticks);
+    if (is_malware) {
+        if (is_anomalous) ++window_tp_count_;
+        else ++window_fn_count_;
+    } else {
+        if (is_anomalous) ++window_fp_count_;
+        else ++window_tn_count_;
+    }
+    window_inspected_count_ += static_cast<uint32_t>(inspected);
+    window_sq_sum_ += static_cast<uint64_t>(max_sum_sq);
+    window_latency_ticks_ += latency_ticks;
 }
 
 /**
@@ -303,7 +314,9 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
         new_policy_available_.store(false, std::memory_order_release);
     }
 
-    uint32_t total_packets = window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
+    uint32_t total_packets = runtime_fast_path_active_
+                                 ? runtime_packet_count_
+                                 : window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
     if (total_packets < static_cast<uint32_t>(CTRL_WINDOW_SIZE)) return;
 
     // Package binary structure payload
@@ -321,10 +334,17 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
         // Asynchronously hand off telemetry to the background ONNX thread
         {
             std::lock_guard<std::mutex> lock(onnx_mutex_);
-            shared_telemetry_ =
-                WindowTelemetry{static_cast<double>(window_sq_sum_) / total_packets, filter.get_sampling_rate(),
-                                static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
-                                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets};
+            const uint32_t anomaly_count = runtime_fast_path_active_
+                                               ? runtime_anomaly_count_
+                                               : window_tp_count_ + window_fp_count_;
+            const double true_anomaly_rate = runtime_fast_path_active_
+                                                 ? 0.0
+                                                 : static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets;
+            shared_telemetry_ = WindowTelemetry{
+                static_cast<double>(window_sq_sum_) / total_packets,
+                filter.get_sampling_rate(),
+                static_cast<double>(anomaly_count) / total_packets,
+                true_anomaly_rate};
         }
         new_telemetry_available_.store(true, std::memory_order_release);
         onnx_cv_.notify_one();
@@ -371,6 +391,8 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     window_inspected_count_ = 0;
     window_sq_sum_ = 0;
     window_latency_ticks_ = 0;
+    runtime_packet_count_ = 0;
+    runtime_anomaly_count_ = 0;
 }
 
 /**
