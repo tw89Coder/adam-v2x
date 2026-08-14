@@ -61,9 +61,9 @@ class DqnActionTranslator(ActionTranslator):
         action_index = max(0, min(len(self.action_map) - 1, action_index))
         delta = self.action_map[action_index]
         
-        # DRL controls only the nominal S0 range; FSM risk states can still raise
-        # the effective inspection rate up to 100%.
-        new_rate = max(0.05, min(0.20, current_sampling_rate + delta))
+        # DRL can raise sparse-attack coverage up to 80%; the independent FSM
+        # safety floor retains exclusive authority to force 100% inspection.
+        new_rate = max(0.05, min(0.80, current_sampling_rate + delta))
         
         # Return 4D policy: [recovery_rate, penalty_multiplier, sq_threshold, new_sampling_rate]
         # Rest of the parameters are set to default baseline FSM settings

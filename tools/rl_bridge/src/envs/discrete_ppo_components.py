@@ -23,7 +23,7 @@ class DiscretePPOActionTranslator:
         action_index = max(0, min(len(self.action_map) - 1, int(action)))
         new_rate = max(
             0.05,
-            min(0.20, current_sampling_rate + self.action_map[action_index]),
+            min(0.80, current_sampling_rate + self.action_map[action_index]),
         )
         return [0.05, 50.0, 600, new_rate]
 

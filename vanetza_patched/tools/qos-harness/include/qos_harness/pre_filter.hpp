@@ -57,19 +57,23 @@ public:
         if (execution_mode_ == FilterExecutionMode::STATIC_FIXED_RATE || !adaptive_sampling_enabled_) {
             return BASE_SAMPLING_RATE;
         }
+
+        double fsm_floor = 0.05;
         if (current_budget <= TAU_2) {
-            return 1.0;
+            fsm_floor = 1.0;
         } else if (current_budget <= TAU_1) {
             constexpr double INV_TAU_SPAN = 1.0 / 30.0;
             double range_ratio = (current_budget - TAU_2) * INV_TAU_SPAN;
-            return 1.0 - 0.5 * range_ratio;
+            fsm_floor = 1.0 - 0.5 * range_ratio;
         } else if (current_budget < MAX_BUDGET) {
             constexpr double INV_TAU_SPAN = 1.0 / 30.0;
             double range_ratio = (current_budget - TAU_1) * INV_TAU_SPAN;
-            return 0.5 - (0.5 - BASE_SAMPLING_RATE) * range_ratio;
+            fsm_floor = 0.5 - (0.5 - 0.05) * range_ratio;
         }
-        return BASE_SAMPLING_RATE;
+        return std::max(BASE_SAMPLING_RATE, fsm_floor);
     }
+
+    double get_base_sampling_rate() const { return BASE_SAMPLING_RATE; }
 
     // exposed for debug logging in harness
     double current_budget;

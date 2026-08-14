@@ -51,7 +51,7 @@ namespace qos_harness {
 
 namespace {
 constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.05;
-constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.20;
+constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.80;
 
 double clamp_drl_s0_sampling_rate(double rate) {
     return std::max(MIN_DRL_S0_SAMPLING_RATE,
@@ -336,7 +336,8 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
             shared_telemetry_ =
                 WindowTelemetry{static_cast<double>(window_sq_sum_) / total_packets, filter.get_sampling_rate(),
                                 static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
-                                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets};
+                                static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets,
+                                filter.get_base_sampling_rate()};
         }
         new_telemetry_available_.store(true, std::memory_order_release);
         onnx_cv_.notify_one();
@@ -418,7 +419,8 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             static_cast<double>(sq_sum) / denominator,
             filter.get_sampling_rate(),
             static_cast<double>(anomaly_count) / denominator,
-            static_cast<double>(true_anomaly_count) / denominator};
+            static_cast<double>(true_anomaly_count) / denominator,
+            filter.get_base_sampling_rate()};
     }
     new_telemetry_available_.store(true, std::memory_order_release);
     onnx_cv_.notify_one();
@@ -609,9 +611,9 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 }
 
                 float delta = dqn_action_map_[best_action_idx];
-                float new_rate = telemetry.instant_sampling_rate + delta;
+                float new_rate = telemetry.base_sampling_rate + delta;
                 if (new_rate < 0.05f) new_rate = 0.05f;
-                if (new_rate > 0.20f) new_rate = 0.20f;
+                if (new_rate > 0.80f) new_rate = 0.80f;
 
                 out_policy.recovery_rate = 0.05;
                 out_policy.penalty_multiplier = 50.0;
@@ -624,7 +626,17 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-                out_policy.base_sampling_rate = float_output[3];
+                // Existing wrappers encode new_effective = effective + action_delta.
+                // Recover that delta and apply it to the independent DRL base so an
+                // FSM-forced 100% rate can never become the next permanent base.
+                double observed_delta = static_cast<double>(float_output[3]) - telemetry.instant_sampling_rate;
+                double closest_delta = dqn_action_map_.front();
+                for (float candidate : dqn_action_map_) {
+                    if (std::abs(observed_delta - candidate) < std::abs(observed_delta - closest_delta)) {
+                        closest_delta = candidate;
+                    }
+                }
+                out_policy.base_sampling_rate = telemetry.base_sampling_rate + closest_delta;
             } else {
                 std::cerr << "[FATAL] ONNX DQN model returned unexpected action dimensions: " << action_dim
                           << " (Expected raw=" << dqn_action_map_.size() << " or wrapped=4)\n";
@@ -638,7 +650,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-                out_policy.base_sampling_rate = float_output[3];
+                const double expected_delta = static_cast<double>(float_output[3]) - telemetry.instant_sampling_rate;
+                out_policy.base_sampling_rate = telemetry.base_sampling_rate + expected_delta;
             } else {
                 std::cerr << "[FATAL] ONNX Discrete PPO model returned unexpected action dimensions: " << action_dim
                           << " (Expected wrapped=4)\n";
