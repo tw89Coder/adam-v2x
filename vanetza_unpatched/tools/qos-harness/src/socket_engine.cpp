@@ -218,6 +218,9 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
 
                 int print_interval = std::max(1, total_pkts / 100);
                 int window_sync_counter = 0;
+                int window_start_anomalies = 0;
+                int window_start_malware = 0;
+                uint64_t window_sq_sum = 0;
 
                 struct timespec session_cpu_start, session_cpu_end;
                 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_start);
@@ -302,12 +305,21 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
 
                     // Sync RL telemetry and ONNX window update for DRL control plane
                     if (filter_mode == 3) {
-                        rl_bridge.collect_onnx_runtime_telemetry(
-                            filter_fsm.get_last_sq(), is_drop, is_malware,
-                            filter_fsm.was_inspected(), filter_fsm.get_last_latency_ticks());
+                        // Native deployment needs only the three ONNX input features.
+                        // Reuse the session's classification counters and aggregate only SQ
+                        // here; full per-packet telemetry remains available to host training.
+                        window_sq_sum += static_cast<uint64_t>(filter_fsm.get_last_sq());
                         if (++window_sync_counter >= 500) {
+                            const int anomaly_count = true_positives + false_positives;
                             window_sync_counter = 0;
-                            rl_bridge.check_and_sync_window(received_pkts, filter_fsm);
+                            rl_bridge.publish_native_onnx_window(
+                                500,
+                                static_cast<uint32_t>(anomaly_count - window_start_anomalies),
+                                static_cast<uint32_t>(malware_count - window_start_malware),
+                                window_sq_sum, filter_fsm);
+                            window_start_anomalies = anomaly_count;
+                            window_start_malware = malware_count;
+                            window_sq_sum = 0;
                         }
                     }
                     received_pkts++;

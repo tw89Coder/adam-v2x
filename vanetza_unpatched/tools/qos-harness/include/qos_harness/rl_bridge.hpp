@@ -158,6 +158,17 @@ public:
      */
     void check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& filter);
 
+    /**
+     * @brief Publishes one pre-aggregated UDP/native-ONNX control window.
+     *
+     * This deployment-only entry point avoids per-packet training telemetry.
+     * Host-local training continues to use collect_packet_telemetry() and
+     * check_and_sync_window().
+     */
+    void publish_native_onnx_window(uint32_t packet_count, uint32_t anomaly_count,
+                                    uint32_t true_anomaly_count, uint64_t sq_sum,
+                                    AdaptiveFilterFSM& filter);
+
 private:
     std::string repo_root_;
     int port_;

@@ -373,6 +373,43 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     window_latency_ticks_ = 0;
 }
 
+void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomaly_count,
+                                          uint32_t true_anomaly_count, uint64_t sq_sum,
+                                          AdaptiveFilterFSM& filter) {
+    if (!onnx_enabled_ || packet_count == 0) return;
+
+    // Preserve check_and_sync_window() ordering: apply the completed policy
+    // before publishing the next observation and its current sampling rate.
+    if (new_policy_available_.load(std::memory_order_acquire)) {
+        FilterPolicy policy;
+        {
+            std::lock_guard<std::mutex> lock(onnx_mutex_);
+            policy = shared_policy_;
+        }
+        if (safety_guards_enabled_) {
+            if (policy.sq_threshold > 650) policy.sq_threshold = 650;
+            if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
+            if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
+            if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
+        }
+        filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
+                                    policy.sq_threshold, policy.base_sampling_rate);
+        new_policy_available_.store(false, std::memory_order_release);
+    }
+
+    const double denominator = static_cast<double>(packet_count);
+    {
+        std::lock_guard<std::mutex> lock(onnx_mutex_);
+        shared_telemetry_ = WindowTelemetry{
+            static_cast<double>(sq_sum) / denominator,
+            filter.get_sampling_rate(),
+            static_cast<double>(anomaly_count) / denominator,
+            static_cast<double>(true_anomaly_count) / denominator};
+    }
+    new_telemetry_available_.store(true, std::memory_order_release);
+    onnx_cv_.notify_one();
+}
+
 /**
  * @brief Connects to loopback port and executes a synchronous telemetry/policy handshake.
  *
