@@ -15,6 +15,12 @@ deployment:
     graph_optimization: "all"
     cpu_memory_arena: true
     memory_pattern: true
+    diagnostics:
+      enabled: false
+      mailbox_counters: true
+      timing: true
+      policy_changes: true
+      console_summary: true
 
 # ------------------------------------------------------------------------------
 # State Representation Settings

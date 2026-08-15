@@ -60,7 +60,8 @@ bool pin_current_thread(int core_id, const char* role) {
 
 int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int data_core, int control_core,
                                   const std::string& default_onnx_path,
-                                  bool onnx_fixed_policy_diagnostic) {
+                                  bool onnx_fixed_policy_diagnostic,
+                                  int onnx_diagnostics_override) {
     if (!pin_current_thread(data_core, "Data-plane receiver")) return 1;
     int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -193,6 +194,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
                     rl_bridge.set_control_core(control_core);
                     rl_bridge.set_fixed_policy_diagnostic(onnx_fixed_policy_diagnostic);
+                    rl_bridge.set_async_diagnostics_override(onnx_diagnostics_override);
                     // Preserve an empty path so RLBridge can apply the documented
                     // CLI > YAML > built-in-default precedence itself.
                     rl_bridge.initialize_onnx(true, default_onnx_path);

@@ -18,6 +18,40 @@
 
 namespace qos_harness {
 
+void ConsolePresenter::printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& r) {
+    const double age_avg = r.policies_applied
+        ? static_cast<double>(r.policy_age_sum) / r.policies_applied : 0.0;
+    const double unchanged_pct = r.inferences_completed
+        ? 100.0 * r.policies_unchanged / r.inferences_completed : 0.0;
+    const double inference_avg = r.inferences_completed
+        ? static_cast<double>(r.inference_wall_total_us) / r.inferences_completed : 0.0;
+    std::printf(
+        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
+        "│%s                 ONNX ASYNC DIAGNOSTICS                     %s│\n"
+        "└──────────────────────────────────────────────────────────────┘%s\n",
+        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+    std::printf("  ├── Windows published       : %llu\n", static_cast<unsigned long long>(r.windows_published));
+    std::printf("  ├── Telemetry consumed      : %llu\n", static_cast<unsigned long long>(r.telemetry_consumed));
+    std::printf("  ├── Telemetry overwritten   : %llu\n", static_cast<unsigned long long>(r.telemetry_overwritten));
+    std::printf("  ├── Inferences completed    : %llu\n", static_cast<unsigned long long>(r.inferences_completed));
+    std::printf("  ├── Policies applied        : %llu\n", static_cast<unsigned long long>(r.policies_applied));
+    std::printf("  ├── Policies superseded     : %llu\n", static_cast<unsigned long long>(r.policies_superseded));
+    std::printf("  ├── Unchanged policies      : %llu (%.2f%%)\n",
+                static_cast<unsigned long long>(r.policies_unchanged), unchanged_pct);
+    std::printf("  ├── Policy age avg/max      : %.2f / %llu windows\n", age_avg,
+                static_cast<unsigned long long>(r.policy_age_max));
+    std::printf("  ├── Policy age > 1 window   : %llu\n", static_cast<unsigned long long>(r.policy_age_over_one));
+    std::printf("  ├── Inference wall avg/p99  : %.2f / %llu us\n", inference_avg,
+                static_cast<unsigned long long>(r.inference_wall_p99_us));
+    std::printf("  ├── Inference CPU total     : %.3f ms\n", r.inference_cpu_total_us / 1000.0);
+    std::printf("  ├── Core-2 publish total    : %.3f ms\n", r.publish_wall_total_us / 1000.0);
+    std::printf("  └── Core-2 mutex wait total/max: %.3f ms / %llu us\n",
+                r.mutex_wait_total_us / 1000.0,
+                static_cast<unsigned long long>(r.mutex_wait_max_us));
+    std::printf("  %s──────────────────────────────────────────────────────────────%s\n\n",
+                frame().c_str(), reset().c_str());
+}
+
 // Static functions providing ANSI escape codes for terminal coloring
 std::string ConsolePresenter::reset() { return "\033[0m"; }
 std::string ConsolePresenter::green() { return safe(); }

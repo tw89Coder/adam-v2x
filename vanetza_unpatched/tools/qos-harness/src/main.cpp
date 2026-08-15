@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -42,6 +43,8 @@ void printHelp(const char* progName) {
               << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
               << "  --onnx-fixed-policy  Diagnostic: bypass ORT inference and return the fixed safe policy\n"
+              << "  --onnx-diagnostics   Enable asynchronous ONNX mailbox/timing diagnostics\n"
+              << "  --no-onnx-diagnostics  Disable diagnostics even when YAML enables them\n"
               << "  --data-core      Pin the packet-processing thread to this CPU (Default: 2)\n"
               << "  --control-core   Pin the ONNX worker to this CPU (Default: next usable CPU)\n"
               << "  --no-affinity    Disable explicit thread affinity\n"
@@ -63,6 +66,14 @@ int main(int argc, char* argv[]) {
             }
             std::cout << "[TEST] Initiating standalone C++ ONNX equivalence check...\n";
             qos_harness::RLBridge bridge(REPO_ROOT_STR);
+            bool test_async_diagnostics = false;
+            for (int j = 1; j < argc; ++j) {
+                if (std::string(argv[j]) == "--onnx-diagnostics") {
+                    bridge.set_async_diagnostics_override(1);
+                    test_async_diagnostics = true;
+                }
+                else if (std::string(argv[j]) == "--no-onnx-diagnostics") bridge.set_async_diagnostics_override(0);
+            }
             bridge.initialize_onnx(true, test_model_path);
             bridge.set_safety_guards(false); // Disable safety guards during check to get raw model outputs
             
@@ -88,6 +99,13 @@ int main(int argc, char* argv[]) {
             std::cout << "[TEST] C++ Output penalty_multiplier: " << p1.penalty_multiplier << "\n";
             std::cout << "[TEST] C++ Output sq_threshold: " << p1.sq_threshold << "\n";
             std::cout << "[TEST] C++ Output base_sampling_rate: " << p1.base_sampling_rate << "\n";
+            if (test_async_diagnostics) {
+                AdaptiveFilterFSM filter;
+                for (int window = 0; window < 5; ++window) {
+                    bridge.publish_native_onnx_window(100, 1, 1, 1000, filter);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+            }
             return 0;
         }
     }
@@ -114,6 +132,7 @@ int main(int argc, char* argv[]) {
     int control_core = -1;
     bool affinity_enabled = true;
     bool onnx_fixed_policy_diagnostic = false;
+    int onnx_diagnostics_override = -1;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -191,6 +210,10 @@ int main(int argc, char* argv[]) {
             enable_filter = true;
         } else if (arg == "--onnx-fixed-policy") {
             onnx_fixed_policy_diagnostic = true;
+        } else if (arg == "--onnx-diagnostics") {
+            onnx_diagnostics_override = 1;
+        } else if (arg == "--no-onnx-diagnostics") {
+            onnx_diagnostics_override = 0;
         } else if (arg == "--static-filter" || arg == "--full-100" || arg == "--static-100") {
             static_filter_mode = true;
             enable_filter = true;
@@ -291,7 +314,8 @@ int main(int argc, char* argv[]) {
         std::string prog_path = argv[0];
         std::string build_type = (prog_path.find("vanetza_patched") != std::string::npos) ? "patched" : "unpatched";
         return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core,
-                                                          onnx_model_path, onnx_fixed_policy_diagnostic);
+                                                          onnx_model_path, onnx_fixed_policy_diagnostic,
+                                                          onnx_diagnostics_override);
     }
     if (is_udp_sender) {
         int f_mode = 0; // 0=OFF

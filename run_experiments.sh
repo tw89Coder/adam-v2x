@@ -175,6 +175,7 @@ ONNX_MODEL_PATH=""
 DISABLE_SAFETY=false
 RUN_TRACE=false
 ONNX_FIXED_POLICY_DIAGNOSTIC=false
+ONNX_DIAGNOSTICS_OVERRIDE=""
 LAMBDA_PPS=""
 
 
@@ -280,6 +281,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --onnx-fixed-policy)
             ONNX_FIXED_POLICY_DIAGNOSTIC=true
+            shift
+            ;;
+        --onnx-diagnostics)
+            ONNX_DIAGNOSTICS_OVERRIDE="enable"
+            shift
+            ;;
+        --no-onnx-diagnostics)
+            ONNX_DIAGNOSTICS_OVERRIDE="disable"
             shift
             ;;
         -s|--disable-safety)
@@ -687,6 +696,11 @@ case "$ACTION" in
             fi
             if [ "$ONNX_FIXED_POLICY_DIAGNOSTIC" = true ]; then
                 receiver_args+=("--onnx-fixed-policy")
+            fi
+            if [ "$ONNX_DIAGNOSTICS_OVERRIDE" = "enable" ]; then
+                receiver_args+=("--onnx-diagnostics")
+            elif [ "$ONNX_DIAGNOSTICS_OVERRIDE" = "disable" ]; then
+                receiver_args+=("--no-onnx-diagnostics")
             fi
             execute_cmd "$bin" "${receiver_args[@]}"
         }

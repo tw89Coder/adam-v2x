@@ -36,7 +36,8 @@ public:
      */
     static int run_receiver(int port, const std::string& build_type, int data_core, int control_core,
                             const std::string& default_onnx_path = "",
-                            bool onnx_fixed_policy_diagnostic = false);
+                            bool onnx_fixed_policy_diagnostic = false,
+                            int onnx_diagnostics_override = -1);
 
     /**
      * @brief Runs UDP sender on Laptop / WSL Traffic Generator.

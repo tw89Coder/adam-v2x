@@ -32,6 +32,8 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -58,6 +60,13 @@ double clamp_drl_s0_sampling_rate(double rate) {
     return std::max(MIN_DRL_S0_SAMPLING_RATE,
                     std::min(rate, MAX_DRL_S0_SAMPLING_RATE));
 }
+
+bool same_policy(const FilterPolicy& lhs, const FilterPolicy& rhs) {
+    return std::abs(lhs.recovery_rate - rhs.recovery_rate) < 1e-12 &&
+           std::abs(lhs.penalty_multiplier - rhs.penalty_multiplier) < 1e-12 &&
+           lhs.sq_threshold == rhs.sq_threshold &&
+           std::abs(lhs.base_sampling_rate - rhs.base_sampling_rate) < 1e-12;
+}
 }  // namespace
 
 RLBridge::RLBridge(const std::string& repo_root, int port)
@@ -74,6 +83,14 @@ RLBridge::~RLBridge() {
     onnx_cv_.notify_all();
     if (onnx_thread_.joinable()) {
         onnx_thread_.join();
+    }
+    if (runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_console_summary && onnx_enabled_) {
+        if (!inference_wall_samples_us_.empty()) {
+            std::sort(inference_wall_samples_us_.begin(), inference_wall_samples_us_.end());
+            const std::size_t index = (inference_wall_samples_us_.size() - 1) * 99 / 100;
+            async_diagnostics_.inference_wall_p99_us = inference_wall_samples_us_[index];
+        }
+        ConsolePresenter::printOnnxAsyncDiagnostics(async_diagnostics_);
     }
     if (server_fd_ >= 0) {
         close(server_fd_);
@@ -201,6 +218,7 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
                   << "  ├── Control window: " << runtime_config_.control_window_packets << " packets (YAML/default)\n"
                   << "  ├── ORT threads: intra=" << runtime_config_.onnx_intra_op_threads
                   << ", inter=" << runtime_config_.onnx_inter_op_threads << " (YAML/default)\n"
+                  << "  ├── Async diagnostics: " << (runtime_config_.diagnostics_enabled ? "enabled" : "disabled") << "\n"
                   << "  └── Model: " << onnx_model_path_ << " (" << model_path_source_ << ")\n\n";
         if (fixed_policy_diagnostic_) {
             std::cout << "[DIAGNOSTIC] ORT session.Run() bypassed; fixed policy "
@@ -372,8 +390,24 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
     // critical section. This preserves the original policy-before-telemetry
     // ordering while avoiding a second cross-core mutex/cache-line transfer.
     const double denominator = static_cast<double>(packet_count);
+    const bool diagnostics = runtime_config_.diagnostics_enabled;
+    const auto publish_start = diagnostics && runtime_config_.diagnostics_timing
+        ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    const auto mutex_start = publish_start;
     {
         std::lock_guard<std::mutex> lock(onnx_mutex_);
+        if (diagnostics && runtime_config_.diagnostics_timing) {
+            const auto locked_at = std::chrono::steady_clock::now();
+            const uint64_t wait_us = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(locked_at - mutex_start).count());
+            async_diagnostics_.mutex_wait_total_us += wait_us;
+            async_diagnostics_.mutex_wait_max_us = std::max(async_diagnostics_.mutex_wait_max_us, wait_us);
+        }
+        const uint64_t next_sequence = shared_telemetry_sequence_ + 1;
+        if (diagnostics && runtime_config_.diagnostics_mailbox_counters &&
+            new_telemetry_available_.load(std::memory_order_relaxed)) {
+            ++async_diagnostics_.telemetry_overwritten;
+        }
         if (new_policy_available_.load(std::memory_order_relaxed)) {
             FilterPolicy policy = shared_policy_;
             if (safety_guards_enabled_) {
@@ -387,6 +421,14 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
             filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
                                         policy.sq_threshold, policy.base_sampling_rate);
+            if (diagnostics && runtime_config_.diagnostics_mailbox_counters) {
+                ++async_diagnostics_.policies_applied;
+                const uint64_t age = next_sequence > shared_policy_sequence_
+                    ? next_sequence - shared_policy_sequence_ : 0;
+                async_diagnostics_.policy_age_sum += age;
+                async_diagnostics_.policy_age_max = std::max(async_diagnostics_.policy_age_max, age);
+                if (age > 1) ++async_diagnostics_.policy_age_over_one;
+            }
             new_policy_available_.store(false, std::memory_order_relaxed);
         }
 
@@ -398,9 +440,18 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             filter.get_base_sampling_rate(), filter.current_budget,
             static_cast<uint32_t>(filter.get_state()),
             static_cast<uint32_t>(std::max(0, filter.get_clean_streak()))};
+        shared_telemetry_sequence_ = next_sequence;
+        if (diagnostics) {
+            async_diagnostics_.windows_published = next_sequence;
+        }
     }
     new_telemetry_available_.store(true, std::memory_order_release);
     onnx_cv_.notify_one();
+    if (diagnostics && runtime_config_.diagnostics_timing) {
+        async_diagnostics_.publish_wall_total_us += static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - publish_start).count());
+    }
 }
 
 /**
@@ -790,6 +841,7 @@ void RLBridge::onnx_worker_loop() {
     // 2. Execution Loop
     while (!stop_onnx_thread_.load(std::memory_order_relaxed)) {
         WindowTelemetry local_telemetry;
+        uint64_t local_sequence = 0;
         {
             std::unique_lock<std::mutex> lock(onnx_mutex_);
             onnx_cv_.wait(lock, [this]() {
@@ -802,15 +854,50 @@ void RLBridge::onnx_worker_loop() {
             }
 
             local_telemetry = shared_telemetry_;
+            local_sequence = shared_telemetry_sequence_;
             new_telemetry_available_.store(false, std::memory_order_release);
+            if (runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_mailbox_counters) {
+                ++async_diagnostics_.telemetry_consumed;
+            }
         }
 
         // Run ONNX Runtime inference in background thread (pinned to Core B)
         FilterPolicy policy{0.05, 50.0, 600, MIN_DRL_S0_SAMPLING_RATE};
+        const bool timing = runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_timing;
+        const auto wall_start = timing ? std::chrono::steady_clock::now()
+                                       : std::chrono::steady_clock::time_point{};
+        struct timespec cpu_start{}, cpu_end{};
+        if (timing) clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpu_start);
         const bool policy_ready = fixed_policy_diagnostic_ || run_onnx_inference(local_telemetry, policy);
+        uint64_t wall_us = 0;
+        if (timing) {
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpu_end);
+            wall_us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - wall_start).count());
+            const uint64_t cpu_us = static_cast<uint64_t>(
+                (cpu_end.tv_sec - cpu_start.tv_sec) * 1000000LL +
+                (cpu_end.tv_nsec - cpu_start.tv_nsec) / 1000LL);
+            async_diagnostics_.inference_wall_total_us += wall_us;
+            async_diagnostics_.inference_cpu_total_us += cpu_us;
+            inference_wall_samples_us_.push_back(wall_us);
+        }
         if (policy_ready) {
             std::lock_guard<std::mutex> lock(onnx_mutex_);
+            if (runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_mailbox_counters &&
+                new_policy_available_.load(std::memory_order_relaxed)) {
+                ++async_diagnostics_.policies_superseded;
+            }
+            if (runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_policy_changes &&
+                previous_policy_valid_ && same_policy(previous_generated_policy_, policy)) {
+                ++async_diagnostics_.policies_unchanged;
+            }
+            previous_generated_policy_ = policy;
+            previous_policy_valid_ = true;
             shared_policy_ = policy;
+            shared_policy_sequence_ = local_sequence;
+            if (runtime_config_.diagnostics_enabled) {
+                ++async_diagnostics_.inferences_completed;
+            }
             new_policy_available_.store(true, std::memory_order_release);
         }
     }

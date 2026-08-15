@@ -134,6 +134,16 @@ RuntimeConfig RuntimeConfig::load(const std::string& path) {
                     config.onnx_graph_optimization != "all") {
                     throw std::runtime_error("expected disable, basic, extended, or all");
                 }
+            } else if (full_key == "deployment.onnx.diagnostics.enabled") {
+                config.diagnostics_enabled = parse_bool(value);
+            } else if (full_key == "deployment.onnx.diagnostics.mailbox_counters") {
+                config.diagnostics_mailbox_counters = parse_bool(value);
+            } else if (full_key == "deployment.onnx.diagnostics.timing") {
+                config.diagnostics_timing = parse_bool(value);
+            } else if (full_key == "deployment.onnx.diagnostics.policy_changes") {
+                config.diagnostics_policy_changes = parse_bool(value);
+            } else if (full_key == "deployment.onnx.diagnostics.console_summary") {
+                config.diagnostics_console_summary = parse_bool(value);
             }
         } catch (const std::exception& error) {
             throw std::runtime_error(path + ":" + std::to_string(line_number) +

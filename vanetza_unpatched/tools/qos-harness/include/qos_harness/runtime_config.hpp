@@ -18,6 +18,11 @@ struct RuntimeConfig {
     bool onnx_memory_pattern = true;
     bool onnx_parallel_execution = false;
     std::string onnx_graph_optimization = "all";
+    bool diagnostics_enabled = false;
+    bool diagnostics_mailbox_counters = true;
+    bool diagnostics_timing = true;
+    bool diagnostics_policy_changes = true;
+    bool diagnostics_console_summary = true;
 
     static RuntimeConfig load(const std::string& path);
 };

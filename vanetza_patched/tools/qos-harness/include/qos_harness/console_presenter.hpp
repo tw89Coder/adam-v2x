@@ -3,8 +3,28 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>
 
 namespace qos_harness {
+
+struct OnnxAsyncDiagnostics {
+    uint64_t windows_published = 0;
+    uint64_t telemetry_consumed = 0;
+    uint64_t telemetry_overwritten = 0;
+    uint64_t inferences_completed = 0;
+    uint64_t policies_applied = 0;
+    uint64_t policies_superseded = 0;
+    uint64_t policies_unchanged = 0;
+    uint64_t policy_age_sum = 0;
+    uint64_t policy_age_max = 0;
+    uint64_t policy_age_over_one = 0;
+    uint64_t inference_wall_total_us = 0;
+    uint64_t inference_wall_p99_us = 0;
+    uint64_t inference_cpu_total_us = 0;
+    uint64_t publish_wall_total_us = 0;
+    uint64_t mutex_wait_total_us = 0;
+    uint64_t mutex_wait_max_us = 0;
+};
 
 class ConsolePresenter {
 public:
@@ -77,6 +97,7 @@ public:
     static void printProfilerEndBox(size_t limit, const std::string& csv, const std::string& bin);
     static void printSecurityReport(int total, int malware, int tp, int tn, int fp, int fn);
     static void printAblationMetrics(const std::string& config_name, double fnr, double avg_sampling, const std::string& cost_str);
+    static void printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& report);
 };
 
 }  // namespace qos_harness

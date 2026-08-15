@@ -12,6 +12,7 @@
 
 #include "qos_harness/pre_filter.hpp"
 #include "qos_harness/runtime_config.hpp"
+#include "qos_harness/console_presenter.hpp"
 
 namespace qos_harness {
 
@@ -114,6 +115,11 @@ public:
 
     /** Diagnostic only: preserve the native control mailbox but bypass ORT Run(). */
     void set_fixed_policy_diagnostic(bool enabled) { fixed_policy_diagnostic_ = enabled; }
+
+    /** -1 uses YAML, 0 disables, and 1 enables diagnostics. */
+    void set_async_diagnostics_override(int enabled) {
+        if (enabled >= 0) runtime_config_.diagnostics_enabled = (enabled != 0);
+    }
 
     uint32_t get_control_window_size() const { return runtime_config_.control_window_packets; }
 
@@ -243,6 +249,13 @@ private:
     // Shared communication buffers
     WindowTelemetry shared_telemetry_;
     FilterPolicy shared_policy_;
+    uint64_t shared_telemetry_sequence_ = 0;
+    uint64_t shared_policy_sequence_ = 0;
+
+    OnnxAsyncDiagnostics async_diagnostics_;
+    std::vector<uint64_t> inference_wall_samples_us_;
+    bool previous_policy_valid_ = false;
+    FilterPolicy previous_generated_policy_{};
 
     std::atomic<uint64_t> total_inference_time_us_{0};
     std::atomic<uint32_t> inference_count_{0};
