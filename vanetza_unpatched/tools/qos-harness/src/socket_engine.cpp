@@ -191,10 +191,11 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
-                    std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
                     rl_bridge.set_control_core(control_core);
                     rl_bridge.set_fixed_policy_diagnostic(onnx_fixed_policy_diagnostic);
-                    rl_bridge.initialize_onnx(true, model_to_use);
+                    // Preserve an empty path so RLBridge can apply the documented
+                    // CLI > YAML > built-in-default precedence itself.
+                    rl_bridge.initialize_onnx(true, default_onnx_path);
                     rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
