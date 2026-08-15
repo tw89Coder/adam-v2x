@@ -678,6 +678,9 @@ case "$ACTION" in
             else
                 receiver_args+=("--no-affinity")
             fi
+            if [ "$RUN_ONNX" = true ]; then
+                receiver_args+=("--onnx" "$ONNX_MODEL_PATH")
+            fi
             execute_cmd "$bin" "${receiver_args[@]}"
         }
         if [ "$TARGET" == "all" ]; then
