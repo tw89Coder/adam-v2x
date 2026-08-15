@@ -21,6 +21,12 @@ deployment:
       timing: true
       policy_changes: true
       console_summary: true
+  data_plane_diagnostics:
+    enabled: false
+    filter_timing: true
+    parser_timing: true
+    state_residency: true
+    console_summary: true
 
 # ------------------------------------------------------------------------------
 # State Representation Settings

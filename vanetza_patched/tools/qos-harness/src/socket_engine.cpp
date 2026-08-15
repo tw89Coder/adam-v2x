@@ -61,7 +61,8 @@ bool pin_current_thread(int core_id, const char* role) {
 int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int data_core, int control_core,
                                   const std::string& default_onnx_path,
                                   bool onnx_fixed_policy_diagnostic,
-                                  int onnx_diagnostics_override) {
+                                  int onnx_diagnostics_override,
+                                  int data_plane_diagnostics_override) {
     if (!pin_current_thread(data_core, "Data-plane receiver")) return 1;
     int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -189,6 +190,11 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                 const uint32_t sampling_seed = header.run_id ? header.run_id : 42U;
                 filter_fsm.set_random_seed(sampling_seed ^ 0xDEADBEEFU);
                 qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
+                rl_bridge.set_data_plane_diagnostics_override(data_plane_diagnostics_override);
+                const bool data_diagnostics = rl_bridge.data_plane_diagnostics_enabled();
+                const bool profile_filter = data_diagnostics && rl_bridge.data_plane_filter_timing_enabled();
+                const bool profile_parser = data_diagnostics && rl_bridge.data_plane_parser_timing_enabled();
+                DataPlaneDiagnostics data_report;
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
@@ -286,10 +292,46 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                         }
                     }
 
+                    const auto filter_end_t = data_diagnostics
+                        ? std::chrono::high_resolution_clock::now()
+                        : std::chrono::high_resolution_clock::time_point{};
+
                     if (!is_drop) {
                         context.indicate(std::move(packet_data));
                     }
                     auto end_t = std::chrono::high_resolution_clock::now();
+
+                    if (data_diagnostics) {
+                        ++data_report.packets;
+                        const bool inspected = filter_mode != 0 && filter_fsm.was_inspected();
+                        const uint64_t filter_ns = static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::nanoseconds>(filter_end_t - start_t).count());
+                        if (inspected) {
+                            ++data_report.inspected;
+                            if (profile_filter) data_report.filter_inspected_ns += filter_ns;
+                            data_report.f2_ticks_total += filter_fsm.get_last_latency_ticks();
+                        } else {
+                            ++data_report.skipped;
+                            if (profile_filter) data_report.filter_skipped_ns += filter_ns;
+                        }
+                        if (is_drop) {
+                            ++data_report.dropped;
+                        } else {
+                            const uint64_t parser_ns = static_cast<uint64_t>(
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(end_t - filter_end_t).count());
+                            if (is_malware) {
+                                ++data_report.parser_malicious_count;
+                                if (profile_parser) data_report.parser_malicious_ns += parser_ns;
+                            } else {
+                                ++data_report.parser_legitimate_count;
+                                if (profile_parser) data_report.parser_legitimate_ns += parser_ns;
+                            }
+                        }
+                        if (filter_mode != 0 && rl_bridge.data_plane_state_residency_enabled()) {
+                            const std::size_t state = static_cast<std::size_t>(filter_fsm.get_state());
+                            if (state < 4) ++data_report.state_packets[state];
+                        }
+                    }
 
                     long long service_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_t - start_t).count();
                     long long total_latency_ns = service_ns;
@@ -406,6 +448,11 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                 // Print industrial security report if filter was active
                 if (filter_mode != 0) {
                     ConsolePresenter::printSecurityReport(received_pkts, malware_count, true_positives, true_negatives, false_positives, false_negatives);
+                }
+                if (data_diagnostics && rl_bridge.data_plane_console_summary_enabled()) {
+                    const char* mode_name = filter_mode == 3 ? "ONNX" : filter_mode == 2 ? "STATIC" :
+                                            filter_mode == 1 ? "FSM" : "OFF";
+                    ConsolePresenter::printDataPlaneDiagnostics(data_report, mode_name);
                 }
 
                 std::cout << ConsolePresenter::green() << "[+] [SESSION COMPLETE] Saved telemetry matrix to " << out_filename

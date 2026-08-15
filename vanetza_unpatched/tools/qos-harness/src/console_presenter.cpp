@@ -52,6 +52,43 @@ void ConsolePresenter::printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& r) 
                 frame().c_str(), reset().c_str());
 }
 
+void ConsolePresenter::printDataPlaneDiagnostics(const DataPlaneDiagnostics& r, const std::string& mode) {
+    const double inspected_avg = r.inspected ? static_cast<double>(r.filter_inspected_ns) / r.inspected : 0.0;
+    const double skipped_avg = r.skipped ? static_cast<double>(r.filter_skipped_ns) / r.skipped : 0.0;
+    const double legit_avg = r.parser_legitimate_count
+        ? static_cast<double>(r.parser_legitimate_ns) / r.parser_legitimate_count : 0.0;
+    const double malware_avg = r.parser_malicious_count
+        ? static_cast<double>(r.parser_malicious_ns) / r.parser_malicious_count : 0.0;
+    const double f2_avg = r.inspected ? static_cast<double>(r.f2_ticks_total) / r.inspected : 0.0;
+    std::printf(
+        "\n%s┌──────────────────────────────────────────────────────────────┐\n"
+        "│%s                DATA-PLANE DIAGNOSTICS                     %s│\n"
+        "└──────────────────────────────────────────────────────────────┘%s\n",
+        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+    std::printf("  ├── Filter mode             : %s\n", mode.c_str());
+    std::printf("  ├── Packets total           : %llu\n", static_cast<unsigned long long>(r.packets));
+    std::printf("  ├── Inspected / skipped     : %llu / %llu\n",
+                static_cast<unsigned long long>(r.inspected), static_cast<unsigned long long>(r.skipped));
+    std::printf("  ├── Dropped before parser   : %llu\n", static_cast<unsigned long long>(r.dropped));
+    std::printf("  ├── F2 ticks total / avg    : %llu / %.2f\n",
+                static_cast<unsigned long long>(r.f2_ticks_total), f2_avg);
+    std::printf("  ├── Filter inspected total/avg: %.3f ms / %.2f ns\n",
+                r.filter_inspected_ns / 1e6, inspected_avg);
+    std::printf("  ├── Filter skipped total/avg  : %.3f ms / %.2f ns\n",
+                r.filter_skipped_ns / 1e6, skipped_avg);
+    std::printf("  ├── Legit parser count/time   : %llu / %.3f ms (avg %.2f ns)\n",
+                static_cast<unsigned long long>(r.parser_legitimate_count), r.parser_legitimate_ns / 1e6, legit_avg);
+    std::printf("  ├── Malware parser count/time : %llu / %.3f ms (avg %.2f ns)\n",
+                static_cast<unsigned long long>(r.parser_malicious_count), r.parser_malicious_ns / 1e6, malware_avg);
+    std::printf("  └── FSM state S0/S1/S2/S3     : %llu / %llu / %llu / %llu\n",
+                static_cast<unsigned long long>(r.state_packets[0]),
+                static_cast<unsigned long long>(r.state_packets[1]),
+                static_cast<unsigned long long>(r.state_packets[2]),
+                static_cast<unsigned long long>(r.state_packets[3]));
+    std::printf("  %s──────────────────────────────────────────────────────────────%s\n\n",
+                frame().c_str(), reset().c_str());
+}
+
 // Static functions providing ANSI escape codes for terminal coloring
 std::string ConsolePresenter::reset() { return "\033[0m"; }
 std::string ConsolePresenter::green() { return safe(); }

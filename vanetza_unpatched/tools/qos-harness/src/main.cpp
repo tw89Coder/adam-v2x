@@ -45,6 +45,8 @@ void printHelp(const char* progName) {
               << "  --onnx-fixed-policy  Diagnostic: bypass ORT inference and return the fixed safe policy\n"
               << "  --onnx-diagnostics   Enable asynchronous ONNX mailbox/timing diagnostics\n"
               << "  --no-onnx-diagnostics  Disable diagnostics even when YAML enables them\n"
+              << "  --data-plane-diagnostics  Profile common filter/parser data-plane stages\n"
+              << "  --no-data-plane-diagnostics  Disable data-plane profiling\n"
               << "  --data-core      Pin the packet-processing thread to this CPU (Default: 2)\n"
               << "  --control-core   Pin the ONNX worker to this CPU (Default: next usable CPU)\n"
               << "  --no-affinity    Disable explicit thread affinity\n"
@@ -133,6 +135,7 @@ int main(int argc, char* argv[]) {
     bool affinity_enabled = true;
     bool onnx_fixed_policy_diagnostic = false;
     int onnx_diagnostics_override = -1;
+    int data_plane_diagnostics_override = -1;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -214,6 +217,10 @@ int main(int argc, char* argv[]) {
             onnx_diagnostics_override = 1;
         } else if (arg == "--no-onnx-diagnostics") {
             onnx_diagnostics_override = 0;
+        } else if (arg == "--data-plane-diagnostics") {
+            data_plane_diagnostics_override = 1;
+        } else if (arg == "--no-data-plane-diagnostics") {
+            data_plane_diagnostics_override = 0;
         } else if (arg == "--static-filter" || arg == "--full-100" || arg == "--static-100") {
             static_filter_mode = true;
             enable_filter = true;
@@ -315,7 +322,8 @@ int main(int argc, char* argv[]) {
         std::string build_type = (prog_path.find("vanetza_patched") != std::string::npos) ? "patched" : "unpatched";
         return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core,
                                                           onnx_model_path, onnx_fixed_policy_diagnostic,
-                                                          onnx_diagnostics_override);
+                                                          onnx_diagnostics_override,
+                                                          data_plane_diagnostics_override);
     }
     if (is_udp_sender) {
         int f_mode = 0; // 0=OFF

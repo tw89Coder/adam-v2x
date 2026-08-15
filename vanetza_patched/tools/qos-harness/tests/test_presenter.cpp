@@ -31,6 +31,27 @@ void test_security_report_layout() {
     ConsolePresenter::printSecurityReport(100000, 20051, 20051, 79949, 0, 0);
 }
 
+void test_data_plane_diagnostics_layout() {
+    std::cout << "\n[TEST] Printing Data-Plane Diagnostics layout...\n";
+    DataPlaneDiagnostics report;
+    report.packets = 1000000;
+    report.inspected = 750000;
+    report.skipped = 250000;
+    report.dropped = 1000;
+    report.f2_ticks_total = 123456789;
+    report.filter_inspected_ns = 5000000000ULL;
+    report.filter_skipped_ns = 10000000ULL;
+    report.parser_legitimate_count = 998000;
+    report.parser_legitimate_ns = 2000000000ULL;
+    report.parser_malicious_count = 1000;
+    report.parser_malicious_ns = 300000000ULL;
+    report.state_packets[0] = 500000;
+    report.state_packets[1] = 200000;
+    report.state_packets[2] = 200000;
+    report.state_packets[3] = 100000;
+    ConsolePresenter::printDataPlaneDiagnostics(report, "ONNX");
+}
+
 int main() {
     std::cout << "======================================================================\n";
     std::cout << "                 qos-harness-test: GUI Box Alignment Unit Test\n";
@@ -39,6 +60,7 @@ int main() {
     test_diagnosis_layout();
     test_profiler_layout();
     test_security_report_layout();
+    test_data_plane_diagnostics_layout();
 
     std::cout << "======================================================================\n";
     std::cout << "       [SUCCESS] All ConsolePresenter layout tests printed successfully!\n";

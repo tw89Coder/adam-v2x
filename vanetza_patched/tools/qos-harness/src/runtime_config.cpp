@@ -144,6 +144,16 @@ RuntimeConfig RuntimeConfig::load(const std::string& path) {
                 config.diagnostics_policy_changes = parse_bool(value);
             } else if (full_key == "deployment.onnx.diagnostics.console_summary") {
                 config.diagnostics_console_summary = parse_bool(value);
+            } else if (full_key == "deployment.data_plane_diagnostics.enabled") {
+                config.data_plane_diagnostics_enabled = parse_bool(value);
+            } else if (full_key == "deployment.data_plane_diagnostics.filter_timing") {
+                config.data_plane_filter_timing = parse_bool(value);
+            } else if (full_key == "deployment.data_plane_diagnostics.parser_timing") {
+                config.data_plane_parser_timing = parse_bool(value);
+            } else if (full_key == "deployment.data_plane_diagnostics.state_residency") {
+                config.data_plane_state_residency = parse_bool(value);
+            } else if (full_key == "deployment.data_plane_diagnostics.console_summary") {
+                config.data_plane_console_summary = parse_bool(value);
             }
         } catch (const std::exception& error) {
             throw std::runtime_error(path + ":" + std::to_string(line_number) +

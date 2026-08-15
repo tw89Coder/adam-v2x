@@ -26,6 +26,21 @@ struct OnnxAsyncDiagnostics {
     uint64_t mutex_wait_max_us = 0;
 };
 
+struct DataPlaneDiagnostics {
+    uint64_t packets = 0;
+    uint64_t inspected = 0;
+    uint64_t skipped = 0;
+    uint64_t dropped = 0;
+    uint64_t f2_ticks_total = 0;
+    uint64_t filter_inspected_ns = 0;
+    uint64_t filter_skipped_ns = 0;
+    uint64_t parser_legitimate_count = 0;
+    uint64_t parser_legitimate_ns = 0;
+    uint64_t parser_malicious_count = 0;
+    uint64_t parser_malicious_ns = 0;
+    uint64_t state_packets[4] = {0, 0, 0, 0};
+};
+
 class ConsolePresenter {
 public:
     // Mapped color channels retained for main.cpp legacy compatibility
@@ -98,6 +113,7 @@ public:
     static void printSecurityReport(int total, int malware, int tp, int tn, int fp, int fn);
     static void printAblationMetrics(const std::string& config_name, double fnr, double avg_sampling, const std::string& cost_str);
     static void printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& report);
+    static void printDataPlaneDiagnostics(const DataPlaneDiagnostics& report, const std::string& mode);
 };
 
 }  // namespace qos_harness

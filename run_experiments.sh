@@ -176,6 +176,7 @@ DISABLE_SAFETY=false
 RUN_TRACE=false
 ONNX_FIXED_POLICY_DIAGNOSTIC=false
 ONNX_DIAGNOSTICS_OVERRIDE=""
+DATA_PLANE_DIAGNOSTICS_OVERRIDE=""
 LAMBDA_PPS=""
 
 
@@ -289,6 +290,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-onnx-diagnostics)
             ONNX_DIAGNOSTICS_OVERRIDE="disable"
+            shift
+            ;;
+        --data-plane-diagnostics)
+            DATA_PLANE_DIAGNOSTICS_OVERRIDE="enable"
+            shift
+            ;;
+        --no-data-plane-diagnostics)
+            DATA_PLANE_DIAGNOSTICS_OVERRIDE="disable"
             shift
             ;;
         -s|--disable-safety)
@@ -701,6 +710,11 @@ case "$ACTION" in
                 receiver_args+=("--onnx-diagnostics")
             elif [ "$ONNX_DIAGNOSTICS_OVERRIDE" = "disable" ]; then
                 receiver_args+=("--no-onnx-diagnostics")
+            fi
+            if [ "$DATA_PLANE_DIAGNOSTICS_OVERRIDE" = "enable" ]; then
+                receiver_args+=("--data-plane-diagnostics")
+            elif [ "$DATA_PLANE_DIAGNOSTICS_OVERRIDE" = "disable" ]; then
+                receiver_args+=("--no-data-plane-diagnostics")
             fi
             execute_cmd "$bin" "${receiver_args[@]}"
         }

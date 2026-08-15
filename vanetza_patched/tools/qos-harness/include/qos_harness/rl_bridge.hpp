@@ -121,6 +121,15 @@ public:
         if (enabled >= 0) runtime_config_.diagnostics_enabled = (enabled != 0);
     }
 
+    void set_data_plane_diagnostics_override(int enabled) {
+        if (enabled >= 0) runtime_config_.data_plane_diagnostics_enabled = (enabled != 0);
+    }
+    bool data_plane_diagnostics_enabled() const { return runtime_config_.data_plane_diagnostics_enabled; }
+    bool data_plane_filter_timing_enabled() const { return runtime_config_.data_plane_filter_timing; }
+    bool data_plane_parser_timing_enabled() const { return runtime_config_.data_plane_parser_timing; }
+    bool data_plane_state_residency_enabled() const { return runtime_config_.data_plane_state_residency; }
+    bool data_plane_console_summary_enabled() const { return runtime_config_.data_plane_console_summary; }
+
     uint32_t get_control_window_size() const { return runtime_config_.control_window_packets; }
 
     /**

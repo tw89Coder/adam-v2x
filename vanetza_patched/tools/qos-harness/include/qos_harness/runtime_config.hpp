@@ -23,6 +23,11 @@ struct RuntimeConfig {
     bool diagnostics_timing = true;
     bool diagnostics_policy_changes = true;
     bool diagnostics_console_summary = true;
+    bool data_plane_diagnostics_enabled = false;
+    bool data_plane_filter_timing = true;
+    bool data_plane_parser_timing = true;
+    bool data_plane_state_residency = true;
+    bool data_plane_console_summary = true;
 
     static RuntimeConfig load(const std::string& path);
 };
