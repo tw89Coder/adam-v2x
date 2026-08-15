@@ -35,6 +35,9 @@ struct WindowTelemetry {
     double anomaly_rate;
     double true_anomaly_rate; // Ground truth attack intensity (malware packets / total packets) in the window
     double base_sampling_rate = 0.10; // DRL request before the FSM safety floor is applied
+    double current_budget = 100.0;
+    uint32_t fsm_state = 0;
+    uint32_t clean_streak = 0;
 };
 
 #pragma pack(push, 1)
@@ -47,6 +50,10 @@ struct WindowTelemetryPayload {
     uint64_t total_sq;
     uint64_t total_latency_ticks;
     float current_sampling_rate;
+    float base_sampling_rate;
+    float current_budget;
+    uint32_t fsm_state;
+    uint32_t clean_streak;
 };
 #pragma pack(pop)
 

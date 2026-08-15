@@ -379,8 +379,7 @@ int main(int argc, char* argv[]) {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
     } else if (rl_train_mode) {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::RL_SOCKET_CONTROL);
-        std::cout << "[+] PPO-only training active: FSM sampling override disabled; "
-                     "detector and budget telemetry remain enabled.\n";
+        std::cout << "[+] Online RL training active: deployment-equivalent FSM safety override enabled.\n";
     } else {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::DYNAMIC_ADAPTIVE_FSM);
     }

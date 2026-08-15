@@ -330,6 +330,10 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     payload.total_sq = window_sq_sum_;
     payload.total_latency_ticks = window_latency_ticks_;
     payload.current_sampling_rate = static_cast<float>(filter.get_sampling_rate());
+    payload.base_sampling_rate = static_cast<float>(filter.get_base_sampling_rate());
+    payload.current_budget = static_cast<float>(filter.current_budget);
+    payload.fsm_state = static_cast<uint32_t>(filter.get_state());
+    payload.clean_streak = static_cast<uint32_t>(std::max(0, filter.get_clean_streak()));
 
     if (onnx_enabled_) {
         // Asynchronously hand off telemetry to the background ONNX thread
@@ -339,7 +343,9 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                 WindowTelemetry{static_cast<double>(window_sq_sum_) / total_packets, filter.get_sampling_rate(),
                                 static_cast<double>(window_tp_count_ + window_fp_count_) / total_packets,
                                 static_cast<double>(window_tp_count_ + window_fn_count_) / total_packets,
-                                filter.get_base_sampling_rate()};
+                                filter.get_base_sampling_rate(), filter.current_budget,
+                                static_cast<uint32_t>(filter.get_state()),
+                                static_cast<uint32_t>(std::max(0, filter.get_clean_streak()))};
         }
         new_telemetry_available_.store(true, std::memory_order_release);
         onnx_cv_.notify_one();
@@ -422,7 +428,9 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             filter.get_sampling_rate(),
             static_cast<double>(anomaly_count) / denominator,
             static_cast<double>(true_anomaly_count) / denominator,
-            filter.get_base_sampling_rate()};
+            filter.get_base_sampling_rate(), filter.current_budget,
+            static_cast<uint32_t>(filter.get_state()),
+            static_cast<uint32_t>(std::max(0, filter.get_clean_streak()))};
     }
     new_telemetry_available_.store(true, std::memory_order_release);
     onnx_cv_.notify_one();
@@ -529,25 +537,39 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // The last element of output shape vector is the action dimension (e.g. 2, 3, or 4).
         size_t action_dim = output_shape.back();
 
-        // 1. Prepare Current Features (Shape: 1x3)
-        // Feature Engineering Alignment:
-        // Construct the normalized 3D state vector exactly matching Python training pipelines.
-        // Features:
-        // [0]: instant_sampling_rate (0.0 to 1.0)
-        // [1]: normalized_max_f2_similarity (0.0 to 1.0)
-        // [2]: raw_anomaly_rate (0.0 to 1.0)
-        std::vector<float> current_features = {static_cast<float>(telemetry.instant_sampling_rate),
-                                               static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
-                                               static_cast<float>(telemetry.anomaly_rate)};
-
         // --- NEW: DYNAMIC DIMENSION INSPECTION ---
         static auto input_type_info = session.GetInputTypeInfo(0);
         static auto input_tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
         static std::vector<int64_t> model_input_shape = input_tensor_info.GetShape();
         static int64_t model_input_dim = model_input_shape.back();  // e.g. 3 or 12
 
-        const size_t FEATURE_DIM = 3;
+        // New CMDP models use seven deployment-observable features. Retain the
+        // legacy three-feature contract for existing 3/12-input checkpoints.
+        const bool legacy_state = (model_input_dim == 3 || model_input_dim == 12);
+        const size_t FEATURE_DIM = legacy_state ? 3 : 7;
+        if (model_input_dim <= 0 || model_input_dim % static_cast<int64_t>(FEATURE_DIM) != 0) {
+            std::cerr << "[FATAL] ONNX input dimension " << model_input_dim
+                      << " is incompatible with feature dimension " << FEATURE_DIM << "\n";
+            std::exit(1);
+        }
         static size_t K = model_input_dim / FEATURE_DIM;
+
+        std::vector<float> current_features;
+        if (legacy_state) {
+            current_features = {static_cast<float>(telemetry.instant_sampling_rate),
+                                static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
+                                static_cast<float>(telemetry.anomaly_rate)};
+        } else {
+            constexpr double CLEAN_STREAK_NORMALIZER = 1000.0;
+            current_features = {
+                static_cast<float>(telemetry.base_sampling_rate),
+                static_cast<float>(telemetry.instant_sampling_rate),
+                static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
+                static_cast<float>(telemetry.anomaly_rate),
+                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.current_budget / 100.0))),
+                static_cast<float>(std::min<uint32_t>(telemetry.fsm_state, 3U) / 3.0),
+                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.clean_streak / CLEAN_STREAK_NORMALIZER)))};
+        }
 
         // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION INSTANCE BUFFER ---
         if (input_history_buffer_.empty()) {
@@ -718,6 +740,10 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
     payload.total_sq = window_sq_sum_;
     payload.total_latency_ticks = window_latency_ticks_;
     payload.current_sampling_rate = static_cast<float>(telemetry.instant_sampling_rate);
+    payload.base_sampling_rate = static_cast<float>(telemetry.base_sampling_rate);
+    payload.current_budget = static_cast<float>(telemetry.current_budget);
+    payload.fsm_state = telemetry.fsm_state;
+    payload.clean_streak = telemetry.clean_streak;
 
     if (handshake_with_agent(payload, out_policy)) {
         return true;

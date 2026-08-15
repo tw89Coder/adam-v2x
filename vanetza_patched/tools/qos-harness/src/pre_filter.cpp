@@ -149,6 +149,7 @@ int AdaptiveFilterFSM::calculate_max_sum_sq(const vanetza::ByteBuffer& buf) {
 bool AdaptiveFilterFSM::process_packet(const vanetza::ByteBuffer& buf) {
     last_inspected_ = false;
     last_latency_ticks_ = 0;
+    last_max_sum_sq_ = 0;
 
     // Fast path: Packets smaller than the window size cannot contain recursive recursion bombs
     if (buf.size() < static_cast<size_t>(WINDOW_SIZE)) {

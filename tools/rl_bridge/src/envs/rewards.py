@@ -58,7 +58,11 @@ class DqnSamplingReward(RewardStrategy):
         lambda_lr: float = None,
         leakage_target: float = None,
         overhead_scale: float = None,
+        security_horizon_windows: int = None,
+        lambda_min: float = None,
+        lambda_max: float = None,
     ):
+        from collections import deque
         from src.config import RAW_CFG
         dqn_r = RAW_CFG.get("dqn", {}).get("reward_shaping", {})
 
@@ -82,25 +86,60 @@ class DqnSamplingReward(RewardStrategy):
             if overhead_scale is not None
             else dqn_r.get("overhead_scale", 2.0)
         )
+        self.lambda_min = float(lambda_min if lambda_min is not None else dqn_r.get("lambda_min", 5.0))
+        self.lambda_max = float(lambda_max if lambda_max is not None else dqn_r.get("lambda_max", 30.0))
+        horizon = (
+            security_horizon_windows
+            if security_horizon_windows is not None
+            else dqn_r.get("security_horizon_windows", 100)
+        )
+        self.security_counts = deque(maxlen=max(1, int(horizon)))
+        self.last_rolling_leakage_rate = 0.0
+        self.last_rolling_malware_count = 0
 
     def compute(self, metrics: dict, action_policy: list) -> float:
-        leakage_rate = metrics["leakage_rate"]
-        inspect_rate = metrics["instant_sampling_rate"]
+        tp = int(metrics.get("tp_count", 0))
+        fn = int(metrics.get("fn_count", 0))
+        self.security_counts.append((tp, fn))
+        rolling_tp = sum(pair[0] for pair in self.security_counts)
+        rolling_fn = sum(pair[1] for pair in self.security_counts)
+        rolling_malware = rolling_tp + rolling_fn
+        leakage_rate = rolling_fn / rolling_malware if rolling_malware > 0 else 0.0
+        self.last_rolling_leakage_rate = leakage_rate
+        self.last_rolling_malware_count = rolling_malware
+        # The action controls the S0 base rate. Extra work imposed by the FSM
+        # in S1--S3 is a safety intervention, so charging all of it to the
+        # action gives the learner incorrect credit assignment.
+        base_rate = metrics.get("base_sampling_rate", 0.0)
+        inspect_rate = metrics.get("actual_inspection_rate", base_rate)
 
         violation = max(0.0, leakage_rate - self.leakage_target)
 
         reward = (
-            -self.overhead_scale * inspect_rate
+            -self.overhead_scale * (base_rate + 0.10 * inspect_rate)
             -self.lambda_penalty * violation
         )
 
         return float(reward)
 
-    def update_lambda(self, avg_leakage_rate: float):
-        self.lambda_penalty = max(
-            0.0,
+    def reset(self):
+        self.security_counts.clear()
+        self.last_rolling_leakage_rate = 0.0
+        self.last_rolling_malware_count = 0
+
+    def update_lambda(self, avg_leakage_rate: float, malware_count: int = None):
+        evidence = self.last_rolling_malware_count if malware_count is None else int(malware_count)
+        # An empty horizon has no FNR evidence. It must not be interpreted as
+        # zero leakage, which would erase the safety multiplier in peacetime.
+        if evidence <= 0:
+            return self.lambda_penalty
+        self.lambda_penalty = min(
+            self.lambda_max,
+            max(
+            self.lambda_min,
             self.lambda_penalty
             + self.lambda_lr * (avg_leakage_rate - self.leakage_target)
+            )
         )
         return self.lambda_penalty
     

@@ -17,15 +17,15 @@ class NetworkIOHelper:
     def parse_telemetry(raw_bytes: bytes):
         """
         Parses incoming binary telemetry payload from C++ socket and calculates performance rates.
-        Format: tp_count(I), tn_count(I), fp_count(I), fn_count(I), inspected_count(I), total_sq(Q), total_latency_ticks(Q), current_sampling_rate(f)
-        Total size: 40 bytes.
+        Format: five counters (I), two accumulators (Q), three rates/budget
+        values (f), FSM state (I), and clean streak (I). Total size: 56 bytes.
         """
         import struct
-        PAYLOAD_FORMAT = '<IIIIIQQf'
+        PAYLOAD_FORMAT = '<IIIIIQQfffII'
         try:
-            if len(raw_bytes) < 40:
+            if len(raw_bytes) < 56:
                 return None
-            unpacked = struct.unpack(PAYLOAD_FORMAT, raw_bytes[:40])
+            unpacked = struct.unpack(PAYLOAD_FORMAT, raw_bytes[:56])
             
             # Extract raw count fields
             tp = unpacked[0]
@@ -36,6 +36,10 @@ class NetworkIOHelper:
             total_sq = unpacked[5]
             latency_ticks = unpacked[6]
             instant_sampling_rate = unpacked[7]
+            base_sampling_rate = unpacked[8]
+            current_budget = unpacked[9]
+            fsm_state = unpacked[10]
+            clean_streak = unpacked[11]
             
             total_packets = tp + tn + fp + fn
             if total_packets == 0:
@@ -54,12 +58,18 @@ class NetworkIOHelper:
                 "total_sq": total_sq,
                 "total_latency_ticks": latency_ticks,
                 "instant_sampling_rate": instant_sampling_rate,
+                "effective_sampling_rate": instant_sampling_rate,
+                "base_sampling_rate": base_sampling_rate,
+                "current_budget": current_budget,
+                "fsm_state": fsm_state,
+                "clean_streak": clean_streak,
                 
                 # Computed rates
                 "avg_sq": total_sq / total_packets,
                 "anomaly_rate": (tp + fp) / total_packets,
                 "true_anomaly_rate": total_malware / total_packets,
-                "avg_budget": instant_sampling_rate,  # backward compatibility with older PPO envs
+                "avg_budget": max(0.0, min(1.0, current_budget / 100.0)),
+                "actual_inspection_rate": inspected / total_packets,
                 
                 "fpr": fp / total_benign if total_benign > 0 else 0.0,
                 "fnr": fn / total_malware if total_malware > 0 else 0.0,

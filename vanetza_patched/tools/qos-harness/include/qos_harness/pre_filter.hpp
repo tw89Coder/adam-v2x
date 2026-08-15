@@ -26,7 +26,7 @@ public:
 
     void set_execution_mode(FilterExecutionMode mode) {
         execution_mode_ = mode;
-        if (mode == FilterExecutionMode::STATIC_FIXED_RATE || mode == FilterExecutionMode::RL_SOCKET_CONTROL) {
+        if (mode == FilterExecutionMode::STATIC_FIXED_RATE) {
             adaptive_sampling_enabled_ = false;
         } else {
             adaptive_sampling_enabled_ = true;
@@ -74,6 +74,7 @@ public:
     }
 
     double get_base_sampling_rate() const { return BASE_SAMPLING_RATE; }
+    int get_clean_streak() const { return clean_streak; }
 
     // exposed for debug logging in harness
     double current_budget;

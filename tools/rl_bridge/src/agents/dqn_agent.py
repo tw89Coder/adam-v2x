@@ -15,6 +15,7 @@ class DQNAgent(BaseV2XAgent):
     Epsilon-greedy exploration Agent wrapper for DQN models.
     Provides identical act() signature to maintain compatibility with PPO co-simulation loops.
     """
+    algorithm_name = "dqn"
     def __init__(self, model: torch.nn.Module, action_translator: Any, eps_start: float = None, eps_end: float = None, eps_decay: int = None):
         """
         @param model The PyTorch Q-Network model.

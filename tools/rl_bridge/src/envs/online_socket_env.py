@@ -38,7 +38,15 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         # Active features list used to construct the observation state tensor.
         # Options: "avg_sq", "instant_sampling_rate", "anomaly_rate", "true_anomaly_rate", "avg_budget"
         # Edit this list to dynamically change DQN/PPO observation space without modifying method signatures.
-        self.active_features = ["instant_sampling_rate", "avg_sq", "anomaly_rate"]
+        self.active_features = [
+            "base_sampling_rate",
+            "effective_sampling_rate",
+            "avg_sq",
+            "anomaly_rate",
+            "current_budget",
+            "fsm_state",
+            "clean_streak",
+        ]
         # =================================
         
         # Strategy Pattern initialization
@@ -77,6 +85,12 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
                 state_values.append(val / MAX_F2_SQ)
             elif feature == "packet_size":
                 state_values.append(val / MAX_PACKET_SIZE)
+            elif feature == "current_budget":
+                state_values.append(max(0.0, min(1.0, val / 100.0)))
+            elif feature == "fsm_state":
+                state_values.append(max(0.0, min(1.0, val / 3.0)))
+            elif feature == "clean_streak":
+                state_values.append(max(0.0, min(1.0, val / 1000.0)))
             else:
                 state_values.append(val)  # instant_sampling_rate/anomaly_rate/budget/true_rate are already [0.0, 1.0]
         return torch.tensor(state_values, dtype=torch.float32)
@@ -88,8 +102,17 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         while True:
             self.client_socket, _ = self.server_socket.accept()
             try:
-                # Receive exactly 40 bytes binary structure payload
-                raw_bytes = self.client_socket.recv(40)
+                # TCP can split a struct across reads; receive the complete
+                # fixed-size telemetry contract before parsing it.
+                chunks = []
+                remaining = 56
+                while remaining > 0:
+                    chunk = self.client_socket.recv(remaining)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    remaining -= len(chunk)
+                raw_bytes = b"".join(chunks)
                 metrics = NetworkIOHelper.parse_telemetry(raw_bytes)
                 
                 if metrics is None:
@@ -116,6 +139,8 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
             except Exception:
                 pass
             self.client_socket = None
+        if hasattr(self.reward_strategy, "reset"):
+            self.reward_strategy.reset()
             
         state, _ = self._wait_for_telemetry()
         return state
@@ -125,7 +150,7 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         Send action down the open socket connection, then blocks until the next telemetry arrives.
         """
         # Retrieve the current sampling rate to calculate relative DQN changes
-        current_rate = self.current_metrics.get("instant_sampling_rate", 0.10) if self.current_metrics else 0.10
+        current_rate = self.current_metrics.get("base_sampling_rate", 0.10) if self.current_metrics else 0.10
         
         # Translate the action to C++ FSM 4D policy parameters using the strategy
         action_policy = self.action_translator.translate(action, current_rate)

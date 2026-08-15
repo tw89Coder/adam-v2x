@@ -28,7 +28,7 @@ YAML_PATH = os.path.join(CONFIG_DIR, "config", "agent.yaml")
 _defaults = {
     "algorithm": "dqn",
     "state_representation": {
-        "frame_stack": 1
+        "frame_stack": 4
     },
     "infrastructure": {
         "host": "127.0.0.1", "port": 8080, "checkpoint_dir": "checkpoints",
@@ -72,10 +72,13 @@ _defaults = {
         "tau": 0.005,
         "hidden_dim": 64,
         "reward_shaping": {
-            "lambda_penalty": 10.0,
-            "lambda_lr": 0.05,
-            "leakage_target": 0.01,
-            "overhead_scale": 2.0
+            "lambda_penalty": 20.0,
+            "lambda_lr": 0.50,
+            "lambda_min": 5.0,
+            "lambda_max": 30.0,
+            "leakage_target": 0.20,
+            "overhead_scale": 1.0,
+            "security_horizon_windows": 100
         }
     }
 }

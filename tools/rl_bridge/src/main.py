@@ -32,7 +32,13 @@ from src.envs.offline_dataset_env import V2XOfflineDatasetEnv
 from src.algorithms.ppo_learner import PPOLearner
 from src.algorithms.sac_learner import SACLearner
 
-def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, batch_size: int):
+def run_online(
+    env: V2XOnlineSocketEnv,
+    agent: V2XAgent,
+    learner: PPOLearner,
+    batch_size: int,
+    checkpoint_path_override: str = None,
+):
     """
     Continuous online training co-simulation loop interacting with the C++ TCP socket.
     """
@@ -67,12 +73,13 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
     import os
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     algorithm_name = getattr(agent, "algorithm_name", None)
-    log_suffix = f"_{algorithm_name}" if algorithm_name else ""
-    checkpoint_path = (
+    checkpoint_path = checkpoint_path_override or (
         os.path.join(CHECKPOINT_DIR, f"v2x_online_brain_{algorithm_name}.pth")
         if algorithm_name
         else ONLINE_BRAIN_PATH
     )
+    checkpoint_tag = os.path.splitext(os.path.basename(checkpoint_path))[0]
+    log_suffix = f"_{checkpoint_tag}"
     log_path = os.path.join(CHECKPOINT_DIR, f"training_progress{log_suffix}.csv")
     log_file = open(log_path, mode="w", newline="", encoding="utf-8")
     progress_fields = [
@@ -263,12 +270,25 @@ def run_online(env: V2XOnlineSocketEnv, agent: V2XAgent, learner: PPOLearner, ba
                 # Update Lagrangian multiplier for constrained DQN reward
                 if hasattr(env.reward_strategy, "update_lambda") and len(buffer["leakage_rates"]) > 0:
                     rollout_malware_count = sum_tp + sum_fn
-                    avg_leakage_rate = (
+                    batch_leakage_rate = (
                         sum_fn / rollout_malware_count
                         if rollout_malware_count > 0
                         else 0.0
                     )
-                    current_lambda = env.reward_strategy.update_lambda(avg_leakage_rate)
+                    avg_leakage_rate = getattr(
+                        env.reward_strategy,
+                        "last_rolling_leakage_rate",
+                        batch_leakage_rate,
+                    )
+                    rolling_malware_count = getattr(
+                        env.reward_strategy,
+                        "last_rolling_malware_count",
+                        rollout_malware_count,
+                    )
+                    current_lambda = env.reward_strategy.update_lambda(
+                        avg_leakage_rate,
+                        malware_count=rolling_malware_count,
+                    )
 
                     metrics["avg_leakage_rate"] = avg_leakage_rate
                     metrics["lambda_penalty"] = current_lambda
@@ -489,6 +509,8 @@ def main():
     parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
     parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
     parser.add_argument("--fresh", action="store_true", help="Start training from scratch, ignoring existing checkpoints")
+    parser.add_argument("--checkpoint-path", type=str, default=None,
+                        help="Isolated checkpoint path for loading/saving this training run")
     parser.add_argument("-a", "--algo", "--algorithm", dest="algo", type=str, choices=["ppo", "discrete_ppo", "sac", "dqn"], default=None,
                         help="RL algorithm to use (defaults to config/agent.yaml)")
     args = parser.parse_args()
@@ -513,11 +535,14 @@ def main():
         frame_stack=frame_stack
     )
     model = agent.model
-    selected_online_brain_path = (
+    selected_online_brain_path = args.checkpoint_path or (
         os.path.join(CHECKPOINT_DIR, f"v2x_online_brain_{algo_name}.pth")
         if algo_name == "discrete_ppo"
         else ONLINE_BRAIN_PATH
     )
+    if not os.path.isabs(selected_online_brain_path):
+        workspace_root = os.path.dirname(os.path.dirname(PROJECT_ROOT))
+        selected_online_brain_path = os.path.join(workspace_root, selected_online_brain_path)
 
     # 2. Instantiate and run environment wrappers dynamically
     if args.mode == "online":
@@ -538,7 +563,7 @@ def main():
         batch_size = RAW_CFG.get(algo_name, {}).get(
             "rollout_steps", RAW_CFG["hyperparameters"]["batch_size"]
         )
-        run_online(env, agent, learner, batch_size)
+        run_online(env, agent, learner, batch_size, selected_online_brain_path)
     else:
         # Load weights if available
         if not args.fresh and os.path.exists(OFFLINE_BRAIN_PATH):

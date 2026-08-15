@@ -53,12 +53,14 @@ class DQNDeploymentWrapper(nn.Module):
         # 3. Retrieve rate delta delta from action map buffer
         delta = self.action_map_tensor[best_action_idx]
         
-        # 4. Extract current base sampling rate (first feature of the newest frame at the end of the stack)
+        # 4. Extract current base sampling rate from the newest frame. Legacy
+        # models have three features; the publishable CMDP contract has seven.
         input_dim = full_observation.shape[1]
-        current_rate = full_observation[:, input_dim - 3]
+        feature_dim = 3 if input_dim in (3, 12) else 7
+        current_rate = full_observation[:, input_dim - feature_dim]
         
         # 5. Compute new rate and enforce safety boundaries in-graph
-        new_rate = torch.clamp(current_rate + delta, min=0.05, max=1.0)
+        new_rate = torch.clamp(current_rate + delta, min=0.05, max=0.80)
         
         # 6. Construct 4D output policy matching C++ expectation scaling
         batch_size = full_observation.shape[0]
@@ -150,6 +152,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="V2X DRL Actor Policy ONNX Export Pipeline")
     parser.add_argument("-m", "--model", type=str, default=None, help="Path to input PyTorch checkpoint (.pth)")
     parser.add_argument("-o", "--output", type=str, default=None, help="Path to output ONNX model (.onnx)")
+    parser.add_argument("--raw-dqn", action="store_true",
+                        help="Export the five raw DQN Q-values without the deployment wrapper")
     return parser.parse_args()
 
 def main():
@@ -238,9 +242,10 @@ def main():
         dqn_model.load_state_dict(checkpoint)
         dqn_model.eval()
         
-        # 4. Wrap base Q-Network inside DQNDeploymentWrapper to align output signature (5 -> 4)
-        action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
-        export_model = DQNDeploymentWrapper(dqn_model, action_map)
+        # Raw Q-values preserve the exact discrete action identity. This is the
+        # preferred native C++ contract; the wrapper remains for compatibility.
+        action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.10, -0.05, 0.0, 0.05, 0.10])
+        export_model = dqn_model if args.raw_dqn else DQNDeploymentWrapper(dqn_model, action_map)
         export_model.eval()
 
     elif is_discrete_ppo:
@@ -317,6 +322,7 @@ def main():
     
     try:
         os.makedirs(os.path.dirname(onnx_output_path), exist_ok=True)
+        output_name = 'q_values' if is_dqn and args.raw_dqn else 'output_actions'
         torch.onnx.export(
             export_model,
             dummy_input,
@@ -325,8 +331,8 @@ def main():
             opset_version=18,
             do_constant_folding=True,
             input_names=['input_telemetry'],
-            output_names=['output_actions'],
-            dynamic_axes={'input_telemetry': {0: 'batch_size'}, 'output_actions': {0: 'batch_size'}}
+            output_names=[output_name],
+            dynamic_axes={'input_telemetry': {0: 'batch_size'}, output_name: {0: 'batch_size'}}
         )
         # Force the model's IR version to 9 if it exceeds the limit,
         # ensuring compatibility with older C++ ONNX Runtime libraries.

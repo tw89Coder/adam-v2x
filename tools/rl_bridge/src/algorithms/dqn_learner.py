@@ -92,7 +92,9 @@ class DQNLearner(BaseLearner):
         
         # Optimizer
         self.optimizer = optim.Adam(self.agent.model.parameters(), lr=lr)
-        self.loss_fn = nn.MSELoss()
+        # Huber loss prevents rare sparse-attack penalties from dominating an
+        # entire Q update while retaining a quadratic basin near convergence.
+        self.loss_fn = nn.SmoothL1Loss()
         
         # Initialize Replay Buffer (Capacity: configured, State Dimension: dynamically read)
         state_dim = self.agent.model.net[0].in_features if hasattr(self.agent.model, 'net') else 3
@@ -158,14 +160,18 @@ class DQNLearner(BaseLearner):
         
         # 5. Compute Target Q values: Target = r + gamma * max_a Q_target(s', a) * (1 - done)
         with torch.no_grad():
+            # Double DQN reduces optimistic Q-value bias by separating action
+            # selection (online network) from evaluation (target network).
+            next_actions = self.agent.model(b_next_states).argmax(dim=1, keepdim=True)
             next_q_values = self.target_model(b_next_states)
-            max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+            max_next_q_values = next_q_values.gather(1, next_actions)
             expected_state_action_values = b_rewards + (self.gamma * max_next_q_values * (1.0 - b_dones))
             
         # 6. Compute loss and optimize network
         loss = self.loss_fn(state_action_values, expected_state_action_values)
         self.optimizer.zero_grad()
         loss.backward()
+        nn.utils.clip_grad_norm_(self.agent.model.parameters(), max_norm=5.0)
         self.optimizer.step()
         
         # 7. Soft Update target network weights: target = tau * model + (1 - tau) * target
@@ -228,4 +234,3 @@ def build_dqn_pipeline(lr: float, port: int, mode: str, raw_data=None, frame_sta
     agent = DQNAgent(model, action_translator=translator)
     learner = DQNLearner(agent, lr=lr)
     return env, agent, learner
-

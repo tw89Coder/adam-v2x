@@ -7,7 +7,7 @@ algorithm: "dqn"               # Default algorithm used by training/export/deplo
 # State Representation Settings
 # ------------------------------------------------------------------------------
 state_representation:
-  frame_stack: 10                        # k frames to stack. Set to 1 for stateless mode.
+  frame_stack: 4                         # 4 x 100-packet windows of controller history.
 
 
 # ------------------------------------------------------------------------------
@@ -137,10 +137,13 @@ dqn:
   
   # DQN Specific Reward shaping weights
   reward_shaping:
-    lambda_penalty: 10.0
-    lambda_lr: 0.05
-    leakage_target: 0.01
-    overhead_scale: 2.0
+    lambda_penalty: 20.0
+    lambda_lr: 0.50
+    lambda_min: 5.0
+    lambda_max: 30.0
+    leakage_target: 0.20
+    overhead_scale: 1.0
+    security_horizon_windows: 100        # 10,000 packets per security-cost estimate.
 
 # ------------------------------------------------------------------------------
 # 9. DQN-aligned Discrete PPO (same state/action/reward, different learner)

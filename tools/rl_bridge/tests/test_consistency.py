@@ -8,6 +8,7 @@ import sys
 import torch
 import numpy as np
 import pytest
+import struct
 
 # Adjust sys.path to find src modules relative to Python root tools/rl_bridge
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,6 +21,8 @@ from scripts.export_onnx import DQNDeploymentWrapper
 from scripts.export_onnx import DiscretePPODeploymentWrapper
 from src.models.discrete_ppo_net import DiscretePPOActorCritic
 from src.config import RAW_CFG
+from src.envs.rewards import DqnSamplingReward
+from src.utils.network_io import NetworkIOHelper
 
 def cpp_scale(onnx_output):
     """
@@ -36,7 +39,7 @@ def dqn_setup():
     """
     pytest fixture supplying initialized dqn network, translator, and deployment wrapper.
     """
-    state_dim = 3
+    state_dim = 28
     action_dim = 5
     hidden_dim = 64
     action_map = RAW_CFG.get("dqn", {}).get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
@@ -60,13 +63,13 @@ def test_dqn_translation_consistency(dqn_setup):
     torch.manual_seed(42)
     
     num_samples = 100
+    state_dim = 28
     test_states = []
     for _ in range(num_samples):
-        # Sampling rate in range [0.05, 1.0]
-        sampling_rate = np.random.uniform(0.05, 1.0)
-        avg_sq = np.random.uniform(0.0, 1.0)
-        anomaly_rate = np.random.uniform(0.0, 1.0)
-        test_states.append([sampling_rate, avg_sq, anomaly_rate])
+        state = np.random.uniform(0.0, 1.0, size=state_dim).tolist()
+        sampling_rate = np.random.uniform(0.05, 0.8)
+        state[-7] = sampling_rate
+        test_states.append(state)
         
     test_tensor = torch.tensor(test_states, dtype=torch.float32)
     
@@ -76,7 +79,7 @@ def test_dqn_translation_consistency(dqn_setup):
         
     for i in range(num_samples):
         state = test_states[i]
-        curr_rate = state[0]
+        curr_rate = state[-7]
         
         # A. Python pipeline path
         q_vals = q_values[i]
@@ -120,3 +123,47 @@ def test_discrete_ppo_wrapper_uses_expected_delta():
     ))
     assert abs(output[3].item() - (1.0 + expected_delta)) < 1e-6
     assert output[3].item() < 1.0  # Argmax Hold would incorrectly remain at 100%.
+
+
+def test_cmdp_telemetry_contract_and_actual_inspection_rate():
+    payload = struct.pack(
+        "<IIIIIQQfffII",
+        2, 87, 1, 10, 25, 65025, 1234,
+        0.50, 0.20, 55.0, 1, 400,
+    )
+    metrics = NetworkIOHelper.parse_telemetry(payload)
+    assert metrics is not None
+    assert metrics["base_sampling_rate"] == pytest.approx(0.20)
+    assert metrics["effective_sampling_rate"] == pytest.approx(0.50)
+    assert metrics["actual_inspection_rate"] == pytest.approx(0.25)
+    assert metrics["avg_budget"] == pytest.approx(0.55)
+    assert metrics["fsm_state"] == 1
+    assert metrics["clean_streak"] == 400
+
+
+def test_dqn_reward_uses_rolling_fnr_and_measured_work():
+    reward = DqnSamplingReward(
+        lambda_penalty=20.0,
+        leakage_target=0.20,
+        overhead_scale=1.0,
+        security_horizon_windows=2,
+    )
+    first = reward.compute(
+        {"tp_count": 0, "fn_count": 1, "base_sampling_rate": 0.10,
+         "actual_inspection_rate": 0.10}, []
+    )
+    second = reward.compute(
+        {"tp_count": 3, "fn_count": 0, "base_sampling_rate": 0.20,
+         "actual_inspection_rate": 0.50}, []
+    )
+    assert first == pytest.approx(-16.11)
+    assert reward.last_rolling_leakage_rate == pytest.approx(0.25)
+    assert second == pytest.approx(-1.25)
+
+
+def test_dqn_lambda_requires_attack_evidence():
+    reward = DqnSamplingReward(lambda_penalty=20.0, lambda_lr=0.5, leakage_target=0.2)
+    assert reward.update_lambda(0.0, malware_count=0) == pytest.approx(20.0)
+    assert reward.update_lambda(0.0, malware_count=10) == pytest.approx(19.9)
+    reward.lambda_penalty = 30.0
+    assert reward.update_lambda(1.0, malware_count=10) == pytest.approx(30.0)
