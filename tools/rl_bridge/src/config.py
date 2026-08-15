@@ -61,10 +61,11 @@ _defaults = {
     },
     "safety_boundaries": {
         "enabled": True, "max_sq_threshold": 650, "min_penalty_multiplier": 20.0,
-        "max_recovery_rate": 0.10, "min_base_sampling_rate": 0.05
+        "max_recovery_rate": 0.10, "min_base_sampling_rate": 0.70
     },
     "dqn": {
         "action_map": [-0.10, -0.05, 0.0, 0.05, 0.10],
+        "action_profiles": [[0.10, 0.70], [0.075, 0.70], [0.05, 0.75], [0.025, 0.80], [0.01, 0.80]],
         "capacity": 10000,
         "eps_start": 1.0,
         "eps_end": 0.05,

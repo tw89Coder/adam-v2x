@@ -21,6 +21,7 @@ public:
     };
 
     AdaptiveFilterFSM();
+    void set_random_seed(uint32_t seed) { rng_state = seed ? seed : 0xA341316CU; }
     bool process_packet(const vanetza::ByteBuffer& buf);
     State get_state() const;
 

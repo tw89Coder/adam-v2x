@@ -114,6 +114,7 @@ int main(int argc, char* argv[]) {
     double custom_recovery = 0.05;
     double custom_penalty = 50.0;
     int custom_sq_thresh = 600;
+    double custom_base_sampling = 0.10;
 
     bool is_udp_receiver = false;
     bool is_udp_sender = false;
@@ -201,6 +202,10 @@ int main(int argc, char* argv[]) {
             has_custom_policy = true;
         } else if (arg == "--sq-thresh" && i + 1 < argc) {
             custom_sq_thresh = std::atoi(argv[++i]);
+            has_custom_policy = true;
+        } else if (arg == "--base-sampling" && i + 1 < argc) {
+            custom_base_sampling = std::atof(argv[++i]);
+            custom_base_sampling = std::max(0.05, std::min(1.0, custom_base_sampling));
             has_custom_policy = true;
         } else if (arg == "-t" && i + 1 < argc) {
             total_packets = std::atoi(argv[++i]);
@@ -370,6 +375,10 @@ int main(int argc, char* argv[]) {
 
     // Initialize the main mitigation state machine
     AdaptiveFilterFSM filter_fsm;
+    // Couple attack generation and sampling to the declared experiment seed.
+    // Previously the sampler used wall-clock time, defeating reproducibility
+    // and paired comparisons between policies.
+    filter_fsm.set_random_seed(static_cast<uint32_t>(seed) ^ 0xDEADBEEFU);
 
     if (static_filter_mode) {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::STATIC_FIXED_RATE);
@@ -377,8 +386,10 @@ int main(int argc, char* argv[]) {
         std::cout << "[+] Static Fixed Filter Active: Sampling Rate = " << (static_sampling_rate * 100.0) << "%\n";
     } else if (enable_onnx) {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
+        filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
     } else if (rl_train_mode) {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::RL_SOCKET_CONTROL);
+        filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
         std::cout << "[+] Online RL training active: deployment-equivalent FSM safety override enabled.\n";
     } else {
         filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::DYNAMIC_ADAPTIVE_FSM);
@@ -386,9 +397,9 @@ int main(int argc, char* argv[]) {
 
     // Apply custom parameters if CLI override flags were provided
     if (has_custom_policy) {
-        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, 0.10);
+        filter_fsm.update_policy_params(custom_recovery, custom_penalty, custom_sq_thresh, custom_base_sampling);
         std::cout << "[+] Policy Override Active -> Recovery: " << custom_recovery << " | Penalty: " << custom_penalty
-                  << " | SQ Thresh: " << custom_sq_thresh << " | S0 Sampling: 0.10\n";
+                  << " | SQ Thresh: " << custom_sq_thresh << " | S0 Sampling: " << custom_base_sampling << "\n";
     }
 
     // Initialize socket co-simulation bridge for active DRL co-processing

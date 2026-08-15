@@ -37,6 +37,11 @@ class DQNDeploymentWrapper(nn.Module):
         super().__init__()
         self.dqn = dqn_net
         self.register_buffer("action_map_tensor", torch.tensor(action_map, dtype=torch.float32))
+        profiles = RAW_CFG.get("dqn", {}).get("action_profiles", [
+            [0.10, 0.70], [0.075, 0.70], [0.05, 0.75], [0.025, 0.80], [0.01, 0.80]
+        ])
+        self.register_buffer("recovery_profiles", torch.tensor([p[0] for p in profiles], dtype=torch.float32))
+        self.register_buffer("sampling_profiles", torch.tensor([p[1] for p in profiles], dtype=torch.float32))
         
     def forward(self, full_observation):
         # full_observation shape: (batch_size, 3) where:
@@ -50,24 +55,15 @@ class DQNDeploymentWrapper(nn.Module):
         # 2. ArgMax greedy choice in-graph
         best_action_idx = torch.argmax(q_values, dim=1)
         
-        # 3. Retrieve rate delta delta from action map buffer
-        delta = self.action_map_tensor[best_action_idx]
-        
-        # 4. Extract current base sampling rate from the newest frame. Legacy
-        # models have three features; the publishable CMDP contract has seven.
-        input_dim = full_observation.shape[1]
-        feature_dim = 3 if input_dim in (3, 12) else 7
-        current_rate = full_observation[:, input_dim - feature_dim]
-        
-        # 5. Compute new rate and enforce safety boundaries in-graph
-        new_rate = torch.clamp(current_rate + delta, min=0.05, max=0.80)
+        recovery_rate = self.recovery_profiles[best_action_idx]
+        new_rate = self.sampling_profiles[best_action_idx]
         
         # 6. Construct 4D output policy matching C++ expectation scaling
         batch_size = full_observation.shape[0]
         device = full_observation.device
         
         # recovery_rate: 0.05 / 0.5 = 0.1
-        rec_rate = torch.full((batch_size, 1), 0.1, dtype=torch.float32, device=device)
+        rec_rate = (recovery_rate / 0.5).unsqueeze(-1)
         # penalty_multiplier: 50.0 / 100.0 = 0.5
         penalty = torch.full((batch_size, 1), 0.5, dtype=torch.float32, device=device)
         # sq_threshold: (600 - 400) / 400 = 0.5

@@ -118,14 +118,22 @@ safety_boundaries:
   max_sq_threshold: 650                 # Upper limit of SQ threshold to prevent recursive ASN.1 payload leakage (FNR spikes)
   min_penalty_multiplier: 20.0          # Lower limit of penalty multiplier to guarantee budget drains fast under attack
   max_recovery_rate: 0.10               # Upper limit of recovery rate to prevent premature budget restoration
-  min_base_sampling_rate: 0.05          # Lower limit of peacetime inspection rate to maintain audit visibility
+  min_base_sampling_rate: 0.70          # Empirical 1M-packet floor satisfying <=20% FNR at 0.1% attacks.
 
 # ------------------------------------------------------------------------------
 # 8. DQN Algorithm & Architecture Settings (Andy's Custom DQN Parameters)
 # ------------------------------------------------------------------------------
 dqn:
-  # Action map for DQN discrete actions. Translates discrete action index (0-4) to relative sampling rate change.
+  # Compatibility labels retained for existing telemetry columns.
   action_map: [-0.10, -0.05, 0.00, 0.05, 0.10]
+  # Direct safe policy profiles: [recovery_rate, S0 base sampling].
+  # Lower recovery keeps the FSM elevated longer after observed attacks.
+  action_profiles:
+    - [0.100, 0.70]
+    - [0.075, 0.70]
+    - [0.050, 0.75]
+    - [0.025, 0.80]
+    - [0.010, 0.80]
   
   # Hyperparameters specific to DQN
   capacity: 10000                       # Replay buffer maximum capacity

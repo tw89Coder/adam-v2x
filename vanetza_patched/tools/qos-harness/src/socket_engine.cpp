@@ -182,10 +182,14 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
 
                 // Setup FSM Filter and ONNX RL Bridge
                 AdaptiveFilterFSM filter_fsm;
+                // Use the declared trial id rather than wall-clock time so
+                // FSM/static/ONNX policies receive paired sampling streams.
+                const uint32_t sampling_seed = header.run_id ? header.run_id : 42U;
+                filter_fsm.set_random_seed(sampling_seed ^ 0xDEADBEEFU);
                 qos_harness::RLBridge rl_bridge(LOCAL_REPO_ROOT_STR);
                 if (filter_mode == 3) {
                     filter_fsm.set_execution_mode(AdaptiveFilterFSM::FilterExecutionMode::ONNX_INFERENCE);
-                    filter_fsm.update_policy_params(0.05, 50.0, 600, 0.10);
+                    filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
                     std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
                     rl_bridge.set_control_core(control_core);
                     rl_bridge.initialize_onnx(true, model_to_use);

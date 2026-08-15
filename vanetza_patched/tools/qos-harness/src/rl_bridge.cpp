@@ -50,7 +50,7 @@
 namespace qos_harness {
 
 namespace {
-constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.05;
+constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.70;
 constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.80;
 
 double clamp_drl_s0_sampling_rate(double rate) {
@@ -310,7 +310,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
             if (policy.sq_threshold > 650) policy.sq_threshold = 650;
             if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
             if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-            if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
+            if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
         }
         policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier, policy.sq_threshold,
@@ -352,7 +352,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
         new_telemetry_available_.store(true, std::memory_order_release);
         onnx_cv_.notify_one();
     } else if (socket_enabled_) {
-        FilterPolicy next_policy{0.05, 50.0, 600, 0.10};
+        FilterPolicy next_policy{0.05, 50.0, 600, MIN_DRL_S0_SAMPLING_RATE};
 
         // Handshake with the optimization engine using binary struct
         if (handshake_with_agent(payload, next_policy)) {
@@ -361,7 +361,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                 if (next_policy.sq_threshold > 650) next_policy.sq_threshold = 650;
                 if (next_policy.penalty_multiplier < 20.0) next_policy.penalty_multiplier = 20.0;
                 if (next_policy.recovery_rate > 0.10) next_policy.recovery_rate = 0.10;
-                if (next_policy.base_sampling_rate < 0.05) next_policy.base_sampling_rate = 0.05;
+                if (next_policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) next_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
             }
             next_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(next_policy.base_sampling_rate);
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
@@ -415,7 +415,7 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             if (policy.sq_threshold > 650) policy.sq_threshold = 650;
             if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
             if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-            if (policy.base_sampling_rate < 0.05) policy.base_sampling_rate = 0.05;
+            if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
         }
         policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
@@ -637,15 +637,12 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                     }
                 }
 
-                float delta = dqn_action_map_[best_action_idx];
-                float new_rate = telemetry.base_sampling_rate + delta;
-                if (new_rate < 0.05f) new_rate = 0.05f;
-                if (new_rate > 0.80f) new_rate = 0.80f;
-
-                out_policy.recovery_rate = 0.05;
+                constexpr float RECOVERY_PROFILES[5] = {0.10f, 0.075f, 0.05f, 0.025f, 0.01f};
+                constexpr float SAMPLING_PROFILES[5] = {0.70f, 0.70f, 0.75f, 0.80f, 0.80f};
+                out_policy.recovery_rate = RECOVERY_PROFILES[best_action_idx];
                 out_policy.penalty_multiplier = 50.0;
                 out_policy.sq_threshold = 600;
-                out_policy.base_sampling_rate = new_rate;
+                out_policy.base_sampling_rate = SAMPLING_PROFILES[best_action_idx];
             } else if (action_dim == 4) {
                 // ==========================================
                 // [Wrapped DQN Model Mapping] DQNDeploymentWrapper
@@ -702,7 +699,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
                 out_policy.sq_threshold = 650;
-                out_policy.base_sampling_rate = 0.05;
+                out_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
             } else {
                 std::cerr << "[FATAL] ONNX PPO model returned unexpected action dimensions: " << action_dim << "\n";
                 std::exit(1);
@@ -717,7 +714,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
             if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
             if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
             if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
-            if (out_policy.base_sampling_rate < 0.05) out_policy.base_sampling_rate = 0.05;
+            if (out_policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) out_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
         }
         // Architectural invariant: DRL controls only the nominal S0 range.
         // Higher effective inspection rates remain exclusively FSM budget decisions.
@@ -837,7 +834,7 @@ void RLBridge::onnx_worker_loop() {
         }
 
         // Run ONNX Runtime inference in background thread (pinned to Core B)
-        FilterPolicy policy{0.05, 50.0, 600, 0.10};
+        FilterPolicy policy{0.05, 50.0, 600, MIN_DRL_S0_SAMPLING_RATE};
         if (run_onnx_inference(local_telemetry, policy)) {
             std::lock_guard<std::mutex> lock(onnx_mutex_);
             shared_policy_ = policy;

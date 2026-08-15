@@ -54,20 +54,21 @@ class DqnActionTranslator(ActionTranslator):
         dqn_cfg = RAW_CFG.get("dqn", {})
         # Read maps from central configuration
         self.action_map = action_map or dqn_cfg.get("action_map", [-0.20, -0.10, 0.0, 0.10, 0.20])
+        self.action_profiles = dqn_cfg.get("action_profiles", [
+            [0.10, 0.70], [0.075, 0.70], [0.05, 0.75], [0.025, 0.80], [0.01, 0.80]
+        ])
+        self.min_sampling_rate = RAW_CFG.get("safety_boundaries", {}).get("min_base_sampling_rate", 0.70)
 
     def translate(self, action: Any, current_sampling_rate: float) -> list:
         action_index = int(action)
         # Ensure index safety bounds
         action_index = max(0, min(len(self.action_map) - 1, action_index))
-        delta = self.action_map[action_index]
-        
-        # DRL can raise sparse-attack coverage up to 80%; the independent FSM
-        # safety floor retains exclusive authority to force 100% inspection.
-        new_rate = max(0.05, min(0.80, current_sampling_rate + delta))
+        recovery_rate, requested_rate = self.action_profiles[action_index]
+        new_rate = max(self.min_sampling_rate, min(0.80, requested_rate))
         
         # Return 4D policy: [recovery_rate, penalty_multiplier, sq_threshold, new_sampling_rate]
         # Rest of the parameters are set to default baseline FSM settings
-        return [0.05, 50.0, 600, new_rate]
+        return [recovery_rate, 50.0, 600, new_rate]
 
     def get_action_space(self) -> Any:
         return spaces.Discrete(len(self.action_map))
