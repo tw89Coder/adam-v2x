@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -403,29 +404,28 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
                                           AdaptiveFilterFSM& filter) {
     if (!onnx_enabled_ || packet_count == 0) return;
 
-    // Preserve check_and_sync_window() ordering: apply the completed policy
-    // before publishing the next observation and its current sampling rate.
-    if (new_policy_available_.load(std::memory_order_acquire)) {
-        FilterPolicy policy;
-        {
-            std::lock_guard<std::mutex> lock(onnx_mutex_);
-            policy = shared_policy_;
-        }
-        if (safety_guards_enabled_) {
-            if (policy.sq_threshold > 650) policy.sq_threshold = 650;
-            if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
-            if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-            if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-        }
-        policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
-        filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
-                                    policy.sq_threshold, policy.base_sampling_rate);
-        new_policy_available_.store(false, std::memory_order_release);
-    }
-
+    // Apply the completed policy and publish the next observation under one
+    // critical section. This preserves the original policy-before-telemetry
+    // ordering while avoiding a second cross-core mutex/cache-line transfer.
     const double denominator = static_cast<double>(packet_count);
     {
         std::lock_guard<std::mutex> lock(onnx_mutex_);
+        if (new_policy_available_.load(std::memory_order_relaxed)) {
+            FilterPolicy policy = shared_policy_;
+            if (safety_guards_enabled_) {
+                if (policy.sq_threshold > 650) policy.sq_threshold = 650;
+                if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
+                if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
+                if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) {
+                    policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
+                }
+            }
+            policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
+            filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
+                                        policy.sq_threshold, policy.base_sampling_rate);
+            new_policy_available_.store(false, std::memory_order_relaxed);
+        }
+
         shared_telemetry_ = WindowTelemetry{
             static_cast<double>(sq_sum) / denominator,
             filter.get_sampling_rate(),
@@ -530,15 +530,15 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         const char* input_name = input_name_ptr.get();
         const char* output_name = output_name_ptr.get();
 
-        // Dynamic Dimension Inspection:
-        // Read output tensor description to determine the model's action dimension dynamically.
-        // This allows C++ to seamlessly support 2D, 3D, or 4D models without code modifications.
-        auto output_type_info = session.GetOutputTypeInfo(0);
-        auto output_tensor_info = output_type_info.GetTensorTypeAndShapeInfo();
-        std::vector<int64_t> output_shape = output_tensor_info.GetShape();
-
-        // The last element of output shape vector is the action dimension (e.g. 2, 3, or 4).
-        size_t action_dim = output_shape.back();
+        // Model metadata is immutable for the lifetime of the static session.
+        // Cache it instead of querying ORT and allocating a shape vector for
+        // every 100-packet control window.
+        static const size_t action_dim = []() {
+            const auto type_info = session.GetOutputTypeInfo(0);
+            const auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
+            const auto shape = tensor_info.GetShape();
+            return static_cast<size_t>(shape.back());
+        }();
 
         // --- NEW: DYNAMIC DIMENSION INSPECTION ---
         static auto input_type_info = session.GetInputTypeInfo(0);
@@ -557,21 +557,21 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         }
         static size_t K = model_input_dim / FEATURE_DIM;
 
-        std::vector<float> current_features;
+        std::array<float, 7> current_features{};
         if (legacy_state) {
-            current_features = {static_cast<float>(telemetry.instant_sampling_rate),
-                                static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
-                                static_cast<float>(telemetry.anomaly_rate)};
+            current_features[0] = static_cast<float>(telemetry.instant_sampling_rate);
+            current_features[1] = static_cast<float>(telemetry.avg_max_sum_sq / 65025.0);
+            current_features[2] = static_cast<float>(telemetry.anomaly_rate);
         } else {
             constexpr double CLEAN_STREAK_NORMALIZER = 1000.0;
-            current_features = {
+            current_features = {{
                 static_cast<float>(telemetry.base_sampling_rate),
                 static_cast<float>(telemetry.instant_sampling_rate),
                 static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
                 static_cast<float>(telemetry.anomaly_rate),
                 static_cast<float>(std::max(0.0, std::min(1.0, telemetry.current_budget / 100.0))),
                 static_cast<float>(std::min<uint32_t>(telemetry.fsm_state, 3U) / 3.0),
-                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.clean_streak / CLEAN_STREAK_NORMALIZER)))};
+                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.clean_streak / CLEAN_STREAK_NORMALIZER)))}};
         }
 
         // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION INSTANCE BUFFER ---
@@ -583,8 +583,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         if (!history_initialized_) {
             // Fill history buffer by repeating the first frame K times
             for (size_t i = 0; i < K; ++i) {
-                std::copy(current_features.begin(), current_features.end(),
-                          input_history_buffer_.begin() + i * FEATURE_DIM);
+                std::copy_n(current_features.begin(), FEATURE_DIM,
+                            input_history_buffer_.begin() + i * FEATURE_DIM);
             }
             history_initialized_ = true;
         } else {
@@ -593,15 +593,16 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 std::copy(input_history_buffer_.begin() + FEATURE_DIM, input_history_buffer_.end(),
                           input_history_buffer_.begin());
                 // Place new frame at the end of the history
-                std::copy(current_features.begin(), current_features.end(), input_history_buffer_.end() - FEATURE_DIM);
+                std::copy_n(current_features.begin(), FEATURE_DIM, input_history_buffer_.end() - FEATURE_DIM);
             } else {
-                input_history_buffer_ = current_features;
+                std::copy_n(current_features.begin(), FEATURE_DIM, input_history_buffer_.begin());
             }
         }
 
         // 3. Prepare Input Tensor (Using the contiguous flat history vector)
-        std::vector<int64_t> input_shape = {1, static_cast<int64_t>(model_input_dim)};
-        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        static const std::array<int64_t, 2> input_shape = {{1, model_input_dim}};
+        static const Ort::MemoryInfo memory_info =
+            Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         Ort::Value input_tensor =
             Ort::Value::CreateTensor<float>(memory_info, input_history_buffer_.data(), input_history_buffer_.size(),
                                             input_shape.data(), input_shape.size());
@@ -612,12 +613,13 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
 
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        auto output_tensors = session.Run(Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 1);
+        static const Ort::RunOptions run_options{nullptr};
+        auto output_tensors = session.Run(run_options, input_names, &input_tensor, 1, output_names, 1);
 
         auto end_time = std::chrono::high_resolution_clock::now();
         uint64_t elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-        total_inference_time_us_ += elapsed_us;
-        inference_count_++;
+        total_inference_time_us_.fetch_add(elapsed_us, std::memory_order_relaxed);
+        inference_count_.fetch_add(1, std::memory_order_relaxed);
 
         // Retrieve raw floating point outputs from the output tensor.
         float* float_output = output_tensors.front().GetTensorMutableData<float>();
