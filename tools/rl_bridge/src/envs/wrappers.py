@@ -60,7 +60,14 @@ class FrameStackWrapper(BaseV2XEnv):
         Steps base environment, appends observation, and returns stacked tensor.
         """
         next_state, reward, done, info = self.env.step(action)
-        self.frames.append(next_state)
+        if done:
+            # A new scenario is a new MDP episode. Repeating its first frame
+            # prevents observations from the prior mode/rate leaking in.
+            self.frames.clear()
+            for _ in range(self.k):
+                self.frames.append(next_state)
+        else:
+            self.frames.append(next_state)
         return self._get_stacked_state(), reward, done, info
 
     def _get_stacked_state(self) -> torch.Tensor:

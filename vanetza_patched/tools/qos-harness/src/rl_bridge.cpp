@@ -101,6 +101,7 @@ void RLBridge::initialize(bool enable_socket, double pollution_rate, int attack_
     input_history_buffer_.clear();
     packet_buffer_.clear();
     window_idx_ = 0;
+    control_window_idx_ = 0;
 
     window_tp_count_ = 0;
     window_tn_count_ = 0;
@@ -334,6 +335,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     payload.current_budget = static_cast<float>(filter.current_budget);
     payload.fsm_state = static_cast<uint32_t>(filter.get_state());
     payload.clean_streak = static_cast<uint32_t>(std::max(0, filter.get_clean_streak()));
+    payload.episode_start = static_cast<uint32_t>(control_window_idx_ == 0);
 
     if (onnx_enabled_) {
         // Asynchronously hand off telemetry to the background ONNX thread
@@ -366,6 +368,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
     }
+    ++control_window_idx_;
     // Write window-level metrics to window CSV log
     if (window_csv_file_.is_open()) {
         double actual_insp = (total_packets > 0) ? (static_cast<double>(window_inspected_count_) / total_packets) : 0.0;
@@ -744,6 +747,7 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
     payload.current_budget = static_cast<float>(telemetry.current_budget);
     payload.fsm_state = telemetry.fsm_state;
     payload.clean_streak = telemetry.clean_streak;
+    payload.episode_start = 0;
 
     if (handshake_with_agent(payload, out_policy)) {
         return true;

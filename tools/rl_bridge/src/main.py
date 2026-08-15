@@ -135,6 +135,11 @@ def run_online(
                     eval_dist, _ = agent.get_action_distribution(state)
                     policy_probs = eval_dist.probs.detach().cpu().reshape(-1).tolist()
                     greedy_action_index = int(torch.argmax(eval_dist.probs).item())
+            elif getattr(agent, "algorithm_name", "") == "dqn":
+                with torch.no_grad():
+                    device = next(agent.model.parameters()).device
+                    q_values = agent.model(state.to(device).unsqueeze(0))
+                    greedy_action_index = int(torch.argmax(q_values, dim=-1).item())
             
             # 2. Step environment (send parameters and wait for next observation)
             next_state, reward, done, info = env.step(safe_actions)
@@ -158,7 +163,10 @@ def run_online(
                     action_delta = ""
                 sent_policy = info.get("actions_sent", [])
                 sampling_after = sent_policy[3] if len(sent_policy) > 3 else float("nan")
-                sampling_before = float(state[-3].item()) if state.numel() >= 3 else float("nan")
+                # The newest 7-feature frame begins with the controllable base
+                # sampling rate. Legacy 3-feature models keep their rate at -3.
+                rate_offset = -7 if state.numel() % 7 == 0 else -3
+                sampling_before = float(state[rate_offset].item()) if state.numel() >= abs(rate_offset) else float("nan")
                 telemetry_writer.writerow({
                     "step": step_count,
                     "update": update_count,

@@ -105,7 +105,7 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
                 # TCP can split a struct across reads; receive the complete
                 # fixed-size telemetry contract before parsing it.
                 chunks = []
-                remaining = 56
+                remaining = 60
                 while remaining > 0:
                     chunk = self.client_socket.recv(remaining)
                     if not chunk:
@@ -168,11 +168,16 @@ class V2XOnlineSocketEnv(BaseV2XEnv):
         # Wait for the NEXT telemetry input from C++ client
         next_state, next_metrics = self._wait_for_telemetry()
         
-        # Compute surrogate reward using the unified metrics payload and the reward strategy
-        reward = self.reward_strategy.compute(next_metrics, action_policy)
-        
-        # In online V2X continuous serving, there is no terminal 'done' state
-        done = False
+        # A matrix sweep can start a new C++ scenario while this long-lived
+        # Python server remains active. Never construct a transition across
+        # two unrelated traffic processes.
+        done = bool(next_metrics.get("episode_start", False))
+        if done:
+            if hasattr(self.reward_strategy, "reset"):
+                self.reward_strategy.reset()
+            reward = 0.0
+        else:
+            reward = self.reward_strategy.compute(next_metrics, action_policy)
         
         info = {
             "metrics": next_metrics,

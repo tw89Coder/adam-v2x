@@ -54,6 +54,7 @@ struct WindowTelemetryPayload {
     float current_budget;
     uint32_t fsm_state;
     uint32_t clean_streak;
+    uint32_t episode_start;
 };
 #pragma pack(pop)
 
@@ -213,6 +214,7 @@ private:
     std::ofstream window_csv_file_;
     std::vector<PacketTelemetry> packet_buffer_;
     int window_idx_ = 0;
+    uint32_t control_window_idx_ = 0;
     std::string algorithm_ = "dqn";
     std::vector<float> dqn_action_map_;
 

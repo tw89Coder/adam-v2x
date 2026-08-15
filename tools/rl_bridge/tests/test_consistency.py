@@ -127,9 +127,9 @@ def test_discrete_ppo_wrapper_uses_expected_delta():
 
 def test_cmdp_telemetry_contract_and_actual_inspection_rate():
     payload = struct.pack(
-        "<IIIIIQQfffII",
+        "<IIIIIQQfffIII",
         2, 87, 1, 10, 25, 65025, 1234,
-        0.50, 0.20, 55.0, 1, 400,
+        0.50, 0.20, 55.0, 1, 400, 1,
     )
     metrics = NetworkIOHelper.parse_telemetry(payload)
     assert metrics is not None
@@ -139,6 +139,7 @@ def test_cmdp_telemetry_contract_and_actual_inspection_rate():
     assert metrics["avg_budget"] == pytest.approx(0.55)
     assert metrics["fsm_state"] == 1
     assert metrics["clean_streak"] == 400
+    assert metrics["episode_start"] is True
 
 
 def test_dqn_reward_uses_rolling_fnr_and_measured_work():

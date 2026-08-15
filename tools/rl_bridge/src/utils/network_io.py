@@ -18,14 +18,15 @@ class NetworkIOHelper:
         """
         Parses incoming binary telemetry payload from C++ socket and calculates performance rates.
         Format: five counters (I), two accumulators (Q), three rates/budget
-        values (f), FSM state (I), and clean streak (I). Total size: 56 bytes.
+        values (f), FSM state, clean streak, and episode marker (I).
+        Total size: 60 bytes.
         """
         import struct
-        PAYLOAD_FORMAT = '<IIIIIQQfffII'
+        PAYLOAD_FORMAT = '<IIIIIQQfffIII'
         try:
-            if len(raw_bytes) < 56:
+            if len(raw_bytes) < 60:
                 return None
-            unpacked = struct.unpack(PAYLOAD_FORMAT, raw_bytes[:56])
+            unpacked = struct.unpack(PAYLOAD_FORMAT, raw_bytes[:60])
             
             # Extract raw count fields
             tp = unpacked[0]
@@ -40,6 +41,7 @@ class NetworkIOHelper:
             current_budget = unpacked[9]
             fsm_state = unpacked[10]
             clean_streak = unpacked[11]
+            episode_start = bool(unpacked[12])
             
             total_packets = tp + tn + fp + fn
             if total_packets == 0:
@@ -63,6 +65,7 @@ class NetworkIOHelper:
                 "current_budget": current_budget,
                 "fsm_state": fsm_state,
                 "clean_streak": clean_streak,
+                "episode_start": episode_start,
                 
                 # Computed rates
                 "avg_sq": total_sq / total_packets,
