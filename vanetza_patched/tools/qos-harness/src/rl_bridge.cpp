@@ -181,7 +181,9 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
 
         // 2. Dynamically parse agent.yaml to read algorithm and action_map
         algorithm_ = "dqn";                                      // Default fallback
-        dqn_action_map_ = {-0.20f, -0.10f, 0.0f, 0.10f, 0.20f};  // Default fallback
+        // This checkpoint was trained with 5%/10% sampling-rate steps. Keep
+        // the native raw-Q path and the legacy wrapped ONNX contract aligned.
+        dqn_action_map_ = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f};  // Default fallback
 
         std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
         std::ifstream config_file(config_path);

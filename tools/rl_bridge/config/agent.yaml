@@ -125,12 +125,7 @@ safety_boundaries:
 # ------------------------------------------------------------------------------
 dqn:
   # Action map for DQN discrete actions. Translates discrete action index (0-4) to relative sampling rate change.
-  action_map:
-    - -0.20
-    - -0.10
-    - 0.00
-    - 0.10
-    - 0.20
+  action_map: [-0.10, -0.05, 0.00, 0.05, 0.10]
   
   # Hyperparameters specific to DQN
   capacity: 10000                       # Replay buffer maximum capacity

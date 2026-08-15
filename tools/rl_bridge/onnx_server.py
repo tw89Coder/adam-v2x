@@ -42,7 +42,7 @@ K = expected_dim // FEATURE_DIM
 
 print(f"[+] ONNX Input Tensor: '{input_name}' | Expected Dim: {expected_dim} (K={K} frames x {FEATURE_DIM} features)")
 
-action_map = [-0.20, -0.10, 0.0, 0.10, 0.20]
+action_map = [-0.10, -0.05, 0.0, 0.05, 0.10]
 
 server_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_fd.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
