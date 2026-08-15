@@ -18,6 +18,15 @@
 
 namespace qos_harness {
 
+namespace {
+std::string centeredBoxTitle(const std::string& title) {
+    constexpr std::size_t inner_width = 62;
+    if (title.size() >= inner_width) return title.substr(0, inner_width);
+    const std::size_t left = (inner_width - title.size()) / 2;
+    return std::string(left, ' ') + title + std::string(inner_width - title.size() - left, ' ');
+}
+}  // namespace
+
 void ConsolePresenter::printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& r) {
     const double age_avg = r.policies_applied
         ? static_cast<double>(r.policy_age_sum) / r.policies_applied : 0.0;
@@ -25,11 +34,12 @@ void ConsolePresenter::printOnnxAsyncDiagnostics(const OnnxAsyncDiagnostics& r) 
         ? 100.0 * r.policies_unchanged / r.inferences_completed : 0.0;
     const double inference_avg = r.inferences_completed
         ? static_cast<double>(r.inference_wall_total_us) / r.inferences_completed : 0.0;
+    const std::string title = centeredBoxTitle("ONNX ASYNC DIAGNOSTICS");
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s                 ONNX ASYNC DIAGNOSTICS                     %s│\n"
+        "│%s%s%s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n",
-        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+        frame().c_str(), label().c_str(), title.c_str(), frame().c_str(), reset().c_str());
     std::printf("  ├── Windows published       : %llu\n", static_cast<unsigned long long>(r.windows_published));
     std::printf("  ├── Telemetry consumed      : %llu\n", static_cast<unsigned long long>(r.telemetry_consumed));
     std::printf("  ├── Telemetry overwritten   : %llu\n", static_cast<unsigned long long>(r.telemetry_overwritten));
@@ -60,11 +70,12 @@ void ConsolePresenter::printDataPlaneDiagnostics(const DataPlaneDiagnostics& r, 
     const double malware_avg = r.parser_malicious_count
         ? static_cast<double>(r.parser_malicious_ns) / r.parser_malicious_count : 0.0;
     const double f2_avg = r.inspected ? static_cast<double>(r.f2_ticks_total) / r.inspected : 0.0;
+    const std::string title = centeredBoxTitle("DATA-PLANE DIAGNOSTICS");
     std::printf(
         "\n%s┌──────────────────────────────────────────────────────────────┐\n"
-        "│%s                DATA-PLANE DIAGNOSTICS                     %s│\n"
+        "│%s%s%s│\n"
         "└──────────────────────────────────────────────────────────────┘%s\n",
-        frame().c_str(), label().c_str(), frame().c_str(), reset().c_str());
+        frame().c_str(), label().c_str(), title.c_str(), frame().c_str(), reset().c_str());
     std::printf("  ├── Filter mode             : %s\n", mode.c_str());
     std::printf("  ├── Packets total           : %llu\n", static_cast<unsigned long long>(r.packets));
     std::printf("  ├── Inspected / skipped     : %llu / %llu\n",
