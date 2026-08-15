@@ -273,12 +273,8 @@ while [[ $# -gt 0 ]]; do
                 fi
                 shift 2
             else
-                # Dynamically extract default algorithm from agent.yaml
-                ALGO_NAME=$(grep -E '^algorithm:' "${ROOT_DIR}/tools/rl_bridge/config/agent.yaml" | awk '{print $2}' | tr -d '"' | tr -d "'" | tr -d '\r')
-                if [[ -z "$ALGO_NAME" ]]; then
-                    ALGO_NAME="dqn"
-                fi
-                ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_agent_${ALGO_NAME}.onnx"
+                # No explicit override: native C++ resolves model_path from agent.yaml.
+                ONNX_MODEL_PATH=""
                 shift
             fi
             ;;
@@ -360,7 +356,7 @@ if [ "$RUN_ONNX" = true ] && [ "$RUN_FILTER_ON" = false ]; then
 fi
 
 # If ONNX mode is enabled, verify that the ONNX model file exists before execution
-if [ "$RUN_ONNX" = true ]; then
+if [ "$RUN_ONNX" = true ] && [ -n "$ONNX_MODEL_PATH" ]; then
     if [ ! -f "$ONNX_MODEL_PATH" ]; then
         echo -e "${C_ERROR}[ERROR] ONNX model file not found at: ${ONNX_MODEL_PATH}${C_RESET}"
         echo -e "${C_WARN}[NOTICE] Please make sure to compile and export the DRL model to ONNX format first.${C_RESET}"
@@ -584,7 +580,8 @@ execute_matrix_sweep() {
                     sweep_args+=("--lambda" "$LAMBDA_PPS")
                 fi
                 if [ "$RUN_ONNX" = true ]; then
-                    sweep_args+=("--onnx" "$ONNX_MODEL_PATH")
+            sweep_args+=("--onnx")
+            if [ -n "$ONNX_MODEL_PATH" ]; then sweep_args+=("$ONNX_MODEL_PATH"); fi
                 fi
                 if [ "$RUN_STATIC_100" = true ]; then
                     sweep_args+=("--static-filter" "1.0")
@@ -684,7 +681,9 @@ case "$ACTION" in
                 receiver_args+=("--no-affinity")
             fi
             if [ "$RUN_ONNX" = true ]; then
-                receiver_args+=("--onnx" "$ONNX_MODEL_PATH")
+                if [ -n "$ONNX_MODEL_PATH" ]; then
+                    receiver_args+=("--onnx" "$ONNX_MODEL_PATH")
+                fi
             fi
             if [ "$ONNX_FIXED_POLICY_DIAGNOSTIC" = true ]; then
                 receiver_args+=("--onnx-fixed-policy")
@@ -748,7 +747,8 @@ case "$ACTION" in
         
         CUSTOM_ARGS=("$@")
         if [ "$RUN_ONNX" = true ]; then
-            CUSTOM_ARGS+=("--onnx" "$ONNX_MODEL_PATH")
+            CUSTOM_ARGS+=("--onnx")
+            if [ -n "$ONNX_MODEL_PATH" ]; then CUSTOM_ARGS+=("$ONNX_MODEL_PATH"); fi
         fi
         if [ "$DISABLE_SAFETY" = true ]; then
             CUSTOM_ARGS+=("--disable-safety")

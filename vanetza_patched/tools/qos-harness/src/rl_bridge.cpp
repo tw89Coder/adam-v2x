@@ -12,7 +12,7 @@
  * file to prevent cross-run trace contamination.
  *
  * CONTROL WINDOW & SOCKET HANDSHAKE:
- * - Aggregates packet statistics over a window of CTRL_WINDOW_SIZE (100) packets.
+ * - Aggregates packet statistics over a configurable control window.
  * - At window boundaries, it opens a blocking TCP socket loopback connection to port 8080.
  * - Sends a serialized telemetry observation string: "avg_max_sum_sq,avg_budget,anomaly_rate\n"
  * - Blocks execution waiting for the DRL policy decision, which is received as a serialized
@@ -66,7 +66,8 @@ RLBridge::RLBridge(const std::string& repo_root, int port)
       socket_enabled_(false),
       server_fd_(-1),
       onnx_enabled_(false),
-      onnx_model_path_("") {}
+      onnx_model_path_(""),
+      runtime_config_(RuntimeConfig::load(repo_root + "/tools/rl_bridge/config/agent.yaml")) {}
 
 RLBridge::~RLBridge() {
     stop_onnx_thread_ = true;
@@ -158,8 +159,19 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
     onnx_model_path_ = model_path;
 
     if (onnx_enabled_) {
-        // Fallback to default ONNX checkpoint path if no explicit path provided
-        if (onnx_model_path_.empty()) {
+        algorithm_ = runtime_config_.algorithm;
+        dqn_action_map_ = runtime_config_.dqn_action_map;
+
+        // Precedence: explicit CLI path > YAML deployment path > built-in candidates.
+        if (!onnx_model_path_.empty()) {
+            model_path_source_ = "CLI";
+        } else if (!runtime_config_.onnx_model_path.empty()) {
+            onnx_model_path_ = runtime_config_.onnx_model_path;
+            if (!onnx_model_path_.empty() && onnx_model_path_.front() != '/') {
+                onnx_model_path_ = repo_root_ + "/" + onnx_model_path_;
+            }
+            model_path_source_ = "YAML";
+        } else {
             std::vector<std::string> candidates = {repo_root_ + "/checkpoints/v2x_agent_dqn.onnx",
                                                    repo_root_ + "/checkpoints/v2x_agent_discrete_ppo.onnx",
                                                    repo_root_ + "/checkpoints/v2x_agent_ppo.onnx",
@@ -168,6 +180,7 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
                 struct stat st_cand;
                 if (stat(cand.c_str(), &st_cand) == 0) {
                     onnx_model_path_ = cand;
+                    model_path_source_ = "default";
                     break;
                 }
             }
@@ -181,67 +194,14 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
             std::exit(1);
         }
 
-        // 2. Dynamically parse agent.yaml to read algorithm and action_map
-        algorithm_ = "dqn";                                      // Default fallback
-        // This checkpoint was trained with 5%/10% sampling-rate steps. Keep
-        // the native raw-Q path and the legacy wrapped ONNX contract aligned.
-        dqn_action_map_ = {-0.10f, -0.05f, 0.0f, 0.05f, 0.10f};  // Default fallback
-
-        std::string config_path = repo_root_ + "/tools/rl_bridge/config/agent.yaml";
-        std::ifstream config_file(config_path);
-        if (config_file.is_open()) {
-            std::string line;
-            while (std::getline(config_file, line)) {
-                // Strip comments first
-                size_t comment_pos = line.find('#');
-                if (comment_pos != std::string::npos) {
-                    line = line.substr(0, comment_pos);
-                }
-
-                // Find algorithm: "..."
-                size_t algo_pos = line.find("algorithm:");
-                if (algo_pos != std::string::npos) {
-                    std::string val = line.substr(algo_pos + 10);
-                    val.erase(0, val.find_first_not_of(" \t\"'"));
-                    val.erase(val.find_last_not_of(" \t\"'") + 1);
-                    for (auto& c : val) c = std::tolower(c);
-                    algorithm_ = val;
-                }
-
-                // Find action_map: [...]
-                size_t map_pos = line.find("action_map:");
-                if (map_pos != std::string::npos) {
-                    size_t start_bracket = line.find('[', map_pos);
-                    size_t end_bracket = line.find(']', map_pos);
-                    if (start_bracket != std::string::npos && end_bracket != std::string::npos) {
-                        std::string array_str = line.substr(start_bracket + 1, end_bracket - start_bracket - 1);
-                        std::vector<float> parsed_map;
-                        std::stringstream ss(array_str);
-                        std::string token;
-                        try {
-                            while (std::getline(ss, token, ',')) {
-                                token.erase(0, token.find_first_not_of(" \t"));
-                                token.erase(token.find_last_not_of(" \t") + 1);
-                                if (!token.empty()) {
-                                    parsed_map.push_back(std::stof(token));
-                                }
-                            }
-                            if (!parsed_map.empty()) {
-                                dqn_action_map_ = parsed_map;
-                            }
-                        } catch (...) {
-                            // Keep default fallback on parse error
-                        }
-                    }
-                }
-            }
-            config_file.close();
-        }
 #ifdef USE_ONNX
         std::cout << "\n[INIT] Native C++ ONNX Runtime Engine ACTIVE (USE_ONNX=1):\n"
-                  << "  └── Algorithm detected: " << algorithm_ << "\n"
-                  << "  └── Action space map size: " << dqn_action_map_.size() << "\n"
-                  << "  └── Model path verified: " << onnx_model_path_ << "\n\n";
+                  << "  ├── Algorithm: " << algorithm_ << " (YAML/default)\n"
+                  << "  ├── Action space map size: " << dqn_action_map_.size() << " (YAML/default)\n"
+                  << "  ├── Control window: " << runtime_config_.control_window_packets << " packets (YAML/default)\n"
+                  << "  ├── ORT threads: intra=" << runtime_config_.onnx_intra_op_threads
+                  << ", inter=" << runtime_config_.onnx_inter_op_threads << " (YAML/default)\n"
+                  << "  └── Model: " << onnx_model_path_ << " (" << model_path_source_ << ")\n\n";
         if (fixed_policy_diagnostic_) {
             std::cout << "[DIAGNOSTIC] ORT session.Run() bypassed; fixed policy "
                          "recovery=0.05, sampling=0.70 is active.\n\n";
@@ -288,7 +248,7 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
         // Batching Optimization: Instead of performing disk writes on every single packet (which wastes CPU cycles on
         // IO), we store the data in an in-memory buffer and batch-flush it.
         packet_buffer_.push_back({pkt_size, max_sum_sq, budget, state, is_anomalous});
-        if (packet_buffer_.size() >= static_cast<size_t>(CTRL_WINDOW_SIZE)) {
+        if (packet_buffer_.size() >= static_cast<size_t>(runtime_config_.control_window_packets)) {
             flush_telemetry_buffer();
         }
     }
@@ -324,7 +284,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
     }
 
     uint32_t total_packets = window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
-    if (total_packets < static_cast<uint32_t>(CTRL_WINDOW_SIZE)) return;
+    if (total_packets < runtime_config_.control_window_packets) return;
 
     // Package binary structure payload
     WindowTelemetryPayload payload;
@@ -512,14 +472,20 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         // are loaded and compiled exactly once on the first call (lazy initialization).
         // This is safe since the simulation engine runs on a single main thread.
         static Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "V2X_ONNX_Inference");
-        static Ort::SessionOptions session_options = []() {
+        static Ort::SessionOptions session_options = [this]() {
             Ort::SessionOptions opts;
-            opts.SetIntraOpNumThreads(1);
-            opts.SetInterOpNumThreads(1);
-            opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-            opts.EnableCpuMemArena();
-            opts.EnableMemPattern();
-            opts.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+            opts.SetIntraOpNumThreads(runtime_config_.onnx_intra_op_threads);
+            opts.SetInterOpNumThreads(runtime_config_.onnx_inter_op_threads);
+            if (runtime_config_.onnx_graph_optimization == "disable") opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_DISABLE_ALL);
+            else if (runtime_config_.onnx_graph_optimization == "basic") opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+            else if (runtime_config_.onnx_graph_optimization == "extended") opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+            else opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+            if (runtime_config_.onnx_cpu_memory_arena) opts.EnableCpuMemArena();
+            else opts.DisableCpuMemArena();
+            if (runtime_config_.onnx_memory_pattern) opts.EnableMemPattern();
+            else opts.DisableMemPattern();
+            opts.SetExecutionMode(runtime_config_.onnx_parallel_execution ? ExecutionMode::ORT_PARALLEL
+                                                                         : ExecutionMode::ORT_SEQUENTIAL);
             return opts;
         }();
 

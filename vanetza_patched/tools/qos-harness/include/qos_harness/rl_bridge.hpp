@@ -11,6 +11,7 @@
 #include <atomic>
 
 #include "qos_harness/pre_filter.hpp"
+#include "qos_harness/runtime_config.hpp"
 
 namespace qos_harness {
 
@@ -79,9 +80,6 @@ struct PacketTelemetry {
  */
 class RLBridge {
 public:
-    // Must match the 100-packet control horizon used to train the policy.
-    enum : uint32_t { CTRL_WINDOW_SIZE = 100 };
-
     RLBridge(const std::string& repo_root, int port = 8080);
     ~RLBridge();
 
@@ -116,6 +114,8 @@ public:
 
     /** Diagnostic only: preserve the native control mailbox but bypass ORT Run(). */
     void set_fixed_policy_diagnostic(bool enabled) { fixed_policy_diagnostic_ = enabled; }
+
+    uint32_t get_control_window_size() const { return runtime_config_.control_window_packets; }
 
     /**
      * @brief Retrieves the average ONNX inference latency in milliseconds.
@@ -191,6 +191,8 @@ private:
     int server_fd_;
     bool onnx_enabled_;
     std::string onnx_model_path_;
+    RuntimeConfig runtime_config_;
+    std::string model_path_source_ = "default";
     bool safety_guards_enabled_ = true;
     bool fixed_policy_diagnostic_ = false;
     int control_core_ = -1;

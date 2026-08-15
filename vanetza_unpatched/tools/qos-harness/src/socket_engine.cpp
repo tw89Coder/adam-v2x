@@ -315,11 +315,12 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                         // Reuse the session's classification counters and aggregate only SQ
                         // here; full per-packet telemetry remains available to host training.
                         window_sq_sum += static_cast<uint64_t>(filter_fsm.get_last_sq());
-                        if (++window_sync_counter >= static_cast<int>(RLBridge::CTRL_WINDOW_SIZE)) {
+                        const uint32_t control_window = rl_bridge.get_control_window_size();
+                        if (++window_sync_counter >= static_cast<int>(control_window)) {
                             const int anomaly_count = true_positives + false_positives;
                             window_sync_counter = 0;
                             rl_bridge.publish_native_onnx_window(
-                                RLBridge::CTRL_WINDOW_SIZE,
+                                control_window,
                                 static_cast<uint32_t>(anomaly_count - window_start_anomalies),
                                 static_cast<uint32_t>(malware_count - window_start_malware),
                                 window_sq_sum, filter_fsm);

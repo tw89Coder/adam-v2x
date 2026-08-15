@@ -3,6 +3,19 @@
 # ==============================================================================
 algorithm: "dqn"               # Default algorithm used by training/export/deployment
 
+# Native C++ deployment settings. CLI values, when explicitly supplied, take
+# precedence over this section; these values take precedence over C++ defaults.
+deployment:
+  onnx:
+    model_path: "checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx"
+    control_window_packets: 100
+    intra_op_threads: 1
+    inter_op_threads: 1
+    execution_mode: "sequential"
+    graph_optimization: "all"
+    cpu_memory_arena: true
+    memory_pattern: true
+
 # ------------------------------------------------------------------------------
 # State Representation Settings
 # ------------------------------------------------------------------------------

@@ -56,8 +56,11 @@ void printHelp(const char* progName) {
 int main(int argc, char* argv[]) {
     // STANDALONE DIAGNOSTIC ONNX TESTING MODE
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--test-onnx" && i + 1 < argc) {
-            std::string test_model_path = argv[++i];
+        if (std::string(argv[i]) == "--test-onnx") {
+            std::string test_model_path;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                test_model_path = argv[++i];
+            }
             std::cout << "[TEST] Initiating standalone C++ ONNX equivalence check...\n";
             qos_harness::RLBridge bridge(REPO_ROOT_STR);
             bridge.initialize_onnx(true, test_model_path);
@@ -180,9 +183,11 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--rl") {
             rl_train_mode = true;
             enable_filter = true; // Training DRL implies enabling the adaptive FSM pre-filter
-        } else if (arg == "--onnx" && i + 1 < argc) {
+        } else if (arg == "--onnx") {
             enable_onnx = true;
-            onnx_model_path = argv[++i];
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                onnx_model_path = argv[++i];
+            }
             enable_filter = true;
         } else if (arg == "--onnx-fixed-policy") {
             onnx_fixed_policy_diagnostic = true;
@@ -285,9 +290,6 @@ int main(int argc, char* argv[]) {
     if (is_udp_receiver) {
         std::string prog_path = argv[0];
         std::string build_type = (prog_path.find("vanetza_patched") != std::string::npos) ? "patched" : "unpatched";
-        if (onnx_model_path.empty()) {
-            onnx_model_path = REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx";
-        }
         return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core,
                                                           onnx_model_path, onnx_fixed_policy_diagnostic);
     }
