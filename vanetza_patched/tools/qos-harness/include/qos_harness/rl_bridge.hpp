@@ -114,6 +114,9 @@ public:
      */
     void set_safety_guards(bool enabled);
 
+    /** Diagnostic only: preserve the native control mailbox but bypass ORT Run(). */
+    void set_fixed_policy_diagnostic(bool enabled) { fixed_policy_diagnostic_ = enabled; }
+
     /**
      * @brief Retrieves the average ONNX inference latency in milliseconds.
      */
@@ -189,6 +192,7 @@ private:
     bool onnx_enabled_;
     std::string onnx_model_path_;
     bool safety_guards_enabled_ = true;
+    bool fixed_policy_diagnostic_ = false;
     int control_core_ = -1;
     
     // Instance-level variables for frame stacking to prevent cross-node data leakage

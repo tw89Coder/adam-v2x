@@ -59,7 +59,8 @@ bool pin_current_thread(int core_id, const char* role) {
 } // namespace
 
 int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int data_core, int control_core,
-                                  const std::string& default_onnx_path) {
+                                  const std::string& default_onnx_path,
+                                  bool onnx_fixed_policy_diagnostic) {
     if (!pin_current_thread(data_core, "Data-plane receiver")) return 1;
     int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -192,6 +193,7 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                     filter_fsm.update_policy_params(0.05, 50.0, 600, 0.70);
                     std::string model_to_use = default_onnx_path.empty() ? (LOCAL_REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx") : default_onnx_path;
                     rl_bridge.set_control_core(control_core);
+                    rl_bridge.set_fixed_policy_diagnostic(onnx_fixed_policy_diagnostic);
                     rl_bridge.initialize_onnx(true, model_to_use);
                     rl_bridge.initialize(false, rate, mode, false);
                 } else if (filter_mode == 2) {

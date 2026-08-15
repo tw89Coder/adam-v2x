@@ -242,6 +242,10 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
                   << "  └── Algorithm detected: " << algorithm_ << "\n"
                   << "  └── Action space map size: " << dqn_action_map_.size() << "\n"
                   << "  └── Model path verified: " << onnx_model_path_ << "\n\n";
+        if (fixed_policy_diagnostic_) {
+            std::cout << "[DIAGNOSTIC] ORT session.Run() bypassed; fixed policy "
+                         "recovery=0.05, sampling=0.70 is active.\n\n";
+        }
 #else
         std::cout << "\n[INIT] Fallback Non-ONNX Mode (USE_ONNX=0 - Missing ARM C++ Library):\n"
                   << "  └── Model path requested: " << onnx_model_path_ << "\n\n";
@@ -837,7 +841,8 @@ void RLBridge::onnx_worker_loop() {
 
         // Run ONNX Runtime inference in background thread (pinned to Core B)
         FilterPolicy policy{0.05, 50.0, 600, MIN_DRL_S0_SAMPLING_RATE};
-        if (run_onnx_inference(local_telemetry, policy)) {
+        const bool policy_ready = fixed_policy_diagnostic_ || run_onnx_inference(local_telemetry, policy);
+        if (policy_ready) {
             std::lock_guard<std::mutex> lock(onnx_mutex_);
             shared_policy_ = policy;
             new_policy_available_.store(true, std::memory_order_release);

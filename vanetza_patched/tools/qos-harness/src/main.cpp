@@ -41,6 +41,7 @@ void printHelp(const char* progName) {
               << "  -f               Enable Proposed Fast Pre-Filter\n"
               << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
+              << "  --onnx-fixed-policy  Diagnostic: bypass ORT inference and return the fixed safe policy\n"
               << "  --data-core      Pin the packet-processing thread to this CPU (Default: 2)\n"
               << "  --control-core   Pin the ONNX worker to this CPU (Default: next usable CPU)\n"
               << "  --no-affinity    Disable explicit thread affinity\n"
@@ -109,6 +110,7 @@ int main(int argc, char* argv[]) {
     int data_core = 2;
     int control_core = -1;
     bool affinity_enabled = true;
+    bool onnx_fixed_policy_diagnostic = false;
 
     // Hardcoded static fallback parameters for local overrides
     double custom_recovery = 0.05;
@@ -182,6 +184,8 @@ int main(int argc, char* argv[]) {
             enable_onnx = true;
             onnx_model_path = argv[++i];
             enable_filter = true;
+        } else if (arg == "--onnx-fixed-policy") {
+            onnx_fixed_policy_diagnostic = true;
         } else if (arg == "--static-filter" || arg == "--full-100" || arg == "--static-100") {
             static_filter_mode = true;
             enable_filter = true;
@@ -284,7 +288,8 @@ int main(int argc, char* argv[]) {
         if (onnx_model_path.empty()) {
             onnx_model_path = REPO_ROOT_STR + "/checkpoints/v2x_agent_dqn.onnx";
         }
-        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core, onnx_model_path);
+        return qos_harness::UDPSocketEngine::run_receiver(udp_port, build_type, data_core, control_core,
+                                                          onnx_model_path, onnx_fixed_policy_diagnostic);
     }
     if (is_udp_sender) {
         int f_mode = 0; // 0=OFF

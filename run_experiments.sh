@@ -174,6 +174,7 @@ RUN_ONNX=false
 ONNX_MODEL_PATH=""
 DISABLE_SAFETY=false
 RUN_TRACE=false
+ONNX_FIXED_POLICY_DIAGNOSTIC=false
 LAMBDA_PPS=""
 
 
@@ -280,6 +281,10 @@ while [[ $# -gt 0 ]]; do
                 ONNX_MODEL_PATH="${ROOT_DIR}/checkpoints/v2x_agent_${ALGO_NAME}.onnx"
                 shift
             fi
+            ;;
+        --onnx-fixed-policy)
+            ONNX_FIXED_POLICY_DIAGNOSTIC=true
+            shift
             ;;
         -s|--disable-safety)
             DISABLE_SAFETY=true
@@ -680,6 +685,9 @@ case "$ACTION" in
             fi
             if [ "$RUN_ONNX" = true ]; then
                 receiver_args+=("--onnx" "$ONNX_MODEL_PATH")
+            fi
+            if [ "$ONNX_FIXED_POLICY_DIAGNOSTIC" = true ]; then
+                receiver_args+=("--onnx-fixed-policy")
             fi
             execute_cmd "$bin" "${receiver_args[@]}"
         }
