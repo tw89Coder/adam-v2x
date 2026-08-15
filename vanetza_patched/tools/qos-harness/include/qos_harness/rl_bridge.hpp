@@ -71,6 +71,9 @@ struct PacketTelemetry {
  */
 class RLBridge {
 public:
+    // Must match the 100-packet control horizon used to train the policy.
+    enum : uint32_t { CTRL_WINDOW_SIZE = 100 };
+
     RLBridge(const std::string& repo_root, int port = 8080);
     ~RLBridge();
 
@@ -191,7 +194,6 @@ private:
     bool run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
 
     // Window-level statistical accumulators
-    const int CTRL_WINDOW_SIZE = 500;
     uint32_t window_tp_count_ = 0;
     uint32_t window_tn_count_ = 0;
     uint32_t window_fp_count_ = 0;
