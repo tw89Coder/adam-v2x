@@ -55,6 +55,13 @@ namespace qos_harness {
 namespace {
 constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.70;
 constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.80;
+constexpr std::array<double, 5> DQN_RECOVERY_PROFILES{{0.10, 0.075, 0.05, 0.025, 0.01}};
+constexpr std::array<double, 5> DQN_SAMPLING_PROFILES{{0.70, 0.70, 0.75, 0.80, 0.80}};
+
+FilterPolicy dqn_policy_from_action(uint8_t action) {
+    const std::size_t index = std::min<std::size_t>(action, DQN_RECOVERY_PROFILES.size() - 1);
+    return FilterPolicy{DQN_RECOVERY_PROFILES[index], 50.0, 600, DQN_SAMPLING_PROFILES[index]};
+}
 
 double clamp_drl_s0_sampling_rate(double rate) {
     return std::max(MIN_DRL_S0_SAMPLING_RATE,
@@ -232,6 +239,7 @@ void RLBridge::initialize_onnx(bool enable_onnx, const std::string& model_path) 
         stop_onnx_thread_ = false;
         new_telemetry_available_ = false;
         new_policy_available_ = false;
+        pending_dqn_action_.store(NO_DISCRETE_ACTION, std::memory_order_relaxed);
         onnx_thread_ = std::thread(&RLBridge::onnx_worker_loop, this);
     }
 }
@@ -275,6 +283,21 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
                                    inspected, latency_ticks);
 }
 
+bool RLBridge::consume_pending_policy(FilterPolicy& policy, uint64_t& sequence) {
+    const uint8_t action = pending_dqn_action_.exchange(NO_DISCRETE_ACTION, std::memory_order_acq_rel);
+    if (action < DQN_RECOVERY_PROFILES.size()) {
+        policy = dqn_policy_from_action(action);
+        sequence = pending_dqn_action_sequence_.load(std::memory_order_acquire);
+        return true;
+    }
+    if (!new_policy_available_.load(std::memory_order_acquire)) return false;
+    std::lock_guard<std::mutex> lock(onnx_mutex_);
+    policy = shared_policy_;
+    sequence = shared_policy_sequence_;
+    new_policy_available_.store(false, std::memory_order_release);
+    return true;
+}
+
 /**
  * @brief Synchronizes policy parameters with the python DRL brain at window boundary splits.
  *
@@ -283,12 +306,9 @@ void RLBridge::collect_packet_telemetry(size_t pkt_size, int max_sum_sq, double 
  */
 void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& filter) {
     // 1. Check if background thread computed a new policy
-    if (new_policy_available_.load(std::memory_order_acquire)) {
-        FilterPolicy policy;
-        {
-            std::lock_guard<std::mutex> lock(onnx_mutex_);
-            policy = shared_policy_;
-        }
+    uint64_t policy_sequence = 0;
+    FilterPolicy policy;
+    if (consume_pending_policy(policy, policy_sequence)) {
         if (safety_guards_enabled_) {
             if (policy.sq_threshold > 650) policy.sq_threshold = 650;
             if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
@@ -298,7 +318,6 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
         policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier, policy.sq_threshold,
                                     policy.base_sampling_rate);
-        new_policy_available_.store(false, std::memory_order_release);
     }
 
     uint32_t total_packets = window_tp_count_ + window_tn_count_ + window_fp_count_ + window_fn_count_;
@@ -394,6 +413,22 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
     const auto publish_start = diagnostics && runtime_config_.diagnostics_timing
         ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const auto mutex_start = publish_start;
+    FilterPolicy pending_policy;
+    uint64_t pending_policy_sequence = 0;
+    const bool policy_ready = consume_pending_policy(pending_policy, pending_policy_sequence);
+    if (policy_ready) {
+        if (safety_guards_enabled_) {
+            if (pending_policy.sq_threshold > 650) pending_policy.sq_threshold = 650;
+            if (pending_policy.penalty_multiplier < 20.0) pending_policy.penalty_multiplier = 20.0;
+            if (pending_policy.recovery_rate > 0.10) pending_policy.recovery_rate = 0.10;
+            if (pending_policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) {
+                pending_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
+            }
+        }
+        pending_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(pending_policy.base_sampling_rate);
+        filter.update_policy_params(pending_policy.recovery_rate, pending_policy.penalty_multiplier,
+                                    pending_policy.sq_threshold, pending_policy.base_sampling_rate);
+    }
     {
         std::lock_guard<std::mutex> lock(onnx_mutex_);
         if (diagnostics && runtime_config_.diagnostics_timing) {
@@ -408,28 +443,15 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
             new_telemetry_available_.load(std::memory_order_relaxed)) {
             ++async_diagnostics_.telemetry_overwritten;
         }
-        if (new_policy_available_.load(std::memory_order_relaxed)) {
-            FilterPolicy policy = shared_policy_;
-            if (safety_guards_enabled_) {
-                if (policy.sq_threshold > 650) policy.sq_threshold = 650;
-                if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
-                if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-                if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) {
-                    policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-                }
-            }
-            policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
-            filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
-                                        policy.sq_threshold, policy.base_sampling_rate);
+        if (policy_ready) {
             if (diagnostics && runtime_config_.diagnostics_mailbox_counters) {
                 ++async_diagnostics_.policies_applied;
-                const uint64_t age = next_sequence > shared_policy_sequence_
-                    ? next_sequence - shared_policy_sequence_ : 0;
+                const uint64_t age = next_sequence > pending_policy_sequence
+                    ? next_sequence - pending_policy_sequence : 0;
                 async_diagnostics_.policy_age_sum += age;
                 async_diagnostics_.policy_age_max = std::max(async_diagnostics_.policy_age_max, age);
                 if (age > 1) ++async_diagnostics_.policy_age_over_one;
             }
-            new_policy_available_.store(false, std::memory_order_relaxed);
         }
 
         shared_telemetry_ = WindowTelemetry{
@@ -516,7 +538,8 @@ bool RLBridge::handshake_with_agent(const WindowTelemetryPayload& payload, Filte
 }
 
 #ifdef USE_ONNX
-bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy,
+                                  uint8_t* discrete_action) {
     try {
         // ONNX Environment and Session initialization.
         // Using "static" ensures that the ONNX Environment, session options, and network weights
@@ -659,13 +682,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                         best_action_idx = i;
                     }
                 }
-
-                constexpr float RECOVERY_PROFILES[5] = {0.10f, 0.075f, 0.05f, 0.025f, 0.01f};
-                constexpr float SAMPLING_PROFILES[5] = {0.70f, 0.70f, 0.75f, 0.80f, 0.80f};
-                out_policy.recovery_rate = RECOVERY_PROFILES[best_action_idx];
-                out_policy.penalty_multiplier = 50.0;
-                out_policy.sq_threshold = 600;
-                out_policy.base_sampling_rate = SAMPLING_PROFILES[best_action_idx];
+                if (discrete_action) *discrete_action = static_cast<uint8_t>(best_action_idx);
+                out_policy = dqn_policy_from_action(static_cast<uint8_t>(best_action_idx));
             } else if (action_dim == 4) {
                 // ==========================================
                 // [Wrapped DQN Model Mapping] DQNDeploymentWrapper
@@ -753,7 +771,9 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
     }
 }
 #else
-bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy) {
+bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy,
+                                  uint8_t* discrete_action) {
+    if (discrete_action) *discrete_action = NO_DISCRETE_ACTION;
     WindowTelemetryPayload payload;
     payload.tp_count = window_tp_count_;
     payload.tn_count = window_tn_count_;
@@ -863,12 +883,14 @@ void RLBridge::onnx_worker_loop() {
 
         // Run ONNX Runtime inference in background thread (pinned to Core B)
         FilterPolicy policy{0.05, 50.0, 600, MIN_DRL_S0_SAMPLING_RATE};
+        uint8_t discrete_action = NO_DISCRETE_ACTION;
         const bool timing = runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_timing;
         const auto wall_start = timing ? std::chrono::steady_clock::now()
                                        : std::chrono::steady_clock::time_point{};
         struct timespec cpu_start{}, cpu_end{};
         if (timing) clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpu_start);
-        const bool policy_ready = fixed_policy_diagnostic_ || run_onnx_inference(local_telemetry, policy);
+        const bool policy_ready = fixed_policy_diagnostic_ ||
+                                  run_onnx_inference(local_telemetry, policy, &discrete_action);
         uint64_t wall_us = 0;
         if (timing) {
             clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpu_end);
@@ -882,6 +904,14 @@ void RLBridge::onnx_worker_loop() {
             inference_wall_samples_us_.push_back(wall_us);
         }
         if (policy_ready) {
+            if (discrete_action != NO_DISCRETE_ACTION) {
+                pending_dqn_action_sequence_.store(local_sequence, std::memory_order_relaxed);
+                pending_dqn_action_.store(discrete_action, std::memory_order_release);
+                if (runtime_config_.diagnostics_enabled) {
+                    ++async_diagnostics_.inferences_completed;
+                }
+                continue;
+            }
             std::lock_guard<std::mutex> lock(onnx_mutex_);
             if (runtime_config_.diagnostics_enabled && runtime_config_.diagnostics_mailbox_counters &&
                 new_policy_available_.load(std::memory_order_relaxed)) {
