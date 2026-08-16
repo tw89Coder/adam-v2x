@@ -220,9 +220,7 @@ private:
      * @brief Executes in-process ONNX model inference.
      * @return true if inference succeeded, false otherwise.
      */
-    bool run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy,
-                            uint8_t* discrete_action = nullptr);
-    bool consume_pending_policy(FilterPolicy& policy, uint64_t& sequence);
+    bool run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy& out_policy);
 
     // Window-level statistical accumulators
     uint32_t window_tp_count_ = 0;
@@ -256,9 +254,6 @@ private:
     std::atomic<bool> stop_onnx_thread_{false};
     std::atomic<bool> new_telemetry_available_{false};
     std::atomic<bool> new_policy_available_{false};
-    static constexpr uint8_t NO_DISCRETE_ACTION = 0xff;
-    std::atomic<uint8_t> pending_dqn_action_{NO_DISCRETE_ACTION};
-    std::atomic<uint64_t> pending_dqn_action_sequence_{0};
 
     // Shared communication buffers
     WindowTelemetry shared_telemetry_;
