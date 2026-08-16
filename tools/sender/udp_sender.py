@@ -58,16 +58,19 @@ def build_profiles(args, modes, rates):
     }]
 
 
-def sessions_for_run(profiles, run_id, counterbalance):
+def sessions_for_run(profiles, run_id, counterbalance=False, shuffle_sessions=False):
     ordered = profiles
     if counterbalance and run_id > 0 and run_id % 2 == 0:
         ordered = list(reversed(profiles))
-    return [
+    sessions = [
         (profile["name"], profile["filter_mode"], mode, rate)
         for profile in ordered
         for mode in profile["modes"]
         for rate in profile["rates"]
     ]
+    if shuffle_sessions:
+        random.Random(run_id).shuffle(sessions)
+    return sessions
 
 # Enable high-resolution Windows OS timer (1ms tick granularity)
 if sys.platform == "win32":
@@ -149,6 +152,11 @@ def main():
         help="Run a predefined session suite; 'controls' runs Mode-2 FSM/static and Mode-0 baseline",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the resolved session order without using the network")
+    parser.add_argument(
+        "--shuffle-sessions",
+        action="store_true",
+        help="Reproducibly shuffle complete (mode, rate) sessions using the run ID",
+    )
 
     args = parser.parse_args()
 
@@ -173,7 +181,12 @@ def main():
     if args.dry_run:
         print(f"[DRY RUN] {len(run_list)} run(s), {sessions_per_run} session(s)/run, {len(run_list) * sessions_per_run} total")
         for run_id in run_list:
-            sessions = sessions_for_run(profiles, run_id, args.suite == "controls")
+            sessions = sessions_for_run(
+                profiles,
+                run_id,
+                counterbalance=args.suite == "controls" and not args.shuffle_sessions,
+                shuffle_sessions=args.shuffle_sessions,
+            )
             order = " -> ".join(f"{name}(m{mode},{rate:.1f}%)" for name, _, mode, rate in sessions)
             print(f"  Run {run_id}: {order}")
         return
@@ -235,7 +248,12 @@ def main():
                 print(f"\033[1;35m[MULTI-RUN TRIAL IN PROGRESS]\033[0m Iteration: \033[1;33mRun {run_id} / {end_run}\033[0m")
                 print(f"======================================================================")
 
-            run_sessions = sessions_for_run(profiles, run_id, args.suite == "controls")
+            run_sessions = sessions_for_run(
+                profiles,
+                run_id,
+                counterbalance=args.suite == "controls" and not args.shuffle_sessions,
+                shuffle_sessions=args.shuffle_sessions,
+            )
             for profile_name, filter_mode, mode, session_rate in run_sessions:
                 for rate in [session_rate]:
                     print(f"\n\033[34m[UDP SESSION INIT]\033[0m Profile: \033[35m{profile_name}\033[0m | Mode: \033[36m{mode}\033[0m | Rate: \033[33m{rate:.1f}%\033[0m | Filter Mode: {filter_mode} | Run ID: {run_id}")
