@@ -236,6 +236,11 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                 int window_start_anomalies = 0;
                 int window_start_malware = 0;
                 uint64_t window_sq_sum = 0;
+                // Session mode is immutable. Cache the ONNX fast-path controls once
+                // instead of re-reading RuntimeConfig for every received packet.
+                const bool native_onnx_mode = (filter_mode == 3);
+                const uint32_t native_onnx_control_window =
+                    native_onnx_mode ? rl_bridge.get_control_window_size() : 0U;
 
                 struct timespec session_cpu_start, session_cpu_end;
                 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &session_cpu_start);
@@ -355,17 +360,16 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
                     }
 
                     // Sync RL telemetry and ONNX window update for DRL control plane
-                    if (filter_mode == 3) {
+                    if (native_onnx_mode) {
                         // Native deployment needs only the three ONNX input features.
                         // Reuse the session's classification counters and aggregate only SQ
                         // here; full per-packet telemetry remains available to host training.
                         window_sq_sum += static_cast<uint64_t>(filter_fsm.get_last_sq());
-                        const uint32_t control_window = rl_bridge.get_control_window_size();
-                        if (++window_sync_counter >= static_cast<int>(control_window)) {
+                        if (++window_sync_counter == static_cast<int>(native_onnx_control_window)) {
                             const int anomaly_count = true_positives + false_positives;
                             window_sync_counter = 0;
                             rl_bridge.publish_native_onnx_window(
-                                control_window,
+                                native_onnx_control_window,
                                 static_cast<uint32_t>(anomaly_count - window_start_anomalies),
                                 static_cast<uint32_t>(malware_count - window_start_malware),
                                 window_sq_sum, filter_fsm);
