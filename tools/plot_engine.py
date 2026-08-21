@@ -5,6 +5,37 @@ import sys
 import argparse
 from engine.logger import LogStyle
 
+def parse_run_selection(value):
+    """Parse run selections such as '1-20', '1,3,5-8', or 'all'."""
+    normalized = value.strip().lower()
+    if normalized == 'all':
+        return None
+
+    run_ids = set()
+    try:
+        for item in normalized.replace(' ', ',').split(','):
+            if not item:
+                continue
+            if '-' in item:
+                start_text, end_text = item.split('-', 1)
+                start, end = int(start_text), int(end_text)
+                if start < 1 or end < start:
+                    raise ValueError
+                run_ids.update(range(start, end + 1))
+            else:
+                run_id = int(item)
+                if run_id < 1:
+                    raise ValueError
+                run_ids.add(run_id)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "use 'all', a range such as '1-20', or a list such as '1,3,5-8'"
+        ) from exc
+
+    if not run_ids:
+        raise argparse.ArgumentTypeError("at least one run must be selected")
+    return tuple(sorted(run_ids))
+
 def main():
     # Dynamically resolve paths relative to the physical location of this script file
     # script_dir resolves to: ~/term-project/CSE625_QoS/tools
@@ -37,6 +68,11 @@ def main():
     parser.add_argument('--onnx', action='store_true', help="Use ONNX actual deployment results instead of heuristic FSM filtered results for QoS plots.")
     parser.add_argument('--no-patched', action='store_true', help="Exclude Patched Native and Patched Filtered curves from QoS plots.")
     parser.add_argument('-M', '--multi-run', action='store_true', help="Process N-run trial datasets from outputs/multi_runs/ and export to outputs/plots_multi_runs/")
+    parser.add_argument(
+        '--runs', type=parse_run_selection, default=parse_run_selection('1-20'),
+        metavar='SELECTION',
+        help="Multi-run trial selection: '1-20' (default), '1,3,5-8', or 'all'."
+    )
 
     args = parser.parse_args()
 
@@ -56,8 +92,15 @@ def main():
         sys.exit(1)
 
     if args.multi_run:
-        LogStyle.log_stage("[PLOT ENGINE] Multi-Run Pipeline Active. Processing 20-Trial Datasets...")
-        qos_multi_engine = QoSMultiPlotter(root_output_dir=base_dir, use_onnx=True)
+        selection_text = 'all discovered runs' if args.runs is None else f'{len(args.runs)} selected runs'
+        LogStyle.log_stage(
+            f"[PLOT ENGINE] Multi-Run Pipeline Active. Processing {selection_text}..."
+        )
+        qos_multi_engine = QoSMultiPlotter(
+            root_output_dir=base_dir,
+            use_onnx=True,
+            run_ids=args.runs,
+        )
         df_summary = qos_multi_engine.process_all_multi_runs()
         if df_summary is not None:
             LogStyle.log_success("Multi-run trial evaluation, statistical aggregation, and dual-format tables completed cleanly.")

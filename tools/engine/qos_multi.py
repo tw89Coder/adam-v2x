@@ -10,6 +10,7 @@ strictly inside outputs/plots_multi_runs/ to protect original single-run outputs
 import os
 import sys
 import glob
+import re
 import gc
 import time
 import concurrent.futures
@@ -19,6 +20,10 @@ import matplotlib.pyplot as plt
 from engine.qos import QoSPlotter
 from engine.logger import LogStyle
 
+DEFAULT_TRIAL_COUNT = 20
+DEFAULT_EVALUATION_MODES = (0, 1, 2)
+DEFAULT_EVALUATION_RATES = (0.1, 0.5, 1.0, 5.0, 10.0)
+
 class QoSMultiPlotter(QoSPlotter):
     """
     Multi-Run Evaluation Engine: Inherits publication-grade graphics layout and export_figure
@@ -26,8 +31,15 @@ class QoSMultiPlotter(QoSPlotter):
     and exports vector PDF, SVG, and raster PNG figures into outputs/plots_multi_runs/.
     """
     SPINNER = ['-', '\\', '|', '/']
+    EVALUATION_MODES = DEFAULT_EVALUATION_MODES
+    EVALUATION_RATES = DEFAULT_EVALUATION_RATES
 
-    def __init__(self, root_output_dir="outputs", use_onnx=True):
+    def __init__(
+        self,
+        root_output_dir="outputs",
+        use_onnx=True,
+        run_ids=tuple(range(1, DEFAULT_TRIAL_COUNT + 1)),
+    ):
         super().__init__(root_output_dir=root_output_dir, use_onnx=use_onnx, no_patched=True)
         # Protect legacy single-run folders by pointing outputs to multi_runs subdirectories
         self.multi_dir = os.path.join(root_output_dir, "multi_runs")
@@ -36,6 +48,19 @@ class QoSMultiPlotter(QoSPlotter):
         self._ensure_directory_exists(self.plots_dir)
         self._ensure_directory_exists(self.stats_dir)
         self.median_run_map = {}
+        self.run_ids = tuple(run_ids) if run_ids is not None else None
+        self.selected_run_dirs = (
+            {f"run_{run_id:02d}" for run_id in self.run_ids}
+            if self.run_ids is not None else None
+        )
+
+    @staticmethod
+    def _run_dir_from_path(filepath):
+        return os.path.basename(os.path.dirname(os.path.dirname(filepath)))
+
+    def _is_selected_run(self, filepath):
+        run_dir = self._run_dir_from_path(filepath)
+        return self.selected_run_dirs is None or run_dir in self.selected_run_dirs
 
     def _resolve_dataframe(self, environment, filename):
         """
@@ -64,9 +89,24 @@ class QoSMultiPlotter(QoSPlotter):
             LogStyle.log_error(f"Multi-run data directory missing: '{self.multi_dir}'")
             return None
 
-        LogStyle.log_stage("[MULTI-RUN ENGINE] Discovering 20-trial telemetry datasets...")
+        selection_label = (
+            "all available"
+            if self.selected_run_dirs is None
+            else str(len(self.selected_run_dirs))
+        )
+        LogStyle.log_stage(
+            f"[MULTI-RUN ENGINE] Discovering {selection_label} selected trial datasets..."
+        )
         pattern = os.path.join(self.multi_dir, "mode*", "run_*", "*", "*.csv")
-        csv_files = glob.glob(pattern)
+        csv_files = [
+            filepath for filepath in glob.glob(pattern)
+            if self._is_selected_run(filepath)
+        ]
+        if self.selected_run_dirs is None:
+            self.selected_run_dirs = {
+                self._run_dir_from_path(filepath) for filepath in csv_files
+            }
+        expected_trial_count = len(self.selected_run_dirs)
         total_files = len(csv_files)
         LogStyle.log_info(f"Discovered {total_files:,} telemetry files in '{self.multi_dir}'.")
 
@@ -85,6 +125,13 @@ class QoSMultiPlotter(QoSPlotter):
             run_str = parts[1]
             build_type = parts[2]
             filename = parts[3]
+
+            # Reject misplaced files instead of trusting only the parent folder.
+            # Example: a *_mode0_*.csv accidentally copied under mode1/run_02
+            # must not become a 21st Mode-1 trial.
+            filename_mode = re.search(r'_mode(\d+)(?:_|\.)', filename)
+            if filename_mode and mode_str != f"mode{filename_mode.group(1)}":
+                return None
 
             filter_type = "unpatched_native"
             if "onnx" in filename:
@@ -140,8 +187,36 @@ class QoSMultiPlotter(QoSPlotter):
             LogStyle.log_error("No telemetry records processed.")
             return None
 
-        print("\n[*] STAGE 2/4: Computing 20-Trial Aggregated Statistics & Selecting Median Runs...")
+        print(
+            f"\n[*] STAGE 2/4: Computing {expected_trial_count}-Trial Aggregated "
+            "Statistics & Selecting Median Runs..."
+        )
         df_all = pd.DataFrame(records)
+
+        # Establish the CPU reference from the baseline measured in the same run.
+        # Pairing by run and build type removes batch-wide CPU drift and avoids a
+        # machine-specific hard-coded baseline.
+        baseline_rows = df_all[
+            (df_all['mode'] == 'mode0')
+            & (df_all['filter_type'] == 'baseline')
+            & np.isclose(df_all['rate'].astype(float), 0.0)
+            & (df_all['cpu_s'] > 0.0)
+        ]
+        baseline_cpu_by_run = {
+            (row.run_id, row.build_type): float(row.cpu_s)
+            for row in baseline_rows.itertuples()
+        }
+        if baseline_cpu_by_run:
+            LogStyle.log_info(
+                "Paired CPU reference established from "
+                f"{len(baseline_cpu_by_run)} baseline trials: "
+                f"mean={np.mean(list(baseline_cpu_by_run.values())):.4f} s."
+            )
+        if len(baseline_cpu_by_run) != expected_trial_count:
+            LogStyle.log_warn(
+                f"Expected {expected_trial_count} CPU baselines but found "
+                f"{len(baseline_cpu_by_run)}; unmatched groups will report NaN overhead."
+            )
 
         # Select median representative run for each filename configuration
         filename_groups = df_all.groupby('filename')
@@ -175,6 +250,21 @@ class QoSMultiPlotter(QoSPlotter):
         summary_rows = []
         grouped = df_all.groupby(['mode', 'filter_type', 'rate', 'build_type'])
         total_groups = len(grouped)
+
+        incomplete_groups = [
+            (group_key, len(group))
+            for group_key, group in grouped
+            if len(group) != expected_trial_count
+        ]
+        if incomplete_groups:
+            preview = ", ".join(
+                f"{key}={count}" for key, count in incomplete_groups[:8]
+            )
+            suffix = " ..." if len(incomplete_groups) > 8 else ""
+            LogStyle.log_warn(
+                f"Found {len(incomplete_groups)} condition group(s) without exactly "
+                f"{expected_trial_count} trials: {preview}{suffix}"
+            )
 
         for g_idx, ((mode_val, filter_val, rate_val, build_val), group) in enumerate(grouped, 1):
             spin_char = self.SPINNER[g_idx % len(self.SPINNER)]
@@ -228,7 +318,10 @@ class QoSMultiPlotter(QoSPlotter):
             if os.path.exists(pure_ram_dir):
                 try:
                     pure_pattern = os.path.join(pure_ram_dir, mode_val, "run_*", "*", "*.csv")
-                    p_files = glob.glob(pure_pattern)
+                    p_files = [
+                        filepath for filepath in glob.glob(pure_pattern)
+                        if self._is_selected_run(filepath)
+                    ]
                     matched_ram_vals = []
                     for pf in p_files:
                         fn = os.path.basename(pf)
@@ -260,9 +353,18 @@ class QoSMultiPlotter(QoSPlotter):
                 except Exception:
                     pass
 
-            # Base Peacetime Baseline CPU Overhead = 56.3685 s
-            base_cpu_overhead = 56.3685
-            add_cpu_s = round(max(0.0, cpu_s - base_cpu_overhead), 4) if cpu_s > 0.0 else 0.0
+            # Paired CPU delta against the baseline from the same run/build.
+            # Keep the sign: a negative value means the mechanism saved CPU time.
+            paired_cpu_deltas = []
+            if 'cpu_s' in group:
+                for row in group.itertuples():
+                    baseline_cpu = baseline_cpu_by_run.get((row.run_id, row.build_type))
+                    if baseline_cpu is not None and float(row.cpu_s) > 0.0:
+                        paired_cpu_deltas.append(float(row.cpu_s) - baseline_cpu)
+            add_cpu_s = (
+                round(float(np.mean(paired_cpu_deltas)), 4)
+                if paired_cpu_deltas else np.nan
+            )
 
             summary_rows.append({
                 'mode': mode_val,
@@ -291,14 +393,24 @@ class QoSMultiPlotter(QoSPlotter):
         csv_out_path = os.path.join(self.stats_dir, "qos_multi_runs_aggregated.csv")
         df_summary.to_csv(csv_out_path, index=False)
 
-        LogStyle.log_success(f"Aggregated 20-trial statistics saved to: '{csv_out_path}'")
+        LogStyle.log_success(
+            f"Aggregated {expected_trial_count}-trial statistics saved to: '{csv_out_path}'"
+        )
 
         # Display Terminal Summary Tables immediately so user sees the table without waiting for plot rendering
         self._print_terminal_tables(df_summary)
 
+        # Export the exact descriptive statistics behind the representative
+        # Mode-1/Mode-2 timeline figures so manuscript prose is reproducible.
+        self._export_timeline_statistics()
+
         # Render Publication-Grade Master Plots (PDF, SVG, PNG)
         print("\n[*] STAGE 3/4: Rendering Publication Vector (PDF, SVG) & Raster (PNG) Master Plots...")
-        plot_targets = [(m, r) for m in [0, 1, 2] for r in [0.1, 0.5, 1.0, 5.0, 10.0]]
+        plot_targets = [
+            (mode, rate)
+            for mode in self.EVALUATION_MODES
+            for rate in self.EVALUATION_RATES
+        ]
         for p_idx, (m, r) in enumerate(plot_targets, 1):
             spin_char = self.SPINNER[p_idx % len(self.SPINNER)]
             sys.stdout.write(f"\r  [*] Plotting Master Suite [{spin_char} ALIVE]: [{p_idx:2d}/{len(plot_targets):2d}] Mode: {m} | Rate: {r:.1f}%")
@@ -314,6 +426,117 @@ class QoSMultiPlotter(QoSPlotter):
         print(f"\n[+] STAGE 4 COMPLETE: Rendered Pulse & Periodic attack timeline traces.")
 
         return df_summary
+
+    @staticmethod
+    def _timeline_metric_row(mode, series, region, signal, values, source_file):
+        values = pd.Series(values).dropna()
+        if values.empty:
+            return None
+        return {
+            'mode': mode,
+            'series': series,
+            'region': region,
+            'signal': signal,
+            'samples': int(values.size),
+            'mean_ms': float(values.mean()),
+            'median_ms': float(values.median()),
+            'p99_ms': float(values.quantile(0.99)),
+            'p999_ms': float(values.quantile(0.999)),
+            'max_ms': float(values.max()),
+            'source_file': source_file,
+        }
+
+    def _export_timeline_statistics(self):
+        """Export and print statistics from the same median runs used by timelines."""
+        rows = []
+        series_specs = {
+            1: {
+                'native': 'qos_attack_10.0_mode1.csv',
+                'onnx': 'qos_attack_10.0_mode1_onnx.csv',
+            },
+            2: {
+                'native': 'qos_attack_10.0_mode2.csv',
+                'onnx': 'qos_attack_10.0_mode2_onnx.csv',
+            },
+        }
+
+        for mode, specs in series_specs.items():
+            frames = {
+                name: self._resolve_dataframe('unpatched', filename)
+                for name, filename in specs.items()
+            }
+            if any(df is None or df.empty for df in frames.values()):
+                LogStyle.log_warn(
+                    f"Timeline statistics skipped for Mode {mode}: missing native or ONNX data."
+                )
+                continue
+
+            max_id = max(int(df['packet_id'].max()) for df in frames.values())
+            if mode == 1:
+                attack_start, attack_end = int(max_id * 0.30), int(max_id * 0.50)
+                region_masks = {
+                    'attack': lambda df: df['packet_id'].between(attack_start, attack_end),
+                    'clean': lambda df: ~df['packet_id'].between(attack_start, attack_end),
+                }
+            else:
+                total_packets = max_id + 1
+                stride = total_packets // 10
+
+                def attack_mask(df):
+                    segment = (df['packet_id'] // stride).clip(upper=9)
+                    return segment.astype(int) % 2 == 1
+
+                region_masks = {
+                    'attack': attack_mask,
+                    'clean': lambda df: ~attack_mask(df),
+                }
+
+            for series, df in frames.items():
+                filename = specs[series]
+                source_file = self.median_run_map.get(filename, filename)
+                signals = {'raw': df['latency_ms']}
+                if mode == 2:
+                    signals['rolling_500'] = df['latency_ms'].rolling(
+                        window=500, min_periods=1
+                    ).mean()
+
+                for region, mask_fn in region_masks.items():
+                    mask = mask_fn(df)
+                    for signal, values in signals.items():
+                        row = self._timeline_metric_row(
+                            f'mode{mode}', series, region, signal,
+                            values[mask], source_file,
+                        )
+                        if row is not None:
+                            rows.append(row)
+
+        if not rows:
+            return None
+
+        timeline_df = pd.DataFrame(rows)
+        output_path = os.path.join(self.stats_dir, 'timeline_representative_statistics.csv')
+        timeline_df.to_csv(output_path, index=False)
+        LogStyle.log_success(f"Timeline manuscript statistics saved to: '{output_path}'")
+
+        # Keep the manuscript-facing terminal output comparable across modes:
+        # raw attack-window mean and P99 only. The CSV retains the complete
+        # raw/rolling and clean/attack diagnostics for auditing.
+        manuscript_df = timeline_df[
+            (timeline_df['region'] == 'attack')
+            & (timeline_df['signal'] == 'raw')
+        ]
+        print("\n" + "=" * 82)
+        print(" [MANUSCRIPT TIMELINE SUMMARY — RAW ATTACK-WINDOW METRICS]")
+        print("=" * 82)
+        display_columns = ['mode', 'series', 'samples', 'mean_ms', 'p99_ms']
+        print(manuscript_df[display_columns].to_string(
+            index=False,
+            formatters={
+                column: (lambda value: f"{value:.4f}")
+                for column in ['mean_ms', 'p99_ms']
+            },
+        ))
+        return timeline_df
 
     def _parse_single_csv_metrics(self, filepath):
         try:
@@ -461,7 +684,7 @@ class QoSMultiPlotter(QoSPlotter):
                 if sub_f.empty: continue
                 c_code = color_map.get(f_type, C_RESET)
                 row_cells = []
-                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
+                for r in self.EVALUATION_RATES:
                     match_r = sub_f[np.isclose(sub_f['rate_%'].astype(float), r)]
                     if not match_r.empty:
                         m_val = match_r['mean_p99_ms'].values[0]
@@ -490,7 +713,7 @@ class QoSMultiPlotter(QoSPlotter):
                 if sub_f.empty: continue
                 c_code = color_map.get(f_type, C_RESET)
                 row_cells = []
-                for r in [0.1, 0.5, 1.0, 5.0, 10.0]:
+                for r in self.EVALUATION_RATES:
                     match_r = sub_f[np.isclose(sub_f['rate_%'].astype(float), r)]
                     if not match_r.empty:
                         m_val = match_r['mean_fnr_%'].values[0]

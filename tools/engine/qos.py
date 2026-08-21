@@ -422,11 +422,15 @@ class QoSPlotter(BasePlotter):
         ax.plot(df_native['packet_id'], df_native['smoothed_latency'], 
                 label='Unpatched Native (Smoothed)', color='#d62728', linewidth=1.5, alpha=0.9, zorder=5)
 
-        total_packet_indices = 1000000
-        stride_len = total_packet_indices // 10
+        total_packet_indices = int(max(
+            df_native['packet_id'].max(),
+            df_filter['packet_id'].max(),
+        )) + 1
+        mode2_segments = 10
+        stride_len = total_packet_indices // mode2_segments
         legend_appended = False
         
-        for iteration in range(10):
+        for iteration in range(mode2_segments):
             if iteration % 2 == 1:
                 lower_bound = iteration * stride_len
                 upper_bound = (iteration + 1) * stride_len
