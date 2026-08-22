@@ -8,6 +8,20 @@ __pycache__/
 .pytest_cache/
 
 # ==============================================================================
+# Local Manuscript, Meeting & Scratch Artifacts
+# ==============================================================================
+# Keep research writing and transient console notes in the local workspace while
+# excluding them from the public source/reproducibility repository.
+/group_meeting_slides.md
+/main.tex
+/refs.bib
+/AIOT2026.bib
+/terminalText.zip
+/terminal_result.txt
+/testing.txt
+/main.log
+
+# ==============================================================================
 # Local Data, Workspace & Dependency Exclusions
 # ==============================================================================
 data/raw/*
