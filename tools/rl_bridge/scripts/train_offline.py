@@ -37,7 +37,7 @@ def parse_arguments():
     """
     Sets up options for sweeps, clipping boundaries, and optimization iterations.
     """
-    parser = argparse.ArgumentParser(description="Industrial PRL On-Policy PPO/DQN Optimization Pipeline")
+    parser = argparse.ArgumentParser(description="Development-only ADAM policy training from stored telemetry traces.")
     parser.add_argument("-r", "--rate", type=str, default="mix", help="Target trace training dataset directory filter")
     parser.add_argument("-e", "--epochs", type=int, default=20, help="Total offline matrix sweep iterations")
     parser.add_argument("-l", "--lr", type=float, default=0.001, help="Actor-Critic / Q-Network learning parameter parameter ceiling")

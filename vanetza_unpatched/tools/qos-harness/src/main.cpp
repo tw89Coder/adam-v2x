@@ -40,7 +40,7 @@ void printHelp(const char* progName) {
               << "                     2 = Periodic On-Off (5 attack waves)\n"
               << "                     3 = Integrated Multi-Scenario Mix (RL Training Profile)\n"
               << "  -f               Enable Proposed Fast Pre-Filter\n"
-              << "  --rl             Enable Interactive PPO Training Mode (FSM sampling override disabled)\n"
+              << "  --rl             Enable interactive policy training mode (FSM sampling override disabled)\n"
               << "  --onnx           Enable In-Process ONNX Inference Mode (Pre-compiled ONNX Model)\n"
               << "  --onnx-fixed-policy  Diagnostic: bypass ORT inference and return the fixed safe policy\n"
               << "  --onnx-diagnostics   Enable asynchronous ONNX mailbox/timing diagnostics\n"

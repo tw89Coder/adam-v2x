@@ -35,7 +35,7 @@ def parse_arguments():
     """
     Sets up options for local loopback TCP port allocation and rollout batch limits.
     """
-    parser = argparse.ArgumentParser(description="Industrial Online PPO/DQN Coprocessing Console")
+    parser = argparse.ArgumentParser(description="Train an ADAM policy from live C++ harness telemetry.")
     parser.add_argument("-p", "--port", type=int, default=8080, help="Loopback server port assignment")
     parser.add_argument("-b", "--batch", type=int, default=32, help="Rollout batch optimization threshold")
     parser.add_argument("-l", "--lr", type=float, default=0.0003, help="Actor-Critic / Q-Network learning speed")

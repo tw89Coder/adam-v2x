@@ -100,7 +100,7 @@ def main():
     project_root = os.path.dirname(os.path.dirname(script_dir))
     default_outputs = os.path.join(project_root, "outputs")
 
-    parser = argparse.ArgumentParser(description="Industrial Timeline Anomaly Window Audit Tool.")
+    parser = argparse.ArgumentParser(description="Audit attack and clean regions in ADAM timeline traces.")
     parser.add_argument('--mode', type=int, choices=[0, 1, 2], default=1, help="Target simulation attack mode.")
     parser.add_argument('--rate', type=float, choices=[1.0, 5.0, 10.0], default=10.0, help="Target flood intensity rate.")
     parser.add_argument('--output-dir', type=str, default=default_outputs, help="Path to absolute outputs directory.")

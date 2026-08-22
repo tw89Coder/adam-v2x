@@ -1,5 +1,5 @@
 # ==============================================================================
-# V2X QoS DRL Refactored Configuration Matrix
+# ADAM policy training and deployment configuration
 # ==============================================================================
 algorithm: "dqn"               # Default algorithm used by training/export/deployment
 
@@ -51,7 +51,7 @@ infrastructure:
 v2x_bounds:
   max_packet_size: 1500.0               # Maximum Ethernet MTU size in bytes (used for normalizing size feature)
   max_f2_sq: 65025.0                    # Maximum possible F2 sliding-window sketch similarity count (255^2)
-  window_size: 100                      # Number of bytes in the sliding-window F2 sketch window (O(W) cap)
+  window_size: 100                      # Legacy offline-training rows per aggregation window; not the 64-byte C++ F2 window.
 
 # ------------------------------------------------------------------------------
 # 3. Model Architecture Parameters
@@ -103,10 +103,10 @@ action_space:
       max: 0.20
 
 # ------------------------------------------------------------------------------
-# 5. RL/PPO Hyperparameters: Dimensions, Learning Rates, Epochs, and Exploration
+# 5. Shared/legacy learner hyperparameters
 # ------------------------------------------------------------------------------
 hyperparameters:
-  input_dim: 3                          # State tensor observation size (1. Norm Size, 2. Norm SQ, 3. Anomaly Rate)
+  input_dim: 3                          # Legacy unstacked model fallback; v7 derives 7 live features x frame_stack 4 = 28.
   lr_online: 0.0003                     # Learning rate (alpha) of Adam optimizer for online updates
   lr_offline: 0.001                     # Learning rate (alpha) of Adam optimizer for offline updates
   batch_size: 32                        # Number of samples gathered per update step

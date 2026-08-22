@@ -4,7 +4,7 @@
  *
  * DESIGN CONTEXT & WORKFLOW IPC LINK:
  * This class coordinates the telemetry gathering and bidirectional IPC synchronization
- * between the C++ simulator engine and the Python PyTorch/PPO training agent.
+ * between the C++ simulator engine and the Python policy-training agent.
  *
  * TELEMETRY LOGGING (EPISODIC TRACES):
  * Writes per-packet metrics (packet size, max similarity square, budget, state, anomalies)

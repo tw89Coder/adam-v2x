@@ -516,7 +516,7 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
         return 1;
     }
 
-    // Print Sender Industrial Banner
+    // Print sender session banner.
     ConsolePresenter::printUDPSenderBanner(dest_ip, port, modes.size(), rates.size());
 
     uint64_t interval_ns = (lambda_pps > 0) ? static_cast<uint64_t>(1e9 / lambda_pps) : 0;

@@ -37,12 +37,9 @@ def parse_run_selection(value):
     return tuple(sorted(run_ids))
 
 def main():
-    # Dynamically resolve paths relative to the physical location of this script file
-    # script_dir resolves to: ~/term-project/CSE625_QoS/tools
+    # Resolve paths relative to this script so the repository is relocatable.
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # project_root resolves to: ~/term-project/CSE625_QoS
     project_root = os.path.dirname(script_dir)
-    # default_outputs resolves perfectly to: ~/term-project/CSE625_QoS/outputs
     default_outputs = os.path.join(project_root, "outputs")
 
     parser = argparse.ArgumentParser(

@@ -43,9 +43,9 @@ public:
         BASE_SAMPLING_RATE = base_sampling;
     }
 
-    // Online RL training must attribute each observed outcome to the PPO action.
+    // Online policy training must attribute each observed outcome to its action.
     // When disabled, the detector and its budget telemetry remain active, but
-    // the FSM budget is not allowed to override PPO's base sampling rate.
+    // the FSM budget is not allowed to override the training policy's base sampling rate.
     void set_adaptive_sampling_enabled(bool enabled) {
         adaptive_sampling_enabled_ = enabled;
     }
