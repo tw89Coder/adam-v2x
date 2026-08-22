@@ -1,60 +1,33 @@
-# V2X QoS Research: Dockerized Sandbox Environment
+# Containerized co-simulation
 
-This directory contains the containerization configurations designed to streamline building and executing the C++ co-simulation environment without manually configuring libraries (CMake, Conan, GTest, ONNX Runtime) on different host architectures.
+The root `docker-compose.yml` provides an optional development environment for
+online Python/C++ co-simulation. It is not required for the Raspberry Pi
+deployment path or for plotting existing paper outputs.
 
----
-
-## Directory Structure
-
-```text
-docker/
-├── Dockerfile             # Core image configuration (GCC/Python/ONNX Runtime stack)
-└── docker-compose.yml     # Service configuration and mount coordinates (located in root)
-```
-
----
-
-## Prerequisites
-
-Ensure you have Docker and Docker Compose installed on your host system:
-* **Docker Engine**: Version 20.10.0 or higher.
-* **Docker Compose**: Version 1.29.0 or higher.
-
----
-
-## Usage Instructions
-
-To launch the sandbox environment and mount the source code directory, execute the following commands from the project root:
+From the repository root:
 
 ```bash
-# 1. Build and boot up the sandbox container in detached mode
 docker compose up -d --build
-
-# 2. Access the container's interactive shell interface
-docker compose exec qos-sandbox bash
+docker compose logs -f rl-bridge qos-simulation
 ```
 
-Once inside the container shell, you can execute the normal build script and run experiments:
+The services are:
+
+- `rl-bridge`: runs the Python online learner on port 8080.
+- `qos-simulation`: builds/runs the unpatched C++ harness with `--train-rl` and
+  shares the learner's network namespace.
+
+The repository is mounted at `/workspace`. Checkpoints and outputs therefore
+remain visible on the host. Anonymous volumes protect the container-built
+virtual environment, third-party runtime, and C++ build directories from
+incompatible host artifacts.
+
+Stop the services without deleting repository data:
+
 ```bash
-# Compile unpatched and patched target harnesses inside container
-bash manage_build.sh all clean
-
-# Execute in-container RL training or static simulation matrices
-bash run_experiments.sh unpatched --simulate-all -r "10.0 5.0"
+docker compose down
 ```
 
----
-
-## Volume Mapping Configuration
-
-The `docker-compose.yml` mounts the following host directories:
-
-```mermaid
-graph LR
-    H["Host Directory"] -->|Mounted via docker-compose| C["Container Directory"]
-    H_Src["Workspace Source"] -->|"/V2X/home/yhl/term-project/CSE625_QoS"| C_Src["/workspace"]
-    H_Checkpoints["checkpoints/"] -->|"checkpoints/"| C_Checkpoints["/workspace/checkpoints"]
-    H_Outputs["outputs/"] -->|"outputs/"| C_Outputs["/workspace/outputs"]
-```
-
-This volume layout guarantees that any trained weights (`.pth` / `.onnx`) or evaluation statistics CSVs and plots generated inside the container are automatically written back to your host filesystem.
+The paper's policy was trained through the online C++/Python loop. The final
+Raspberry Pi evaluation instead uses in-process C++ ONNX inference and a
+separate Python UDP sender.
