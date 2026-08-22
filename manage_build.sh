@@ -50,17 +50,21 @@ print_usage() {
     echo -e ""
     echo -e "${COLOR_BOLD}Targets:${COLOR_RESET}"
     echo -e "  ${COLOR_SUCCESS}unpatched${COLOR_RESET}      Build the vulnerable/unpatched Vanetza stack workspace"
-    echo -e "  ${COLOR_SUCCESS}patched${COLOR_RESET}        Build the secured/patched state-machine Vanetza workspace"
+    echo -e "  ${COLOR_SUCCESS}patched${COLOR_RESET}        Build the recursion-depth-limited comparison workspace"
     echo -e "  ${COLOR_SUCCESS}all${COLOR_RESET}            Sequentially compile both workspaces"
     echo -e "  ${COLOR_SUCCESS}--sync-harness${COLOR_RESET} Synchronize qos-harness package between workspaces (Default: unpatched -> patched)"
     echo -e ""
     echo -e "${COLOR_BOLD}Modes:${COLOR_RESET}"
     echo -e "  ${COLOR_WARNING}fast${COLOR_RESET}           Execute incremental compilation using naked make only (Default)"
     echo -e "  ${COLOR_WARNING}clean${COLOR_RESET}          Wipe active build directories entirely and re-run full CMake"
-    echo -e "  ${COLOR_WARNING}test${COLOR_RESET}           Compile the harness and run C++ console presenter layout unit tests"
+    echo -e "  ${COLOR_WARNING}test${COLOR_RESET}           Run the legacy console-presenter layout check (use ./run_tests.sh for control logic)"
     echo -e "  ${COLOR_WARNING}--reverse${COLOR_RESET}      Used with --sync-harness to force reverse sync (patched -> unpatched)"
-    exit 1
+    exit "${1:-1}"
 }
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    print_usage 0
+fi
 
 # @description Compiles a given V2X Vanetza workspace using cmake and make.
 # @param $1 string The target workspace subdirectory name.

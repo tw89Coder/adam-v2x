@@ -22,7 +22,7 @@ print_usage() {
     echo -e ""
     echo -e "${C_BOLD}Targets:${C_RESET}"
     echo -e "  ${C_SUCCESS}unpatched${C_RESET}            Run tasks against the unpatched system workspace"
-    echo -e "  ${C_SUCCESS}patched${C_RESET}              Run tasks against the patched system workspace"
+    echo -e "  ${C_SUCCESS}patched${C_RESET}              Run the recursion-depth-limited comparison workspace"
     echo -e "  ${C_SUCCESS}all${C_RESET}                  Sequentially run entire matrix for BOTH unpatched and patched"
     echo -e "  ${C_SUCCESS}python${C_RESET}               Orchestrate Python DRL agent scripts (venv encapsulated)"
     echo -e ""
@@ -31,13 +31,14 @@ print_usage() {
     echo -e "  ${C_WARN}--profile-amp${C_RESET}         Run full geometric size sweep tracking MTU capacity scaling"
     echo -e "  ${C_WARN}--build-dataset${C_RESET}       Generate and validate high-potency toxic exploit vectors"
     echo -e "  ${C_WARN}--simulate-all${C_RESET}        Execute matrix sweep dynamically configured by runtime filters/ranges"
-    echo -e "  ${C_WARN}--train-rl${C_RESET}            Trigger automated one-click RL training pipeline (Forces Mode 3 + Socket Sync)"
-    echo -e "  ${C_WARN}--custom${C_RESET}              Manually bypass defaults to feed raw runtime arguments directly"
+    echo -e "  ${C_WARN}--train-rl${C_RESET}            Feed C++ trajectories to the online learner over the socket bridge"
+    echo -e "  ${C_WARN}receive${C_RESET}               Start the C++ UDP receiver used on the edge node"
+    echo -e "  ${C_WARN}send${C_RESET}                  Start the built-in C++ UDP sender (Python sender is used for paper runs)"
     echo -e ""
     echo -e "${C_BOLD}Actions under 'python' target:${C_RESET}"
-    echo -e "  ${C_WARN}--train-online${C_RESET}       Start PPO interactive online socket server (port 8080)"
-    echo -e "  ${C_WARN}--train-offline${C_RESET}      Run offline dataset trajectory training"
-    echo -e "  ${C_WARN}--deploy${C_RESET}             Start production inference serve daemon"
+    echo -e "  ${C_WARN}--train-online${C_RESET}       Start the configured DQN/PPO online learner (paper path: DQN)"
+    echo -e "  ${C_WARN}--train-offline${C_RESET}      Run the optional offline dataset trainer (not the paper model path)"
+    echo -e "  ${C_WARN}--deploy${C_RESET}             Start the legacy Python inference daemon"
     echo -e "  ${C_WARN}--verify-brain${C_RESET}       Audit brain checkpoints on baseline scenarios"
     echo -e "  ${C_WARN}--export-onnx${C_RESET}        Export trained PyTorch model weights to ONNX format"
     echo -e "  ${C_WARN}--verify-onnx${C_RESET}        Run numeric alignment check between PyTorch, ONNX, and C++"
@@ -47,11 +48,10 @@ print_usage() {
     echo -e "  ${C_INFO}  * Tip: Append -h/--help to any python action to view its specific parameters${C_RESET}"
     echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
     echo -e ""
-    echo -e "${C_BOLD}Common Modifiers (Applies to both Python & C++):${C_RESET}"
-    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Override pollution rates (Default: \"1.0 5.0 10.0\")."
-    echo -e "                          * \"mix\" blends multiple intensity traces (1.0%, 5.0%, 10.0% mode3 traces)"
-    echo -e "                            to pre-train model checkpoints (Offline training only)."
-    echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable heuristic safety clamping boundaries for RL agent"
+    echo -e "${C_BOLD}Rate and safety modifiers:${C_RESET}"
+    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Numeric C++ pollution rates (Default: \"1.0 5.0 10.0\")."
+    echo -e "                          Python offline training additionally accepts the special value \"mix\"."
+    echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable C++ policy safety clamps (diagnostic use only)"
     echo -e ""
     echo -e "${C_BOLD}C++ Simulation Specific Modifiers:${C_RESET}"
     echo -e "  ${C_INFO}-c, --core, --data-core <id>${C_RESET}  Data-plane CPU core (Default: 2)"
@@ -66,6 +66,17 @@ print_usage() {
     echo -e "                            2 = Periodic On-Off (5 waves of peak attack cycles)"
     echo -e "                            3 = Grand Mix Scenario (Dynamic hybrid mix for RL training)"
     echo -e "  ${C_INFO}-o, --onnx [path]${C_RESET}     Enable in-process ONNX model inference during simulation"
+    echo -e "  ${C_INFO}-S, --static-100${C_RESET}      Force static 100% inspection for the filter path"
+    echo -e "  ${C_INFO}-N, --packets <count>${C_RESET} Total packets per experiment (Default: 1000000)"
+    echo -e "  ${C_INFO}-l, --lambda <pps>${C_RESET}    Aggregate packet arrival rate"
+    echo -e "  ${C_INFO}-P, --port <port>${C_RESET}     UDP receiver/sender port (Default: 9999)"
+    echo -e "  ${C_INFO}-ip, --dest-ip <addr>${C_RESET} UDP destination address"
+    echo -e "  ${C_INFO}--zip${C_RESET}                 Pair modes and rates by index for online-training trajectories"
+    echo -e "  ${C_INFO}--sequence-file <path>${C_RESET} Read online-training mode/rate pairs from a file"
+    echo -e "  ${C_INFO}--dry-run${C_RESET}             Print resolved training commands without executing them"
+    echo -e "  ${C_INFO}--onnx-fixed-policy${C_RESET}    Replace ORT inference with a fixed safe policy for diagnosis"
+    echo -e "  ${C_INFO}--onnx-diagnostics${C_RESET}     Enable asynchronous ONNX timing/mailbox diagnostics"
+    echo -e "  ${C_INFO}--data-plane-diagnostics${C_RESET} Enable filter/parser timing diagnostics"
     echo -e ""
     echo -e "${C_BOLD}Python DRL Specific Modifiers:${C_RESET}"
     echo -e "  ${C_INFO}--frame-stack <k>${C_RESET}    Specify frame stacking size (K=1 is stateless; default: from agent.yaml)"
@@ -73,10 +84,15 @@ print_usage() {
     echo -e ""
     echo -e "${C_BOLD}Examples:${C_RESET}"
     echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET} -m \"0 1\" -r \"1.0 5.0\"      \033[90m# Run specific C++ sweep\033[0m"
-    echo -e "  ./run_experiments.sh ${C_SUCCESS}python${C_RESET} ${C_WARN}--train-offline${C_RESET} -e 10 -r mix                 \033[90m# Train PPO on blended trace\033[0m"
-    echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET} -o -n                      \033[90m# Run ONNX sweep without core locking\033[0m"
-    exit 1
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}python${C_RESET} ${C_WARN}--train-online${C_RESET} --algorithm dqn              \033[90m# Paper training path\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}--simulate-all${C_RESET} -F -o -n                   \033[90m# Run v7 ONNX sweep\033[0m"
+    echo -e "  ./run_experiments.sh ${C_SUCCESS}unpatched${C_RESET} ${C_WARN}receive${C_RESET} -P 9999 -o                        \033[90m# Raspberry Pi receiver\033[0m"
+    exit "${1:-1}"
 }
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    print_usage 0
+fi
 
 # ── EARLY ROUTING: Handle Python target to prevent argument swallowing ──────
 if [ "$1" = "python" ]; then
@@ -699,8 +715,9 @@ case "$ACTION" in
                 receiver_args+=("--no-affinity")
             fi
             if [ "$RUN_ONNX" = true ]; then
+                receiver_args+=("--onnx")
                 if [ -n "$ONNX_MODEL_PATH" ]; then
-                    receiver_args+=("--onnx" "$ONNX_MODEL_PATH")
+                    receiver_args+=("$ONNX_MODEL_PATH")
                 fi
             fi
             if [ "$ONNX_FIXED_POLICY_DIAGNOSTIC" = true ]; then
