@@ -67,3 +67,18 @@ add_executable(qos-harness-test
 target_include_directories(qos-harness-test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# Lightweight logic tests are opt-in so production builds and Raspberry Pi
+# deployments retain the existing target graph and dependencies.
+option(BUILD_QOS_HARNESS_TESTS "Build qos-harness control-logic unit tests" OFF)
+if(BUILD_QOS_HARNESS_TESTS)
+    enable_testing()
+    add_executable(qos-harness-unit-tests
+        tests/test_control_logic.cpp
+        src/pre_filter.cpp
+    )
+    target_include_directories(qos-harness-unit-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME qos-harness-control-logic COMMAND qos-harness-unit-tests)
+endif()

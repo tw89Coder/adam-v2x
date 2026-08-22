@@ -42,6 +42,7 @@
 #include <sstream>
 
 #include "qos_harness/console_presenter.hpp"
+#include "qos_harness/control_logic.hpp"
 
 #ifdef USE_ONNX
 #include <onnxruntime_cxx_api.h>
@@ -53,13 +54,7 @@
 namespace qos_harness {
 
 namespace {
-constexpr double MIN_DRL_S0_SAMPLING_RATE = 0.70;
-constexpr double MAX_DRL_S0_SAMPLING_RATE = 0.80;
-
-double clamp_drl_s0_sampling_rate(double rate) {
-    return std::max(MIN_DRL_S0_SAMPLING_RATE,
-                    std::min(rate, MAX_DRL_S0_SAMPLING_RATE));
-}
+constexpr double MIN_DRL_S0_SAMPLING_RATE = control_logic::kMinDrlS0SamplingRate;
 
 bool same_policy(const FilterPolicy& lhs, const FilterPolicy& rhs) {
     return std::abs(lhs.recovery_rate - rhs.recovery_rate) < 1e-12 &&
@@ -289,13 +284,7 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
             std::lock_guard<std::mutex> lock(onnx_mutex_);
             policy = shared_policy_;
         }
-        if (safety_guards_enabled_) {
-            if (policy.sq_threshold > 650) policy.sq_threshold = 650;
-            if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
-            if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-            if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-        }
-        policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
+        control_logic::enforce_policy_boundaries(policy, safety_guards_enabled_);
         filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier, policy.sq_threshold,
                                     policy.base_sampling_rate);
         new_policy_available_.store(false, std::memory_order_release);
@@ -339,14 +328,8 @@ void RLBridge::check_and_sync_window(int current_packet_idx, AdaptiveFilterFSM& 
 
         // Handshake with the optimization engine using binary struct
         if (handshake_with_agent(payload, next_policy)) {
-            // Apply safety boundaries in C++ if enabled
-            if (safety_guards_enabled_) {
-                if (next_policy.sq_threshold > 650) next_policy.sq_threshold = 650;
-                if (next_policy.penalty_multiplier < 20.0) next_policy.penalty_multiplier = 20.0;
-                if (next_policy.recovery_rate > 0.10) next_policy.recovery_rate = 0.10;
-                if (next_policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) next_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-            }
-            next_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(next_policy.base_sampling_rate);
+            // Apply the same unit-tested safety boundaries as native ONNX.
+            control_logic::enforce_policy_boundaries(next_policy, safety_guards_enabled_);
             filter.update_policy_params(next_policy.recovery_rate, next_policy.penalty_multiplier,
                                         next_policy.sq_threshold, next_policy.base_sampling_rate);
         }
@@ -410,15 +393,7 @@ void RLBridge::publish_native_onnx_window(uint32_t packet_count, uint32_t anomal
         }
         if (new_policy_available_.load(std::memory_order_relaxed)) {
             FilterPolicy policy = shared_policy_;
-            if (safety_guards_enabled_) {
-                if (policy.sq_threshold > 650) policy.sq_threshold = 650;
-                if (policy.penalty_multiplier < 20.0) policy.penalty_multiplier = 20.0;
-                if (policy.recovery_rate > 0.10) policy.recovery_rate = 0.10;
-                if (policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) {
-                    policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-                }
-            }
-            policy.base_sampling_rate = clamp_drl_s0_sampling_rate(policy.base_sampling_rate);
+            control_logic::enforce_policy_boundaries(policy, safety_guards_enabled_);
             filter.update_policy_params(policy.recovery_rate, policy.penalty_multiplier,
                                         policy.sq_threshold, policy.base_sampling_rate);
             if (diagnostics && runtime_config_.diagnostics_mailbox_counters) {
@@ -580,19 +555,16 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
 
         std::array<float, 7> current_features{};
         if (legacy_state) {
-            current_features[0] = static_cast<float>(telemetry.instant_sampling_rate);
-            current_features[1] = static_cast<float>(telemetry.avg_max_sum_sq / 65025.0);
-            current_features[2] = static_cast<float>(telemetry.anomaly_rate);
+            const auto normalized = control_logic::normalize_legacy_telemetry(
+                telemetry.instant_sampling_rate, telemetry.avg_max_sum_sq,
+                telemetry.anomaly_rate);
+            std::copy(normalized.begin(), normalized.end(), current_features.begin());
         } else {
-            constexpr double CLEAN_STREAK_NORMALIZER = 1000.0;
-            current_features = {{
-                static_cast<float>(telemetry.base_sampling_rate),
-                static_cast<float>(telemetry.instant_sampling_rate),
-                static_cast<float>(telemetry.avg_max_sum_sq / 65025.0),
-                static_cast<float>(telemetry.anomaly_rate),
-                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.current_budget / 100.0))),
-                static_cast<float>(std::min<uint32_t>(telemetry.fsm_state, 3U) / 3.0),
-                static_cast<float>(std::max(0.0, std::min(1.0, telemetry.clean_streak / CLEAN_STREAK_NORMALIZER)))}};
+            current_features = control_logic::normalize_extended_telemetry(
+                telemetry.base_sampling_rate, telemetry.instant_sampling_rate,
+                telemetry.avg_max_sum_sq, telemetry.anomaly_rate,
+                telemetry.current_budget, telemetry.fsm_state,
+                telemetry.clean_streak);
         }
 
         // --- NEW: PRE-ALLOCATED ZERO-ALLOCATION INSTANCE BUFFER ---
@@ -651,21 +623,8 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 // ==========================================
                 // [Raw DQN Model Mapping] Q-values output
                 // ==========================================
-                int best_action_idx = 0;
-                float max_q_value = float_output[0];
-                for (size_t i = 1; i < dqn_action_map_.size(); ++i) {
-                    if (float_output[i] > max_q_value) {
-                        max_q_value = float_output[i];
-                        best_action_idx = i;
-                    }
-                }
-
-                constexpr float RECOVERY_PROFILES[5] = {0.10f, 0.075f, 0.05f, 0.025f, 0.01f};
-                constexpr float SAMPLING_PROFILES[5] = {0.70f, 0.70f, 0.75f, 0.80f, 0.80f};
-                out_policy.recovery_rate = RECOVERY_PROFILES[best_action_idx];
-                out_policy.penalty_multiplier = 50.0;
-                out_policy.sq_threshold = 600;
-                out_policy.base_sampling_rate = SAMPLING_PROFILES[best_action_idx];
+                control_logic::decode_dqn_profile_action(
+                    float_output, action_dim, out_policy);
             } else if (action_dim == 4) {
                 // ==========================================
                 // [Wrapped DQN Model Mapping] DQNDeploymentWrapper
@@ -705,19 +664,11 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
                 std::exit(1);
             }
         } else if (algorithm_ == "ppo") {
-            if (action_dim == 4) {
-                // ==========================================
-                // [PPO Model Mapping] Continuous Action Space
-                // ==========================================
-                out_policy.recovery_rate = float_output[0] * 0.5;
-                out_policy.penalty_multiplier = float_output[1] * 100.0;
-                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-                out_policy.base_sampling_rate = float_output[3];
-            } else if (action_dim == 3) {
-                out_policy.recovery_rate = float_output[0] * 0.5;
-                out_policy.penalty_multiplier = float_output[1] * 100.0;
-                out_policy.sq_threshold = static_cast<int>(400 + (float_output[2] * 400));
-                out_policy.base_sampling_rate = telemetry.instant_sampling_rate;
+            if (control_logic::decode_ppo_action(
+                    float_output, action_dim, telemetry.instant_sampling_rate,
+                    out_policy)) {
+                // Continuous 3D/4D compatibility outputs decoded by shared,
+                // unit-tested control logic.
             } else if (action_dim == 2) {
                 out_policy.recovery_rate = float_output[0] * 0.5;
                 out_policy.penalty_multiplier = float_output[1] * 100.0;
@@ -733,15 +684,9 @@ bool RLBridge::run_onnx_inference(const WindowTelemetry& telemetry, FilterPolicy
         }
 
         // 4. Heuristic Safety Clamping (Layer 2 Safeguard)
-        if (safety_guards_enabled_) {
-            if (out_policy.sq_threshold > 650) out_policy.sq_threshold = 650;
-            if (out_policy.penalty_multiplier < 20.0) out_policy.penalty_multiplier = 20.0;
-            if (out_policy.recovery_rate > 0.10) out_policy.recovery_rate = 0.10;
-            if (out_policy.base_sampling_rate < MIN_DRL_S0_SAMPLING_RATE) out_policy.base_sampling_rate = MIN_DRL_S0_SAMPLING_RATE;
-        }
         // Architectural invariant: DRL controls only the nominal S0 range.
         // Higher effective inspection rates remain exclusively FSM budget decisions.
-        out_policy.base_sampling_rate = clamp_drl_s0_sampling_rate(out_policy.base_sampling_rate);
+        control_logic::enforce_policy_boundaries(out_policy, safety_guards_enabled_);
 
         return true;
     } catch (const std::exception& e) {
