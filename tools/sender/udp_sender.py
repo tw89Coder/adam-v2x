@@ -131,31 +131,38 @@ def load_packets_from_dir(folder_path, is_malware_header=0):
     return packets
 
 def main():
-    parser = argparse.ArgumentParser(description="V2X Hardware Testbed UDP Traffic Sender")
-    parser.add_argument("--dest-ip", type=str, default="127.0.0.1", help="Target Receiver IP Address")
-    parser.add_argument("-P", "--port", type=int, default=9999, help="Target UDP Port")
-    parser.add_argument("-m", "--modes", type=str, default="0", help="Space-separated attack modes (e.g. '0 1 2')")
-    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated pollution rates (e.g. '0.0%% 5.0%%')")
-    parser.add_argument("-N", "--packets", type=int, default=1000000, help="Total packets per session")
-    parser.add_argument("-l", "--lambda-pps", type=float, default=3000.0, help="Arrival rate lambda (pps)")
-    parser.add_argument("-B", "--baseline", action="store_true", help="Baseline mode (Filter OFF)")
-    parser.add_argument("-F", "--filter", action="store_true", help="Adaptive FSM Filter Mode")
-    parser.add_argument("-S", "--static-100", action="store_true", help="Static 100%% Full Inspection Mode")
-    parser.add_argument("-C", "--codel", action="store_true", help="CoDel AQM Queue Protection Baseline Mode")
-    parser.add_argument("-o", "--onnx", action="store_true", help="Enable ONNX DRL Agent Filter Mode")
-    parser.add_argument("-I", "--run-range", type=str, default="0 0", help="Space-separated trial run ID range (e.g. '1 20' or '1 1')")
-    parser.add_argument("-M", "--pure-memory", action="store_true", help="Enable pure production RAM benchmarking mode (saves to pure_memory_runs)")
-    parser.add_argument("--patched", action="store_true", help="Target kernel is patched")
+    parser = argparse.ArgumentParser(
+        description="Send reproducible V2X packet workloads to the C++ UDP receiver on the physical testbed.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Examples:\n"
+               "  python tools/sender/udp_sender.py --dest-ip 192.0.2.10 -F -o -m '0 1 2' -r '1.0 5.0 10.0' -I '1 20'\n"
+               "  python tools/sender/udp_sender.py --suite controls --dest-ip 192.0.2.10 -I '1 20'\n"
+               "  python tools/sender/udp_sender.py --suite controls --dry-run -I '1 2'"
+    )
+    parser.add_argument("--dest-ip", type=str, default="127.0.0.1", help="C++ receiver address (default: 127.0.0.1).")
+    parser.add_argument("-P", "--port", type=int, default=9999, help="C++ receiver UDP port (default: 9999).")
+    parser.add_argument("-m", "--modes", type=str, default="0", help="Space-separated schedules: 0=continuous, 1=pulse, 2=periodic (default: '0').")
+    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated attack percentages, e.g. '1.0 5.0 10.0' (default: '0.0').")
+    parser.add_argument("-N", "--packets", type=int, default=1000000, help="Packets sent in each session (default: 1000000).")
+    parser.add_argument("-l", "--lambda-pps", type=float, default=3000.0, help="Fixed aggregate arrival rate in packets/s (default: 3000).")
+    parser.add_argument("-B", "--baseline", action="store_true", help="Disable admission filtering (native-parser baseline).")
+    parser.add_argument("-F", "--filter", action="store_true", help="Enable PRB-FSM admission filtering.")
+    parser.add_argument("-S", "--static-100", action="store_true", help="Use static 100%% inspection with the filter.")
+    parser.add_argument("-C", "--codel", action="store_true", help="Use the CoDel comparison configuration.")
+    parser.add_argument("-o", "--onnx", action="store_true", help="Use the deployed ONNX DQN policy with the PRB-FSM.")
+    parser.add_argument("-I", "--run-range", type=str, default="0 0", help="Inclusive trial IDs, e.g. '1 20'; '0 0' writes the single-run layout.")
+    parser.add_argument("-M", "--pure-memory", action="store_true", help="Run logging-disabled RAM profiling and write the pure-memory result layout.")
+    parser.add_argument("--patched", action="store_true", help="Label output as using the recursion-depth-limited comparison receiver.")
     parser.add_argument(
         "--suite",
         choices=("controls",),
-        help="Run a predefined session suite; 'controls' runs Mode-2 FSM/static and Mode-0 baseline",
+        help="Run a predefined comparison matrix; 'controls' selects its own baseline/FSM/static sessions.",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Print the resolved session order without using the network")
+    parser.add_argument("--dry-run", action="store_true", help="Print the resolved session order without loading payloads or sending UDP traffic.")
     parser.add_argument(
         "--shuffle-sessions",
         action="store_true",
-        help="Reproducibly shuffle complete (mode, rate) sessions using the run ID",
+        help="Reproducibly shuffle complete sessions using the trial ID instead of the default counterbalanced order.",
     )
 
     args = parser.parse_args()

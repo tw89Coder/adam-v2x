@@ -509,18 +509,25 @@ def run_offline(env: V2XOfflineDatasetEnv, agent: V2XAgent, learner: PPOLearner,
                   f"Mean Reward: {C_SUCCESS}{epoch_reward / steps:+.2f}{C_RESET}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Unified refactored V2X QoS DRL framework.")
-    parser.add_argument("--mode", type=str, choices=["online", "offline"], default="online", help="Execution mode")
-    parser.add_argument("--host", type=str, default=None, help="TCP server host")
-    parser.add_argument("--port", type=int, default=None, help="TCP server port")
-    parser.add_argument("--epochs", type=int, default=10, help="Offline training epochs count")
-    parser.add_argument("--rate", type=str, default="mix", help="Offline rate CSV filter ('mix' or float string)")
-    parser.add_argument("--frame-stack", type=int, default=None, help="Overrides frame stacking size (k=1 is stateless)")
-    parser.add_argument("--fresh", action="store_true", help="Start training from scratch, ignoring existing checkpoints")
+    parser = argparse.ArgumentParser(
+        description="Train the ADAM control policy. The paper uses online DQN training with C++ harness telemetry.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Publication-style online training:\n"
+               "  python tools/rl_bridge/src/main.py --mode online --algorithm dqn \\\n"
+               "    --checkpoint-path checkpoints/v2x_online_brain_dqn_cmdp_v7_profiles.pth\n\n"
+               "Offline mode is retained for development and is not the paper's training path."
+    )
+    parser.add_argument("--mode", type=str, choices=["online", "offline"], default="online", help="Training source: live C++ telemetry or stored CSV traces (default: online).")
+    parser.add_argument("--host", type=str, default=None, help="Online telemetry server bind address (default: config/agent.yaml).")
+    parser.add_argument("--port", type=int, default=None, help="Online telemetry server port (default: config/agent.yaml).")
+    parser.add_argument("--epochs", type=int, default=10, help="Offline-only dataset passes (default: 10).")
+    parser.add_argument("--rate", type=str, default="mix", help="Offline-only trace selector: 'mix' or an attack-rate string (default: mix).")
+    parser.add_argument("--frame-stack", type=int, default=None, help="Telemetry history length; publication v7 uses 4 x 7 = 28 inputs (default: config).")
+    parser.add_argument("--fresh", action="store_true", help="Initialize new weights instead of resuming the selected checkpoint.")
     parser.add_argument("--checkpoint-path", type=str, default=None,
-                        help="Isolated checkpoint path for loading/saving this training run")
+                        help="Checkpoint used for both resume and save; isolates this run from the configured default.")
     parser.add_argument("-a", "--algo", "--algorithm", dest="algo", type=str, choices=["ppo", "discrete_ppo", "sac", "dqn"], default=None,
-                        help="RL algorithm to use (defaults to config/agent.yaml)")
+                        help="Policy algorithm (publication model: dqn; default: config/agent.yaml).")
     args = parser.parse_args()
 
     # 1. Dynamic algorithm pipeline building via registry factory

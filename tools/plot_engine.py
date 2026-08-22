@@ -46,28 +46,35 @@ def main():
     default_outputs = os.path.join(project_root, "outputs")
 
     parser = argparse.ArgumentParser(
-        description="Industrial-Grade Verification and Plotting Engine for Academic Publication Manuscripts.",
+        description=(
+            "Generate ADAM paper statistics and figures from experiment outputs. "
+            "Use -M for the 20-run publication aggregation path."
+        ),
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog=f"{LogStyle.BOLD}Available Plotting Types and Semantic Meanings:{LogStyle.RESET}\n"
-               f"  {LogStyle.STAGE}amp{LogStyle.RESET}         : Packet amplification ratio profiling (Defense metrics comparison)\n"
-               f"  {LogStyle.STAGE}qos{LogStyle.RESET}         : Cumulative Distribution Function (CDF) latency/loss curves\n"
-               f"  {LogStyle.STAGE}timeline{LogStyle.RESET}    : Multi-modal temporal attack execution traces\n"
-               f"  {LogStyle.STAGE}debug{LogStyle.RESET}       : Diagnostics diagnostic log output checks\n"
-               f"  {LogStyle.STAGE}budget{LogStyle.RESET}      : Resource depletion threshold boundaries under mitigations\n"
-               f"  {LogStyle.STAGE}convergence{LogStyle.RESET} : DRL offline/online training Episode-Reward convergence metrics\n"
-               f"  {LogStyle.STAGE}window{LogStyle.RESET}      : Dynamic timeline curves of window-level sampling, attack, and leakage rates\n"
-               f"  {LogStyle.STAGE}pareto{LogStyle.RESET}      : Analytical Pareto frontier of entropy-depth security tradeoff"
+        epilog=f"{LogStyle.BOLD}Plot types:{LogStyle.RESET}\n"
+               f"  {LogStyle.STAGE}amp{LogStyle.RESET}         Parser workload amplification\n"
+               f"  {LogStyle.STAGE}qos{LogStyle.RESET}         Latency CDF/jitter and summary statistics\n"
+               f"  {LogStyle.STAGE}timeline{LogStyle.RESET}    Mode 1 pulse and Mode 2 periodic timelines\n"
+               f"  {LogStyle.STAGE}debug{LogStyle.RESET}       Input-data diagnostics\n"
+               f"  {LogStyle.STAGE}budget{LogStyle.RESET}      Risk-budget behavior\n"
+               f"  {LogStyle.STAGE}convergence{LogStyle.RESET} Training convergence\n"
+               f"  {LogStyle.STAGE}window{LogStyle.RESET}      Sampling/attack/leakage window telemetry\n"
+               f"  {LogStyle.STAGE}pareto{LogStyle.RESET}      Entropy-depth bound\n\n"
+               f"{LogStyle.BOLD}Publication examples:{LogStyle.RESET}\n"
+               "  python tools/plot_engine.py -M --runs 1-20\n"
+               "  python tools/plot_engine.py --type timeline --onnx\n"
+               "  python tools/plot_engine.py --type qos --onnx -m 0 -r '1.0 5.0 10.0'"
     )
     
-    parser.add_argument('--all', action='store_true', help="Execute entire pipeline suite (Generates all stats, charts, tables).")
+    parser.add_argument('--all', action='store_true', help="Generate every available single-run statistic and figure (default when no pipeline is selected).")
     parser.add_argument('--type', choices=['amp', 'qos', 'timeline', 'debug', 'budget', 'convergence', 'window', 'pareto'], 
-                        help="Isolate target execution pipelines (see type details below).")
-    parser.add_argument('-m', '--mode', type=int, default=0, help="Target protocol simulation state logic mode (Default: 0).")
-    parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack intensity flood multiplier scaling percentage or space-separated list (Default: 10.0).")
-    parser.add_argument('--output-dir', type=str, default=default_outputs, help="Override standard relative root target location for data export.")
-    parser.add_argument('--onnx', action='store_true', help="Use ONNX actual deployment results instead of heuristic FSM filtered results for QoS plots.")
-    parser.add_argument('--no-patched', action='store_true', help="Exclude Patched Native and Patched Filtered curves from QoS plots.")
-    parser.add_argument('-M', '--multi-run', action='store_true', help="Process N-run trial datasets from outputs/multi_runs/ and export to outputs/plots_multi_runs/")
+                        help="Generate only one single-run plot/statistics family (see below).")
+    parser.add_argument('-m', '--mode', type=int, choices=[0, 1, 2, 3], default=0, help="Attack schedule: 0=continuous, 1=single pulse, 2=periodic, 3=mixed training (default: 0).")
+    parser.add_argument('-r', '--rate', type=str, default="10.0", help="Attack percentage or a space-separated list, e.g. '1.0 5.0 10.0' (default: 10.0).")
+    parser.add_argument('--output-dir', type=str, default=default_outputs, help="Experiment output root (default: <repository>/outputs).")
+    parser.add_argument('--onnx', action='store_true', help="Use deployed ONNX-policy results instead of FSM-only filtered results for single-run QoS plots.")
+    parser.add_argument('--no-patched', action='store_true', help="Omit recursion-depth-limited comparison curves from single-run QoS plots.")
+    parser.add_argument('-M', '--multi-run', action='store_true', help="Aggregate publication trials from outputs/multi_runs and regenerate multi-run CSV, console tables, and figures.")
     parser.add_argument(
         '--runs', type=parse_run_selection, default=parse_run_selection('1-20'),
         metavar='SELECTION',

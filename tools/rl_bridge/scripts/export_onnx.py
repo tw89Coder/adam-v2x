@@ -145,11 +145,19 @@ class ActorOnlyModel(nn.Module):
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="V2X DRL Actor Policy ONNX Export Pipeline")
-    parser.add_argument("-m", "--model", type=str, default=None, help="Path to input PyTorch checkpoint (.pth)")
-    parser.add_argument("-o", "--output", type=str, default=None, help="Path to output ONNX model (.onnx)")
+    parser = argparse.ArgumentParser(
+        description="Export an ADAM PyTorch policy checkpoint to an ONNX deployment graph.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Publication v7 export:\n"
+               "  python tools/rl_bridge/scripts/export_onnx.py --raw-dqn \\\n"
+               "    -m checkpoints/v2x_online_brain_dqn_cmdp_v7_profiles.pth \\\n"
+               "    -o checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx\n\n"
+               "Keep the generated .onnx and .onnx.data files together for deployment."
+    )
+    parser.add_argument("-m", "--model", type=str, default=None, help="Input PyTorch checkpoint (.pth); default comes from the RL configuration.")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Output ONNX graph; default comes from the RL configuration.")
     parser.add_argument("--raw-dqn", action="store_true",
-                        help="Export the five raw DQN Q-values without the deployment wrapper")
+                        help="Export five raw DQN Q-values for the C++ action router (required by publication v7).")
     return parser.parse_args()
 
 def main():
