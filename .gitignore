@@ -71,6 +71,20 @@ outputs/**/*
 !outputs/csv_raw/**/fsm_trace_rate_1.0_mode*.csv
 !outputs/csv_raw/**/amplification_profile.csv
 
+# Minimal publication-facing multi-run results and the four measured figures
+# referenced by the manuscript. All other generated combinations stay local.
+!outputs/stats_multi_runs/
+!outputs/stats_multi_runs/qos_multi_runs_aggregated.csv
+!outputs/stats_multi_runs/timeline_representative_statistics.csv
+!outputs/plots_multi_runs/
+!outputs/plots_multi_runs/qos/
+!outputs/plots_multi_runs/qos/master/
+!outputs/plots_multi_runs/qos/master/jitter_mode0_10.0pct_onnx.pdf
+!outputs/plots_multi_runs/qos/master/cdf_mode0_10.0pct_onnx.pdf
+!outputs/plots_multi_runs/qos/timeline/
+!outputs/plots_multi_runs/qos/timeline/pulse_recovery_timeline_onnx.pdf
+!outputs/plots_multi_runs/qos/timeline/periodic_recovery_timeline_onnx.pdf
+
 # ==============================================================================
 # RWTH Aachen V2AIX Dataset Exclusions (Compliance with academic non-distribution license)
 # ==============================================================================

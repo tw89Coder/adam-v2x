@@ -372,10 +372,14 @@ class QoSMultiPlotter(QoSPlotter):
                 'rate_%': rate_val,
                 'build_type': build_val,
                 'trials': n_trials,
+                'mean_latency_ms': group['mean_latency'].mean(),
+                'std_latency_ms': group['mean_latency'].std() if n_trials > 1 else 0.0,
                 'mean_p99_ms': group['p99'].mean(),
                 'std_p99_ms': group['p99'].std() if n_trials > 1 else 0.0,
                 'mean_p999_ms': group['p999'].mean(),
                 'std_p999_ms': group['p999'].std() if n_trials > 1 else 0.0,
+                'mean_sampling_%': group['sampling_rate'].mean(),
+                'std_sampling_%': group['sampling_rate'].std() if n_trials > 1 else 0.0,
                 'mean_fnr_%': group['fnr'].mean(),
                 'std_fnr_%': group['fnr'].std() if n_trials > 1 else 0.0,
                 'mean_fpr_%': group['fpr'].mean(),
@@ -543,6 +547,8 @@ class QoSMultiPlotter(QoSPlotter):
             # Fast header check to read METADATA comment and column structure
             cpu_s = 0.0
             ram_mb = 0.0
+            total_sent = 0
+            total_inspected = 0
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 first_line = f.readline()
                 if first_line.startswith('# METADATA:'):
@@ -555,6 +561,10 @@ class QoSMultiPlotter(QoSPlotter):
                                 cpu_s = float(v.strip())
                             elif k == 'peak_rss_kb':
                                 ram_mb = float(v.strip()) / 1024.0
+                            elif k == 'total_sent':
+                                total_sent = int(v.strip())
+                            elif k == 'total_inspected':
+                                total_inspected = int(v.strip())
                     header_line = f.readline()
                 else:
                     header_line = first_line
@@ -583,6 +593,8 @@ class QoSMultiPlotter(QoSPlotter):
                         'p95': 0.0,
                         'p99': 0.0,
                         'p999': 0.0,
+                        'mean_latency': 0.0,
+                        'sampling_rate': 0.0,
                         'fnr': 0.0,
                         'fpr': 0.0,
                         'cpu_s': cpu_s,
@@ -598,6 +610,11 @@ class QoSMultiPlotter(QoSPlotter):
             p95 = np.percentile(lat_ms, 95)
             p99 = np.percentile(lat_ms, 99)
             p999 = np.percentile(lat_ms, 99.9)
+            mean_latency = float(lat_ms.mean())
+            sampling_rate = (
+                total_inspected / total_sent * 100.0
+                if total_sent > 0 else 0.0
+            )
 
             total_malware = (df['is_malware'] == 1).sum()
             total_normal = (df['is_malware'] == 0).sum()
@@ -618,6 +635,8 @@ class QoSMultiPlotter(QoSPlotter):
                 'p95': p95,
                 'p99': p99,
                 'p999': p999,
+                'mean_latency': mean_latency,
+                'sampling_rate': sampling_rate,
                 'fnr': fnr,
                 'fpr': fpr,
                 'cpu_s': cpu_s,
