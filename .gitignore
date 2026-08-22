@@ -37,12 +37,16 @@ data/processed/*
 # Local third-party library dependencies (such as ONNX Runtime)
 third_party/
 
-# Exclude locally exported ONNX models
-checkpoints/*.onnx
-tools/rl_bridge/checkpoints/*.onnx
-
-# Online training telemetry is generated locally and can exceed GitHub's 100 MB limit.
-checkpoints/online_training_telemetry_discrete_ppo.csv
+# Keep historical training runs and locally exported models out of the public
+# repository. The exact v7 publication checkpoint and deployment pair are the
+# only model artifacts intentionally versioned.
+/checkpoints/*
+!/checkpoints/README.md
+!/checkpoints/SHA256SUMS
+!/checkpoints/v2x_online_brain_dqn_cmdp_v7_profiles.pth
+!/checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx
+!/checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx.data
+/tools/rl_bridge/checkpoints/*
 
 # ==============================================================================
 # V2X QoS Experiment Output Exclusions & Whitelist
