@@ -14,6 +14,7 @@
 #endif
 
 #include <chrono>
+#include <cerrno>
 #include <thread>
 #include <iostream>
 #include <vector>
@@ -75,9 +76,19 @@ int UDPSocketEngine::run_receiver(int port, const std::string& build_type, int d
     int no = 0;
     setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &no, sizeof(no));
 
-    // Align receiver socket buffer to 4MB with sender SO_SNDBUF
-    int rcvbuf_sz = 4 * 1024 * 1024;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf_sz, sizeof(rcvbuf_sz));
+    // Absorb transient parser backlog during concentrated pulse workloads.
+    // Linux reports twice the requested value for SO_RCVBUF bookkeeping, so a
+    // 64 MiB request appears as 128 MiB when net.core.rmem_max permits it.
+    int rcvbuf_sz = 64 * 1024 * 1024;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf_sz, sizeof(rcvbuf_sz)) != 0) {
+        std::cerr << "[UDP RECEIVER WARNING] Failed to request 64 MiB receive buffer: "
+                  << std::strerror(errno) << "\n";
+    }
+    socklen_t rcvbuf_len = sizeof(rcvbuf_sz);
+    if (getsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf_sz, &rcvbuf_len) == 0) {
+        std::cout << "[INIT] Effective UDP receive buffer: "
+                  << (rcvbuf_sz / (1024.0 * 1024.0)) << " MiB\n";
+    }
 
     sockaddr_in6 server_addr{};
     server_addr.sin6_family = AF_INET6;
