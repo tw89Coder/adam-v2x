@@ -50,11 +50,12 @@ checkpoints/online_training_telemetry_discrete_ppo.csv
 # Ignore all generated outputs by default (raw simulation traces, bin packets, logs)
 outputs/**/*
 
-# Whitelist thesis figures, plots, and tables
+# Keep only the standalone amplification inputs/figures in Git. QoS single-run
+# and multi-run results remain local by default; curated multi-run artifacts can
+# be distributed separately as release assets without enlarging normal clones.
 !outputs/plots/
-!outputs/plots/**/*
-!outputs/stats/
-!outputs/stats/**/*
+!outputs/plots/amplification/
+!outputs/plots/amplification/**/*
 
 # Whitelist specific CSV files required for thesis plotting (rates 10.0, 5.0, 1.0)
 !outputs/csv_raw/
