@@ -498,6 +498,8 @@ class QoSMultiPlotter(QoSPlotter):
             for series, df in frames.items():
                 filename = specs[series]
                 source_file = self.median_run_map.get(filename, filename)
+                if os.path.isabs(source_file):
+                    source_file = os.path.relpath(source_file, self.root_output_dir)
                 signals = {'raw': df['latency_ms']}
                 if mode == 2:
                     signals['rolling_500'] = df['latency_ms'].rolling(
