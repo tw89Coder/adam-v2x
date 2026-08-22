@@ -86,18 +86,18 @@ Python virtual environment, installs Python requirements, and configures ONNX
 Runtime:
 
 ```bash
-./setup.sh unpatch   # primary paper-evaluation workspace
-./setup.sh patch     # recursion-limit comparison workspace
-./setup.sh all       # both workspaces
-./setup.sh python    # Python environment only
+bash setup.sh unpatch   # primary paper-evaluation workspace
+bash setup.sh patch     # recursion-limit comparison workspace
+bash setup.sh all       # both workspaces
+bash setup.sh python    # Python environment only
 ```
 
 For subsequent C++ builds:
 
 ```bash
-./manage_build.sh unpatched fast
-./manage_build.sh unpatched clean
-./manage_build.sh patched fast
+bash manage_build.sh unpatched fast
+bash manage_build.sh unpatched clean
+bash manage_build.sh patched fast
 ```
 
 The `unpatched`/`patched` labels describe the underlying parser revision, not
@@ -108,7 +108,7 @@ whether the ADAM pre-filter is enabled. Filter selection is a runtime option.
 Run the publication model against the unpatched parser workspace:
 
 ```bash
-./run_experiments.sh unpatched --simulate-all \
+bash run_experiments.sh unpatched --simulate-all \
   -F -o -m "0 1 2" -r "1.0 5.0 10.0" -N 1000000 -l 3000
 ```
 
@@ -117,16 +117,16 @@ With `-o` and no explicit filename, the C++ harness loads the v7 path from
 
 ```bash
 # Native vulnerable parser, admission filter disabled
-./run_experiments.sh unpatched --simulate-all -B -m "0" -r "10.0"
+bash run_experiments.sh unpatched --simulate-all -B -m "0" -r "10.0"
 
 # FSM-only admission control
-./run_experiments.sh unpatched --simulate-all -F -m "0" -r "10.0"
+bash run_experiments.sh unpatched --simulate-all -F -m "0" -r "10.0"
 
 # Static 100% inspection
-./run_experiments.sh unpatched --simulate-all -F -S -m "0" -r "10.0"
+bash run_experiments.sh unpatched --simulate-all -F -S -m "0" -r "10.0"
 
 # v7 DQN + FSM admission control
-./run_experiments.sh unpatched --simulate-all -F -o -m "0" -r "10.0"
+bash run_experiments.sh unpatched --simulate-all -F -o -m "0" -r "10.0"
 ```
 
 Attack modes are:
@@ -144,7 +144,7 @@ offline training is not the paper's model-training path.
 Start the Python online learner:
 
 ```bash
-./run_experiments.sh python --train-online \
+bash run_experiments.sh python --train-online \
   --algorithm dqn \
   --checkpoint-path checkpoints/v2x_online_brain_dqn_cmdp_v7_profiles.pth
 ```
@@ -153,7 +153,7 @@ In a second terminal, stream online training trajectories from the C++ harness.
 For example, the following pairs the three modes and rates by index:
 
 ```bash
-./run_experiments.sh unpatched --train-rl \
+bash run_experiments.sh unpatched --train-rl \
   --zip -m "0 1 2" -r "1.0 5.0 10.0" \
   -N 1000000 -l 3000
 ```
@@ -165,12 +165,12 @@ resolved from `tools/trainingConfigs/`. Without `--zip` or a sequence file,
 Export and verify a trained checkpoint:
 
 ```bash
-./run_experiments.sh python --export-onnx \
+bash run_experiments.sh python --export-onnx \
   -m checkpoints/v2x_online_brain_dqn_cmdp_v7_profiles.pth \
   --raw-dqn \
   -o checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx
 
-./run_experiments.sh python --verify-onnx \
+bash run_experiments.sh python --verify-onnx \
   -o checkpoints/v2x_agent_dqn_cmdp_v7_profiles_raw_q.onnx
 ```
 
@@ -183,8 +183,8 @@ sender controls the workload schedule; it does not perform policy inference.
 On the Raspberry Pi:
 
 ```bash
-./manage_build.sh unpatched fast
-./run_experiments.sh unpatched receive -P 9999 -o \
+bash manage_build.sh unpatched fast
+bash run_experiments.sh unpatched receive -P 9999 -o \
   --data-core 2 --control-core 3
 ```
 
@@ -222,9 +222,9 @@ outputs/plots_multi_runs/
 For local single-run diagnostics:
 
 ```bash
-./run_experiments.sh python --plot --type qos --onnx --mode 0 --rate 10.0
-./run_experiments.sh python --plot --type timeline --onnx
-./run_experiments.sh python --plot --type pareto
+bash run_experiments.sh python --plot --type qos --onnx --mode 0 --rate 10.0
+bash run_experiments.sh python --plot --type timeline --onnx
+bash run_experiments.sh python --plot --type pareto
 ```
 
 ## Tests
@@ -232,7 +232,7 @@ For local single-run diagnostics:
 Run the dependency-free C++ control-logic tests:
 
 ```bash
-./run_tests.sh
+bash run_tests.sh
 ```
 
 They cover telemetry normalization, policy safety boundaries, DQN/PPO action
@@ -241,7 +241,7 @@ routing compatibility, FSM budget-state boundaries, and the F2 filter.
 Run Python consistency tests with:
 
 ```bash
-./run_experiments.sh python --test
+bash run_experiments.sh python --test
 ```
 
 ## Data and reproducibility notes
@@ -260,9 +260,9 @@ Run Python consistency tests with:
 ## Command reference
 
 ```bash
-./setup.sh --help
-./manage_build.sh --help
-./run_experiments.sh --help
+bash setup.sh --help
+bash manage_build.sh --help
+bash run_experiments.sh --help
 python tools/sender/udp_sender.py --help
 python tools/plot_engine.py --help
 ```

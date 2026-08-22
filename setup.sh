@@ -184,6 +184,12 @@ print_usage() {
     echo -e "  ${COLOR_SUCCESS}freeze${COLOR_RESET}     Freeze the current Python virtual environment packages into requirements.txt."
 }
 
+# Help is informational and must not trigger dependency checks or installation.
+if [ $# -eq 1 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
+    print_usage
+    exit 0
+fi
+
 # Ensure command line arguments are present and valid
 if [ $# -ne 1 ]; then
     log_error "Invalid number of arguments."
