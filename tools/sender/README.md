@@ -19,7 +19,9 @@ python tools/sender/udp_sender.py --help
 ```
 
 Modes `0`, `1`, and `2` select continuous, single-pulse, and periodic attack
-schedules. `-I "1 20"` produces the 20-run layout consumed by
+schedules. Every value passed through `-r` is the target malicious-payload
+percentage over the complete session. The pulse and periodic schedules
+concentrate that global budget into their active windows. `-I "1 20"` produces the 20-run layout consumed by
 `python tools/plot_engine.py -M --runs 1-20`.
 
 The predefined control suite runs Mode-2 FSM and static-100% comparisons at

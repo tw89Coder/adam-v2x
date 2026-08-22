@@ -18,6 +18,7 @@
 #include "qos_harness/rl_bridge.hpp"
 #include "qos_harness/router_fuzzing_context.hpp"
 #include "qos_harness/traffic_generator.hpp"
+#include "qos_harness/workload_schedule.hpp"
 #include "qos_harness/dataset_builder.hpp"
 #include "qos_harness/queue_simulator.hpp"
 #include "qos_harness/socket_engine.hpp"
@@ -33,7 +34,7 @@ const std::string ATTACK_FOLDER = REPO_ROOT_STR + "/inputs/attack_vectors/malwar
 void printHelp(const char* progName) {
     std::cout << "Usage: " << progName << " [-t total] [-p pollution_rate] [-m mode] [-f] [--build-dataset]\n"
               << "  -t               Total packets (Default: 1000000)\n"
-              << "  -p               Pollution rate 0~100 (Default: 5.0)\n"
+              << "  -p               Session-global pollution percentage (Default: 5.0)\n"
               << "  -m               Attack Mode:\n"
               << "                     0 = Uniform Random\n"
               << "                     1 = Single Pulse (30~50% window)\n"
@@ -459,42 +460,16 @@ int main(int argc, char* argv[]) {
 
     // Performance metrics and timeline tracking
     int true_positives = 0, false_positives = 0, true_negatives = 0, false_negatives = 0;
-    int mode1_start = total_packets * 0.3;
-    int mode1_end = total_packets * 0.5;
-    int mode2_period = total_packets / 10;
     int print_interval = total_packets / 100;
     int malware_so_far = 0;
 
     // Used to track the total number of packets sampled by FSM
     int total_inspected = 0;
 
-    // Convert pollution rate percentage into basis points (0.01% resolution)
-    // Ensures sub-1.0% pollution rates (e.g. 0.1%, 0.5%) map to accurate integer ranges
-    unsigned int target_basis_threshold = static_cast<unsigned int>(pollution_rate * 100.0);
-
     // Main packet generation and processing iteration loop
     auto producer = [&](int i) -> std::pair<bool, vanetza::ByteBuffer> {
-        bool is_malware = false;
-        if (attack_mode == 0) {
-            is_malware = (sequence[i] % 10000) < target_basis_threshold;
-        } else if (attack_mode == 1) {
-            if (i >= mode1_start && i <= mode1_end) is_malware = (sequence[i] % 10000) < target_basis_threshold;
-        } else if (attack_mode == 2) {
-            int current_cycle = i / mode2_period;
-            if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
-        } else if (attack_mode == 3) {
-            double progress = static_cast<double>(i) / total_packets;
-            if (progress < 0.2) {
-                is_malware = false;
-            } else if (progress < 0.5) {
-                is_malware = (sequence[i] % 10000) < target_basis_threshold;
-            } else if (progress < 0.7) {
-                is_malware = false;
-            } else {
-                int current_cycle = i / mode2_period;
-                if (current_cycle % 2 == 1) is_malware = (sequence[i] % 10000) < target_basis_threshold;
-            }
-        }
+        const bool is_malware = qos_harness::workload_schedule::is_malicious(
+            sequence[i], i, total_packets, pollution_rate, attack_mode);
         const vanetza::ByteBuffer& buf = is_malware ? attack_packets[sequence[i] % attack_packets.size()]
                                                     : normal_packets[sequence[i] % normal_packets.size()];
         return {is_malware, buf};

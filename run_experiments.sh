@@ -49,7 +49,7 @@ print_usage() {
     echo -e "    (e.g., ./run_experiments.sh python --train-online -h)"
     echo -e ""
     echo -e "${C_BOLD}Rate and safety modifiers:${C_RESET}"
-    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Numeric C++ pollution rates (Default: \"1.0 5.0 10.0\")."
+    echo -e "  ${C_INFO}-r, --rates <\"rates\">${C_RESET}   Session-global pollution percentages (Default: \"1.0 5.0 10.0\")."
     echo -e "                          Python offline training additionally accepts the special value \"mix\"."
     echo -e "  ${C_INFO}-s, --disable-safety${C_RESET}  Disable C++ policy safety clamps (diagnostic use only)"
     echo -e ""

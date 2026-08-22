@@ -1,5 +1,6 @@
 #include "qos_harness/control_logic.hpp"
 #include "qos_harness/pre_filter.hpp"
+#include "qos_harness/workload_schedule.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -149,6 +150,35 @@ void test_fsm_boundaries_and_f2() {
     expect_true(filter.get_last_sq() == 0, "sub-window packet has zero F2 score");
 }
 
+void test_global_workload_rate_mapping() {
+    using namespace qos_harness::workload_schedule;
+    expect_near(active_window_rate(10.0, 0), 10.0, 1e-12,
+                "Mode 0 keeps the global rate");
+    expect_near(active_window_rate(10.0, 1), 50.0, 1e-12,
+                "Mode 1 maps global 10 percent into its 20 percent pulse");
+    expect_near(active_window_rate(10.0, 2), 20.0, 1e-12,
+                "Mode 2 maps global 10 percent into its 50 percent windows");
+    expect_near(active_window_rate(10.0, 3), 20.0, 1e-12,
+                "Mode 3 maps global 10 percent into its 50 percent active windows");
+
+    int active_counts[4] = {0, 0, 0, 0};
+    for (int mode = 0; mode <= 3; ++mode) {
+        for (int i = 0; i < 1000; ++i) {
+            if (is_active_window(i, 1000, mode)) ++active_counts[mode];
+        }
+    }
+    expect_true(active_counts[0] == 1000, "Mode 0 active-window size");
+    expect_true(active_counts[1] == 200, "Mode 1 active-window size");
+    expect_true(active_counts[2] == 500, "Mode 2 active-window size");
+    expect_true(active_counts[3] == 500, "Mode 3 active-window size");
+    expect_true(active_window_basis_threshold(10.0, 0) == 1000,
+                "Mode 0 basis threshold");
+    expect_true(active_window_basis_threshold(10.0, 1) == 5000,
+                "Mode 1 basis threshold");
+    expect_true(active_window_basis_threshold(10.0, 2) == 2000,
+                "Mode 2 basis threshold");
+}
+
 }  // namespace
 
 int main() {
@@ -156,11 +186,12 @@ int main() {
     test_policy_boundaries();
     test_action_routing();
     test_fsm_boundaries_and_f2();
+    test_global_workload_rate_mapping();
 
     if (failures != 0) {
         std::cerr << "[FAILED] " << failures << " assertion(s) failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "[PASSED] telemetry, policy, action-routing, F2, and FSM boundary tests\n";
+    std::cout << "[PASSED] telemetry, policy, action-routing, F2, FSM, and workload-rate tests\n";
     return EXIT_SUCCESS;
 }

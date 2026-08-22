@@ -29,6 +29,7 @@
 #include "qos_harness/file_manager.hpp"
 #include "qos_harness/console_presenter.hpp"
 #include "qos_harness/rl_bridge.hpp"
+#include "qos_harness/workload_schedule.hpp"
 
 #ifndef REPO_ROOT
 #define REPO_ROOT "."
@@ -570,21 +571,8 @@ int UDPSocketEngine::run_sender(const std::string& dest_ip, int port,
 
             for (int i = 0; i < total_packets; ++i) {
                 // Determine attack or normal
-                bool is_malware = false;
-                double p_rnd = (rand() % 10000) / 100.0;
-
-                if (mode == 0) {
-                    is_malware = (p_rnd < rate);
-                } else if (mode == 1) {
-                    if (i >= total_packets * 0.3 && i <= total_packets * 0.5) {
-                        is_malware = (p_rnd < rate * 2.0);
-                    }
-                } else if (mode == 2) {
-                    int cycle = (i / (total_packets / 10)) % 2;
-                    if (cycle == 1) {
-                        is_malware = (p_rnd < rate * 1.5);
-                    }
-                }
+                const bool is_malware = workload_schedule::is_malicious(
+                    static_cast<unsigned int>(rand()), i, total_packets, rate, mode);
 
                 if (is_malware) malware_count++;
 

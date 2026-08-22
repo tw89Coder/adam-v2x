@@ -28,6 +28,34 @@ FILTER_NAMES = {
     4: "CODEL",
 }
 
+# ``rate`` is a session-global malicious-payload percentage.  Temporal modes
+# concentrate that fixed budget inside their active windows.
+ACTIVE_WINDOW_FRACTIONS = {
+    0: 1.0,  # continuous
+    1: 0.2,  # one pulse spanning [30%, 50%)
+    2: 0.5,  # five alternating 100k-packet windows
+}
+
+
+def active_window_rate(global_rate, mode):
+    """Convert a session-global percentage to its active-window percentage."""
+    duty_cycle = ACTIVE_WINDOW_FRACTIONS.get(mode)
+    if duty_cycle is None:
+        raise ValueError(f"unsupported traffic mode: {mode}")
+    return min(100.0, max(0.0, global_rate / duty_cycle))
+
+
+def is_active_window(packet_id, total_packets, mode):
+    """Return whether a packet position belongs to the mode's attack window."""
+    if mode == 0:
+        return True
+    if mode == 1:
+        return total_packets * 3 // 10 <= packet_id < total_packets * 5 // 10
+    if mode == 2:
+        period = max(1, total_packets // 10)
+        return ((packet_id // period) % 2) == 1
+    raise ValueError(f"unsupported traffic mode: {mode}")
+
 
 def resolve_filter_mode(args):
     """Preserve the historical CLI precedence for single-profile runs."""
@@ -142,7 +170,7 @@ def main():
     parser.add_argument("--dest-ip", type=str, default="127.0.0.1", help="C++ receiver address (default: 127.0.0.1).")
     parser.add_argument("-P", "--port", type=int, default=9999, help="C++ receiver UDP port (default: 9999).")
     parser.add_argument("-m", "--modes", type=str, default="0", help="Space-separated schedules: 0=continuous, 1=pulse, 2=periodic (default: '0').")
-    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated attack percentages, e.g. '1.0 5.0 10.0' (default: '0.0').")
+    parser.add_argument("-r", "--rates", type=str, default="0.0", help="Space-separated session-global attack percentages, e.g. '1.0 5.0 10.0' (default: '0.0').")
     parser.add_argument("-N", "--packets", type=int, default=1000000, help="Packets sent in each session (default: 1000000).")
     parser.add_argument("-l", "--lambda-pps", type=float, default=3000.0, help="Fixed aggregate arrival rate in packets/s (default: 3000).")
     parser.add_argument("-B", "--baseline", action="store_true", help="Disable admission filtering (native-parser baseline).")
@@ -329,22 +357,16 @@ def main():
                     normal_count = 0
                     schedule_seed = ((run_id + 1) * 1000003) + (mode * 9176)
                     schedule_rng = random.Random(schedule_seed)
-                    target_basis_threshold = int(rate * 100.0)
+                    window_rate = active_window_rate(rate, mode)
+                    target_basis_threshold = round(window_rate * 100.0)
                     spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
                     for i in range(args.packets):
                         # Paired workload: rate changes only move a fixed per-packet threshold.
                         is_malware = False
                         seq_value = schedule_rng.getrandbits(31)
 
-                        if mode == 0:
+                        if is_active_window(i, args.packets, mode):
                             is_malware = (seq_value % 10000) < target_basis_threshold
-                        elif mode == 1:
-                            if args.packets * 0.3 <= i <= args.packets * 0.5:
-                                is_malware = (seq_value % 10000) < target_basis_threshold
-                        elif mode == 2:
-                            cycle = (i // (args.packets // 10)) % 2
-                            if cycle == 1:
-                                is_malware = (seq_value % 10000) < target_basis_threshold
 
                         if is_malware:
                             wire_pkt = attacks[malware_count % len(attacks)]

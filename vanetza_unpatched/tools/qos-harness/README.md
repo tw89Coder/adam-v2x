@@ -16,6 +16,9 @@ Runtime configurations include native parsing (`-B`), FSM-only filtering
 (`-F`), static 100% inspection (`-F -S`), CoDel (`-C`), and ONNX DQN plus FSM
 (`-F -o`). The aggregate arrival rate is fixed independently of the attack
 percentage.
+For every execution path, the attack percentage denotes the target fraction
+over the complete session; temporal modes redistribute that global workload
+inside their active windows.
 
 ## Execution paths
 
