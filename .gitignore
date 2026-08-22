@@ -79,3 +79,5 @@ inputs/v2aix*
 inputs/base_packets/v2aix*
 inputs/*.tar.gz
 json/
+
+/tools/rl_bridge/src.zip
