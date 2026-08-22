@@ -47,16 +47,10 @@ workspace.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    A[Python UDP sender / local workload generator] --> B[Edge receiver]
-    B --> C[Bounded F2 admission filter]
-    C --> D[PRB-FSM safety guards]
-    D -->|accepted| E[Vanetza ASN.1 parser]
-    D -->|rejected| F[Drop]
-    C -. window telemetry .-> G[Asynchronous v7 DQN via ONNX]
-    G -. bounded sampling/recovery profile .-> D
-```
+![ADAM split-plane architecture](docs/architecture.svg)
+
+The editable Mermaid source is available in
+[`docs/architecture.mmd`](docs/architecture.mmd).
 
 The controller observes four consecutive 100-packet telemetry windows. Each
 window contains seven normalized features, producing the publication model's
