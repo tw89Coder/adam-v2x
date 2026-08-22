@@ -20,6 +20,8 @@ __pycache__/
 /terminal_result.txt
 /testing.txt
 /main.log
+/dqn_ver1/
+/terminalText/
 
 # ==============================================================================
 # Local Data, Workspace & Dependency Exclusions
