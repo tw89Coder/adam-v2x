@@ -1,0 +1,63 @@
+\documentclass[tikz,border=8pt]{standalone}
+\usepackage{xcolor}
+\usetikzlibrary{positioning,arrows.meta,fit,calc,backgrounds}
+
+\definecolor{sBblue}{HTML}{4C72B0}
+\definecolor{sBgreen}{HTML}{55A868}
+\definecolor{sBred}{HTML}{C44E52}
+\definecolor{sBorange}{HTML}{DD8452}
+\definecolor{sByellow}{HTML}{CCB974}
+
+\begin{document}
+\begin{tikzpicture}[
+    font=\sffamily\small,
+    >=Stealth,
+    comp/.style={rectangle, rounded corners=3pt, draw=sBblue, thick, fill=blue!5, text width=2.4cm, align=center, minimum height=1cm, inner sep=3pt},
+    compG/.style={comp, draw=sBgreen, fill=green!5},
+    compP/.style={comp, draw=sBorange, fill=orange!5},
+    compR/.style={comp, draw=sBred, fill=red!5},
+    env/.style={rectangle, rounded corners=3pt, draw=black!60, thick, fill=gray!10, text width=2.4cm, align=center, minimum height=1cm, inner sep=3pt},
+    flow/.style={->, thick, sBblue},
+    flowData/.style={->, very thick, sBgreen},
+    flowCtrl/.style={->, thick, dashed, sBorange},
+    flowThreat/.style={->, very thick, sBred}
+]
+
+\node[font=\bfseries] (air) {ITS-G5 / PC5 (Air)};
+\node[env, below=0.6cm of air] (nic) {Edge NIC\\(Raw Socket)};
+\node[comp, below=0.8cm of nic] (filter) {\textbf{Circuit Breaker}\\Ingress Admission ($F_2$)};
+\node[compR, left=0.5cm of filter] (fsm) {PRB-FSM\\(Budget)};
+\node[compG, below=0.8cm of filter] (gate) {Admission\\Gate};
+\node[compR, left=0.5cm of gate] (drop) {Packet\\Drop};
+\node[comp, below=0.8cm of gate] (parser) {ETSI C-ITS\\Protocol Stack};
+\node[env, below=0.8cm of parser] (app) {Safety Apps\\(FCW, EEBL)};
+
+\node[comp, draw=sByellow, fill=yellow!10, right=1.2cm of filter] (state) {Telemetry\\State $\mathbf{s}_t$};
+\node[compP, right=1.2cm of gate] (agent) {Policy Selector\\(DRL via ONNX)};
+
+\coordinate (data_south) at ($(parser.south) + (0,-0.6)$);
+\coordinate (ctrl_north) at ($(state.north) + (0,0.6)$);
+\coordinate (ctrl_south) at ($(agent.south) + (0,-0.6)$);
+
+\begin{scope}[on background layer]
+    \node[draw=sBblue, dashed, very thick, fill=blue!3, fit=(nic)(fsm)(filter)(drop)(parser)(app)(data_south), inner sep=14pt, rounded corners] (zoneData) {};
+    \node[anchor=south west, font=\bfseries\color{sBblue}, inner sep=2pt] at (zoneData.south west) {MEC Edge Node (Fast Path)};
+    \node[draw=sBorange, dashed, very thick, fill=orange!3, fit=(state)(agent)(ctrl_north)(ctrl_south), inner sep=14pt, rounded corners] (zoneCtrl) {};
+    \node[anchor=south west, font=\bfseries\color{sBorange}, inner sep=2pt] at (zoneCtrl.south west) {Control Plane (Slow)};
+\end{scope}
+
+\draw[flowThreat] (air) -- (nic) node[midway, right, text=black, font=\footnotesize] {Bursty};
+\draw[flowThreat] (nic) -- (filter) node[midway, right, text=black, font=\footnotesize] {Payloads};
+\draw[<->, thick, sBred] (filter) -- (fsm) node[midway, above, text=black, font=\footnotesize] {Query};
+\draw[flowData] (filter) -- (gate) node[midway, right, text=black, font=\footnotesize] {Verdict};
+\draw[flowThreat] (gate) -- (drop) node[midway, above, text=black, font=\footnotesize] {Rejected};
+\draw[flowData] (gate) -- (parser) node[midway, right, text=black, font=\footnotesize] {Accepted};
+\draw[flowData] (parser) -- (app) node[midway, right, text=black, font=\footnotesize] {CAM / DENM};
+
+\draw[flow, sBorange] (state) -- (agent);
+\draw[flowCtrl] (filter.east) -- (state.west) node[midway, above, text=black, font=\footnotesize, fill=white, inner sep=1pt] {$\bar{q}_t, \nu_t$};
+\draw[flowCtrl] (fsm.north) |- (ctrl_north -| fsm.north) -| (state.north) node[near start, above right, text=black, font=\footnotesize, fill=white, inner sep=1pt] {Sampling $p_t^b,p_t^e$};
+\draw[flowCtrl, very thick] (agent.west) -- ++(-0.6,0) |- ($(filter.south) + (0, -0.4)$) -| (fsm.south) node[pos=0.6, below, text=black, font=\footnotesize, fill=white, inner sep=1pt] {Action $a_t=(r_t,p_t^b)$};
+
+\end{tikzpicture}
+\end{document}

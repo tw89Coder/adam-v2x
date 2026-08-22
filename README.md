@@ -49,8 +49,15 @@ workspace.
 
 ![ADAM split-plane architecture](docs/architecture.svg)
 
-The editable Mermaid source is available in
-[`docs/architecture.mmd`](docs/architecture.mmd).
+The figure is generated from the paper's TikZ architecture source in
+[`docs/paper_architecture.tex`](docs/paper_architecture.tex). Regenerate it
+with:
+
+```bash
+pdflatex -interaction=nonstopmode -halt-on-error \
+  -output-directory=/tmp docs/paper_architecture.tex
+pdf2svg /tmp/paper_architecture.pdf docs/architecture.svg
+```
 
 The controller observes four consecutive 100-packet telemetry windows. Each
 window contains seven normalized features, producing the publication model's
